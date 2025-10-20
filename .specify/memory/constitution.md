@@ -1,50 +1,80 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report:
+Version change: 0.0.0 → 1.0.0
+Modified principles: N/A (new constitution)
+Added sections: API-First Architecture, Data Quality & Caching, Performance & Scalability, Security & Compliance
+Removed sections: N/A
+Templates requiring updates: ✅ plan-template.md, ✅ spec-template.md, ✅ tasks-template.md
+Follow-up TODOs: None
+-->
+
+# Domain Analysis System Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. API-First Architecture (NON-NEGOTIABLE)
+Every system component MUST expose functionality via well-defined APIs; FastAPI backend serves as the single source of truth for all domain analysis operations; Frontend MUST consume backend APIs exclusively; All external integrations (DataForSEO, Wayback Machine, LLM) MUST be abstracted behind service layers; API contracts MUST be versioned and backward-compatible.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Data Quality & Caching (NON-NEGOTIABLE)
+All external API responses MUST be validated and sanitized before storage; Raw data MUST be cached in Supabase for 30 days to minimize API costs; Data quality checks MUST be implemented for all external API integrations; Invalid or corrupted data MUST be flagged and excluded from analysis; Cache invalidation MUST be handled automatically based on data freshness requirements.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Test-First Development (NON-NEGOTIABLE)
+TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced; All API endpoints MUST have contract tests; All external service integrations MUST have integration tests; All LLM analysis functions MUST have unit tests with mock data; Test coverage MUST exceed 80% for all critical paths.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Performance & Scalability
+Analysis completion MUST be ≤15 seconds for 90% of requests; System MUST support ≥10 concurrent analyses without degradation; Database queries MUST be optimized with proper indexing; API responses MUST be paginated for large datasets; Caching strategy MUST be implemented at multiple levels (API, database, frontend); Async/await patterns MUST be used for all I/O operations.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Security & Compliance
+All API keys MUST be stored as environment variables; User authentication MUST be implemented via Supabase Auth; Row Level Security (RLS) MUST be enabled on all database tables; Input validation MUST be implemented for all user inputs; Rate limiting MUST be implemented for all external API calls; All user data MUST be encrypted in transit and at rest.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Technology Stack Requirements
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### Backend Architecture
+- **Framework**: FastAPI with Uvicorn ASGI server
+- **Language**: Python 3.10+
+- **Database**: Supabase (PostgreSQL) with official Python SDK
+- **External APIs**: DataForSEO, Wayback Machine, Gemini API
+- **Caching**: Supabase database with 30-day TTL
+- **Authentication**: Supabase Auth with RLS
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+### Frontend Architecture
+- **Framework**: React with TypeScript
+- **State Management**: React Query for server state
+- **UI Components**: Modern component library (Material-UI or similar)
+- **Data Tables**: TanStack Table for sortable/searchable tables
+- **Export**: Google Sheets API integration
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### Data Integration
+- **SEO Data**: DataForSEO API (Backlinks, Keywords, Domain Analytics)
+- **Historical Data**: Wayback Machine CDX API
+- **Analysis**: Gemini API for LLM-powered report generation
+- **Storage**: Supabase PostgreSQL with JSONB columns
+
+## Development Workflow
+
+### Code Quality Standards
+- All code MUST follow PEP 8 standards (Python) and ESLint rules (TypeScript)
+- API documentation MUST be auto-generated via FastAPI OpenAPI
+- All functions MUST have type hints and docstrings
+- Code reviews MUST verify compliance with constitution principles
+- Complexity MUST be justified with clear rationale
+
+### Testing Requirements
+- Unit tests for all business logic functions
+- Integration tests for all external API calls
+- Contract tests for all API endpoints
+- End-to-end tests for complete user journeys
+- Performance tests for scalability requirements
+
+### Deployment & Monitoring
+- Environment-specific configuration management
+- Structured logging for all operations
+- Error tracking and alerting
+- Performance monitoring and metrics
+- Automated deployment pipeline
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+Constitution supersedes all other practices; Amendments require documentation, approval, and migration plan; All PRs/reviews must verify compliance; Complexity must be justified; Use README.md for runtime development guidance; Regular compliance reviews every quarter.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2025-01-18 | **Last Amended**: 2025-01-18
