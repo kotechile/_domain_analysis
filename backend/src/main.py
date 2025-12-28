@@ -3,13 +3,23 @@ Domain Analysis System - FastAPI Backend
 Main application entry point
 """
 
+import sys
+from pathlib import Path
+
+# Add src directory to Python path to ensure imports work
+# This allows running from backend directory with: python -m uvicorn src.main:app
+src_dir = Path(__file__).parent
+if str(src_dir) not in sys.path:
+    sys.path.insert(0, str(src_dir))
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import structlog
 from contextlib import asynccontextmanager
 
-from api.routes import analysis, reports, health
+from api.routes import analysis, reports, health, development_plan, n8n_webhook, bulk_analysis, auctions, filters
+from api.routes import debug_offer_type
 from services.database import init_database
 from services.cache import init_cache
 from utils.config import get_settings
@@ -41,8 +51,18 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown events"""
     # Startup
     logger.info("Starting Domain Analysis System")
-    await init_database()
-    await init_cache()
+    try:
+        await init_database()
+        logger.info("Database initialized successfully")
+    except Exception as e:
+        logger.error("Database initialization failed", error=str(e))
+    
+    try:
+        await init_cache()
+        logger.info("Cache initialized successfully")
+    except Exception as e:
+        logger.warning("Cache initialization failed", error=str(e))
+    
     logger.info("Application startup complete")
     
     yield
@@ -72,15 +92,26 @@ app.add_middleware(
 )
 
 # Add trusted host middleware for security
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=settings.ALLOWED_HOSTS
-)
+# Note: Disable when N8N is enabled (requests come through ngrok with dynamic domains)
+# In production with a fixed domain, re-enable this with your actual domain
+if not settings.N8N_ENABLED:
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=settings.ALLOWED_HOSTS
+    )
+else:
+    logger.warning("TrustedHostMiddleware disabled - N8N enabled, requests come through ngrok")
 
 # Include API routes
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(analysis.router, prefix="/api/v1", tags=["analysis"])
 app.include_router(reports.router, prefix="/api/v1", tags=["reports"])
+app.include_router(development_plan.router, prefix="/api/v1", tags=["development-plan"])
+app.include_router(n8n_webhook.router, prefix="/api/v1", tags=["n8n"])
+app.include_router(bulk_analysis.router, prefix="/api/v1/bulk-analysis", tags=["bulk-analysis"])
+app.include_router(auctions.router, prefix="/api/v1", tags=["auctions"])
+app.include_router(filters.router, prefix="/api/v1", tags=["filters"])
+app.include_router(debug_offer_type.router, prefix="/api/v1", tags=["debug"])
 
 
 @app.get("/")

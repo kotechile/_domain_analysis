@@ -1,0 +1,478 @@
+{
+  "name": "Domain Auction Scoring",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "auction-scoring",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -80,
+        192
+      ],
+      "id": "5f941751-fbaa-47f3-9ca1-675f376bd76d",
+      "name": "Webhook",
+      "webhookId": "c714d039-5b55-4adb-8336-28e716512eb2"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.supabase_url || $json.body.supabaseUrl || 'https://YOUR_PROJECT.supabase.co' }}/storage/v1/object/auction-csvs/{{ $json.body.file_path }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $json.body.supabase_service_role_key || $json.body.supabaseServiceRoleKey || 'YOUR_SERVICE_ROLE_KEY' }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.body.supabase_service_role_key || $json.body.supabaseServiceRoleKey || 'YOUR_SERVICE_ROLE_KEY' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        144,
+        192
+      ],
+      "id": "eaf1d924-8a84-4103-9925-ebd164419d3e",
+      "name": "Download CSV from Storage"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process CSV in chunks to avoid PostgreSQL memory limits\n// For very large files (>50MB), we split into smaller chunks and process separately\n\nconst input = $input.first();\n\n// HTTP Request node with responseFormat: 'text' returns data in input.data\n// Try multiple paths to get CSV text\nlet csvText = null;\n\n// Method 1: Direct data field (most common for text responses)\nif (input.data && typeof input.data === 'string') {\n  csvText = input.data;\n  console.log('Got CSV from input.data, length:', csvText.length);\n}\n// Method 2: JSON field as string\nelse if (input.json && typeof input.json === 'string') {\n  csvText = input.json;\n  console.log('Got CSV from input.json (string), length:', csvText.length);\n}\n// Method 3: JSON object with data field\nelse if (input.json && input.json.data && typeof input.json.data === 'string') {\n  csvText = input.json.data;\n  console.log('Got CSV from input.json.data, length:', csvText.length);\n}\n// Method 4: Binary data\nelse if (input.binary && input.binary.data) {\n  const binaryData = input.binary.data;\n  if (binaryData.data) {\n    // Base64 encoded\n    try {\n      csvText = Buffer.from(binaryData.data, 'base64').toString('utf-8');\n      console.log('Got CSV from binary (base64), length:', csvText.length);\n    } catch (e) {\n      console.log('Error decoding base64:', e.message);\n    }\n  } else if (typeof binaryData === 'string') {\n    csvText = binaryData;\n    console.log('Got CSV from binary (string), length:', csvText.length);\n  }\n}\n\n// Get webhook body - need to get it from the original webhook node\nconst webhookNode = $('Webhook').first();\nconst webhookBody = webhookNode?.json?.body || input.json?.body || input.body || {};\n\nconst auctionSite = webhookBody.auction_site || 'namecheap';\nconst filePath = webhookBody.file_path || null;\nconst supabaseUrl = webhookBody.supabase_url || webhookBody.supabaseUrl || null;\nconst supabaseKey = webhookBody.supabase_service_role_key || webhookBody.supabaseServiceRoleKey || null;\n\nif (!csvText) {\n  console.error('No CSV content found. Input structure:', {\n    hasData: !!input.data,\n    hasJson: !!input.json,\n    hasBinary: !!input.binary,\n    dataType: typeof input.data,\n    jsonType: typeof input.json,\n    inputKeys: Object.keys(input)\n  });\n  return [{\n    json: {\n      error: 'No CSV content found',\n      input_keys: Object.keys(input),\n      input_data_type: typeof input.data,\n      input_json_type: typeof input.json,\n      has_binary: !!input.binary,\n      debug_info: 'Check HTTP Request node output format'\n    }\n  }];\n}\n\n// Validate CSV has content\nif (csvText.length < 10) {\n  return [{\n    json: {\n      error: 'CSV content too short (likely empty or invalid)',\n      csv_length: csvText.length,\n      csv_preview: csvText.substring(0, 200)\n    }\n  }];\n}\n\nconst csvSizeMB = csvText.length / (1024 * 1024);\nconsole.log(`CSV loaded: ${csvText.length} bytes (${csvSizeMB.toFixed(2)} MB), first 200 chars: ${csvText.substring(0, 200)}`);\n\n// For files > 1MB, PostgreSQL can't handle the entire string in memory (very small chunks to avoid connection termination)\n// We need to process in chunks\nconst MAX_CHUNK_SIZE_MB = 0.5;\nconst MAX_CHUNK_SIZE_BYTES = MAX_CHUNK_SIZE_MB * 1024 * 1024;\n\nif (csvText.length > MAX_CHUNK_SIZE_BYTES) {\n  // Split CSV into chunks\n  const lines = csvText.split(/\\r?\\n/);\n  const header = lines[0];\n  const dataLines = lines.slice(1);\n  \n  const chunkSize = Math.floor(MAX_CHUNK_SIZE_BYTES / (csvText.length / lines.length)); // Approximate lines per chunk\n  const chunks = [];\n  \n  for (let i = 0; i < dataLines.length; i += chunkSize) {\n    const chunkLines = [header, ...dataLines.slice(i, i + chunkSize)];\n    chunks.push(chunkLines.join('\\n'));\n  }\n  \n  console.log(`Split CSV into ${chunks.length} chunks`);\n  \n  // Return multiple items - one per chunk\n  // N8N will process each chunk separately\n  return chunks.map((chunk, index) => {\n    const escapedCsv = String(chunk).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"''\");\n    const sqlQuery = `SELECT load_auctions_from_csv('${escapedCsv}', '${auctionSite.replace(/'/g, \"''\")}') as result;`;\n    \n    return {\n      json: {\n        sql_query: sqlQuery,\n        auction_site: auctionSite,\n        file_path: filePath,\n        supabase_url: supabaseUrl,\n        supabase_service_role_key: supabaseKey,\n        webhook_body: webhookBody,\n        csv_size_bytes: chunk.length,\n        chunk_number: index + 1,\n        total_chunks: chunks.length,\n        is_chunk: true\n      }\n    };\n  });\n} else {\n  // Small file - process normally\n  const escapedCsv = String(csvText).replace(/\\\\/g, '\\\\\\\\').replace(/'/g, \"''\");\n  const sqlQueryEmbedded = `SELECT load_auctions_from_csv('${escapedCsv}', '${auctionSite.replace(/'/g, \"''\")}') as result;`;\n  \n  console.log(`SQL query length: ${sqlQueryEmbedded.length} bytes`);\n  \n  return [{\n    json: {\n      sql_query: sqlQueryEmbedded,\n      auction_site: auctionSite,\n      file_path: filePath,\n      supabase_url: supabaseUrl,\n      supabase_service_role_key: supabaseKey,\n      webhook_body: webhookBody,\n      csv_size_bytes: csvText.length,\n      csv_preview: csvText.substring(0, 100),\n      is_chunk: false\n    }\n  }];\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        192
+      ],
+      "id": "113cd591-f135-454c-b6b4-5b4c442f816f",
+      "name": "Prepare Load CSV Query"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql_query }}",
+        "options": {
+          "queryTimeout": 300000
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        544,
+        192
+      ],
+      "id": "534c3cac-770d-474c-a0aa-e0be6f508196",
+      "name": "Load CSV to Database",
+      "credentials": {
+        "postgres": {
+          "id": "DxQODs2W8TambApf",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and aggregate results from load_auctions_from_csv function\n// Handles both single file and chunked processing\nconst allInputs = $input.all();\n\nconsole.log(`Extract Load Results - Processing ${allInputs.length} input(s)`);\n\n// Aggregate results from all chunks (if file was split)\nlet totalInserted = 0;\nlet totalUpdated = 0;\nlet totalSkipped = 0;\nlet totalDeletedExpired = 0;\nlet totalProcessed = 0;\nlet allSuccess = true;\nlet errorMessages = [];\n\n// Get file_path and credentials from first input (should be same for all chunks)\nlet filePath = null;\nlet supabaseUrl = null;\nlet supabaseKey = null;\nlet webhookBody = {};\nlet auctionSite = 'namecheap';\n\nfor (const input of allInputs) {\n  // Extract result from this chunk\n  let result = {};\n  \n  // Method 1: Direct result field\n  if (input.json && input.json.result) {\n    if (typeof input.json.result === 'string') {\n      try {\n        result = JSON.parse(input.json.result);\n      } catch (e) {\n        console.error('Error parsing result JSON:', e);\n        result = { success: false, error: 'Failed to parse result JSON: ' + e.message };\n      }\n    } else if (typeof input.json.result === 'object') {\n      result = input.json.result;\n    }\n  }\n  // Method 2: Result directly in json\n  else if (input.json && input.json.success !== undefined) {\n    result = input.json;\n  }\n  // Method 3: Array format\n  else if (Array.isArray(input.json)) {\n    const firstItem = input.json[0];\n    if (firstItem && firstItem.result) {\n      result = typeof firstItem.result === 'string' ? JSON.parse(firstItem.result) : firstItem.result;\n    }\n  }\n  \n  // Aggregate statistics\n  if (result.success === true) {\n    totalInserted += result.inserted || 0;\n    totalUpdated += result.updated || 0;\n    totalSkipped += result.skipped || 0;\n    totalDeletedExpired += result.deleted_expired || 0;\n    totalProcessed += result.total_processed || 0;\n    if (result.auction_site) auctionSite = result.auction_site;\n  } else {\n    allSuccess = false;\n    const errorMsg = result.error || 'Unknown error';\n    if (result.error_detail) errorMsg += ' - ' + result.error_detail;\n    errorMessages.push(errorMsg);\n  }\n  \n  // Get file info from first successful input\n  if (!filePath || !supabaseUrl || !supabaseKey) {\n    const prevNode = $('Prepare Load CSV Query').first();\n    filePath = prevNode?.json?.file_path || input.json?.file_path || null;\n    supabaseUrl = prevNode?.json?.supabase_url || input.json?.supabase_url || null;\n    supabaseKey = prevNode?.json?.supabase_service_role_key || input.json?.supabase_service_role_key || null;\n    webhookBody = prevNode?.json?.webhook_body || input.json?.webhook_body || {};\n  }\n}\n\n// If still not found, try webhook node\nif (!filePath || !supabaseUrl || !supabaseKey) {\n  const webhookNode = $('Webhook').first();\n  const wb = webhookNode?.json?.body || {};\n  if (!filePath) filePath = wb.file_path || null;\n  if (!supabaseUrl) supabaseUrl = wb.supabase_url || wb.supabaseUrl || null;\n  if (!supabaseKey) supabaseKey = wb.supabase_service_role_key || wb.supabaseServiceRoleKey || null;\n  if (Object.keys(webhookBody).length === 0) webhookBody = wb;\n  if (!auctionSite || auctionSite === 'namecheap') auctionSite = wb.auction_site || 'namecheap';\n}\n\nconst message = allSuccess\n  ? `Loaded ${totalInserted} new, updated ${totalUpdated} existing, skipped ${totalSkipped} invalid records${totalDeletedExpired > 0 ? ', deleted ' + totalDeletedExpired + ' expired' : ''}`\n  : `Errors occurred: ${errorMessages.join('; ')}`;\n\nconsole.log('Aggregated load result:', message);\nconsole.log('File deletion info:', { filePath, hasUrl: !!supabaseUrl, hasKey: !!supabaseKey });\n\nreturn [{\n  json: {\n    success: allSuccess,\n    message: message,\n    inserted: totalInserted,\n    updated: totalUpdated,\n    skipped: totalSkipped,\n    deleted_expired: totalDeletedExpired,\n    total_processed: totalProcessed,\n    auction_site: auctionSite,\n    file_path: filePath,\n    supabase_url: supabaseUrl,\n    supabase_service_role_key: supabaseKey,\n    webhook_body: webhookBody,\n    can_delete_file: !!(filePath && supabaseUrl && supabaseKey),\n    chunks_processed: allInputs.length\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        192
+      ],
+      "id": "l1o2a3d4-c5s6-7890-v7r8e9s0u1l2t",
+      "name": "Extract Load Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Note: Scoring will be done in batches from database\n// This workflow now only loads data - scoring happens separately\n// Return success message indicating data is loaded and ready for batch scoring\n\nconst input = $input.first();\nconst loadResult = input.json || {};\n\nreturn [{\n  json: {\n    success: true,\n    message: 'CSV data loaded successfully. Ready for batch scoring from database.',\n    inserted: loadResult.inserted || 0,\n    updated: loadResult.updated || 0,\n    skipped: loadResult.skipped || 0,\n    file_path: loadResult.file_path,\n    supabase_url: loadResult.supabase_url,\n    supabase_service_role_key: loadResult.supabase_service_role_key,\n    webhook_body: loadResult.webhook_body || {},\n    can_delete_file: loadResult.can_delete_file || false\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        192
+      ],
+      "id": "s1k2i3p4-s5c6-7890-o7r8i9n0g1",
+      "name": "Skip Scoring (Data Load Only)"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql_query }}",
+        "options": {
+          "queryTimeout": 300000
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1376,
+        192
+      ],
+      "id": "s1c2o3r4-i5n6-7890-gc1o2n3f4i5g",
+      "name": "Get Scoring Config",
+      "credentials": {
+        "postgres": {
+          "id": "DxQODs2W8TambApf",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get semantic scores from CSV parsing node and config from Get Scoring Config node\n// This node receives input from both CSV parsing (semantic_scores) and config lookup\n// Handle multiple batches if CSV was split\nconst allInputs = $input.all();\n\nlet semanticScores = {};\nlet configData = {};\nlet configId = null;\nlet webhookBody = {};\n\n// Merge semantic scores from all batches (if CSV was split)\nfor (const item of allInputs) {\n  if (item.json && item.json.semantic_scores) {\n    // Merge semantic scores from this batch\n    Object.assign(semanticScores, item.json.semantic_scores);\n    if (item.json.webhook_body && Object.keys(item.json.webhook_body).length > 0) {\n      webhookBody = item.json.webhook_body;\n    }\n  }\n}\n\n// Find config from Get Scoring Config node (should be same for all batches)\nfor (const item of allInputs) {\n  if (item.json && item.json.id && item.json.age_weight !== undefined) {\n    configData = item.json;\n    configId = item.json.id;\n    break;\n  }\n}\n\nreturn [{\n  json: {\n    config: configData,\n    config_id: configId,\n    semantic_scores: semanticScores,\n    webhook_body: webhookBody\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        192
+      ],
+      "id": "p1a2s3s4-c5o6-7890-c7o8n9f0i1g2",
+      "name": "Prepare Scoring Data"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import json\nimport re\nfrom typing import Dict\n\n# Get input data\ninput_data = _input.all()\nif not input_data:\n    return [{'json': {'error': 'No input data received'}}]\n\n# Get semantic scores, config, and webhook_body from previous nodes\nsemantic_scores = {}\nconfig_id = None\nwebhook_body = {}\n\nfor item in input_data:\n    if 'json' in item:\n        json_data = item['json']\n        if 'semantic_scores' in json_data:\n            semantic_scores = json_data['semantic_scores']\n        if 'config_id' in json_data:\n            config_id = json_data['config_id']\n        if 'config' in json_data and 'id' in json_data['config']:\n            config_id = json_data['config']['id']\n        if 'webhook_body' in json_data:\n            webhook_body = json_data['webhook_body']\n\n# Calculate LFS (Lexical Frequency Score) for domains\n# This is a simplified version - in production, you'd query word_frequency table\nlfs_scores = {}\n\n# For now, we'll use a simple heuristic based on domain name length and token count\n# In production, this should query the word_frequency table in Supabase\nfor domain in semantic_scores.keys():\n    try:\n        domain_parts = domain.lower().rsplit('.', 1)\n        name_part = domain_parts[0] if len(domain_parts) > 1 else domain.lower()\n        \n        # Tokenize domain\n        tokens = re.findall(r'[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)', name_part)\n        \n        # Simple LFS calculation (placeholder)\n        # Real implementation would look up word frequencies\n        token_count = len(tokens) if tokens else 1\n        lfs_score = min(100.0, max(0.0, token_count * 15.0))\n        \n        lfs_scores[domain] = round(lfs_score, 2)\n    except Exception as e:\n        print(f\"Error calculating LFS for {domain}: {e}\")\n        lfs_scores[domain] = 0.0\n\nprint(f\"Calculated LFS scores for {len(lfs_scores)} domains\")\nprint(f\"Semantic scores for {len(semantic_scores)} domains\")\n\n# Return scores as JSONB-ready format, preserving webhook_body\nreturn [{\n    'json': {\n        'lfs_scores': lfs_scores,\n        'semantic_scores': semantic_scores,\n        'config_id': config_id,\n        'webhook_body': webhook_body\n    }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1584,
+        192
+      ],
+      "id": "c1a2l3c4-l5f6-7890-s7c8o9r0e1s2",
+      "name": "Calculate LFS Scores"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge all scoring data and build SQL query for Supabase function call\nconst configData = $input.first()?.json || {};\nconst scoresData = $input.item.json || {};\n\nconst lfsScores = scoresData.lfs_scores || {};\nconst semanticScores = scoresData.semantic_scores || configData.semantic_scores || {};\nconst configId = configData.config_id || scoresData.config_id || null;\nconst batchLimit = scoresData.batch_limit || 10000;\nconst webhookBody = scoresData.webhook_body || configData.webhook_body || {};\n\n// Convert to JSONB format for PostgreSQL (escape single quotes)\nconst lfsScoresJson = JSON.stringify(lfsScores).replace(/'/g, \"''\");\nconst semanticScoresJson = JSON.stringify(semanticScores).replace(/'/g, \"''\");\n\n// Build SQL query with values directly embedded (no parameters)\nlet configIdParam;\nif (configId && configId !== 'null' && configId !== null) {\n  // Escape single quotes in UUID\n  const escapedId = String(configId).replace(/'/g, \"''\");\n  configIdParam = `'${escapedId}'::uuid`;\n} else {\n  configIdParam = 'NULL::uuid';\n}\n\nconst sqlQuery = `SELECT score_and_rank_auctions(${configIdParam}, ${batchLimit}, '${lfsScoresJson}'::jsonb, '${semanticScoresJson}'::jsonb) as result;`;\n\n// Preserve webhook_body and extract file_path for easier access\nconst filePath = webhookBody.file_path || null;\nconst supabaseUrl = webhookBody.supabase_url || webhookBody.supabaseUrl || null;\nconst supabaseKey = webhookBody.supabase_service_role_key || webhookBody.supabaseServiceRoleKey || null;\n\nreturn [{\n  json: {\n    sql_query: sqlQuery,\n    config_id: configId,\n    batch_limit: batchLimit,\n    webhook_body: webhookBody,\n    file_path: filePath,\n    supabase_url: supabaseUrl,\n    supabase_service_role_key: supabaseKey\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        192
+      ],
+      "id": "m1e2r3g4-s5c6-7890-o7r8e9s0",
+      "name": "Build Scoring Function Query"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql_query }}",
+        "options": {
+          "queryTimeout": 300000
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2000,
+        192
+      ],
+      "id": "c1a2l3l4-s5c6-7890-o7r8i9n0g1",
+      "name": "Call Scoring Function",
+      "credentials": {
+        "postgres": {
+          "id": "DxQODs2W8TambApf",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract result from Supabase function call and preserve file_path\n// Get file_path from \"Build Scoring Function Query\" node which definitely has it\nconst allInputs = $input.all();\n\n// Get result from Postgres node\nconst result = allInputs[0]?.json?.result || {};\n\n// Get file_path and Supabase credentials from \"Build Scoring Function Query\" node\nlet filePath = null;\nlet supabaseUrl = null;\nlet supabaseKey = null;\n\ntry {\n  // Access the \"Build Scoring Function Query\" node output directly\n  const buildQueryNode = $('Build Scoring Function Query');\n  if (buildQueryNode && buildQueryNode.first()?.json) {\n    const buildData = buildQueryNode.first().json;\n    filePath = buildData.file_path || null;\n    supabaseUrl = buildData.supabase_url || null;\n    supabaseKey = buildData.supabase_service_role_key || null;\n  }\n} catch (e) {\n  console.log('Could not access Build Scoring Function Query node:', e);\n}\n\n// Fallback: try to get from current input\nif (!filePath || !supabaseUrl || !supabaseKey) {\n  for (const item of allInputs) {\n    if (item.json?.file_path) {\n      filePath = item.json.file_path;\n      supabaseUrl = item.json.supabase_url || null;\n      supabaseKey = item.json.supabase_service_role_key || null;\n      if (filePath && supabaseUrl && supabaseKey) break;\n    }\n    if (item.json?.webhook_body?.file_path) {\n      filePath = item.json.webhook_body.file_path;\n      supabaseUrl = item.json.webhook_body.supabase_url || item.json.webhook_body.supabaseUrl || null;\n      supabaseKey = item.json.webhook_body.supabase_service_role_key || item.json.webhook_body.supabaseServiceRoleKey || null;\n      if (filePath && supabaseUrl && supabaseKey) break;\n    }\n  }\n}\n\n// Final fallback: try to get from original Webhook node\ntry {\n  if (!filePath || !supabaseUrl || !supabaseKey) {\n    const webhookNode = $('Webhook');\n    if (webhookNode && webhookNode.first()?.json?.body) {\n      const webhookBody = webhookNode.first().json.body;\n      if (!filePath && webhookBody.file_path) filePath = webhookBody.file_path;\n      if (!supabaseUrl && (webhookBody.supabase_url || webhookBody.supabaseUrl)) {\n        supabaseUrl = webhookBody.supabase_url || webhookBody.supabaseUrl;\n      }\n      if (!supabaseKey && (webhookBody.supabase_service_role_key || webhookBody.supabaseServiceRoleKey)) {\n        supabaseKey = webhookBody.supabase_service_role_key || webhookBody.supabaseServiceRoleKey;\n      }\n    }\n  }\n} catch (e) {\n  console.log('Could not access Webhook node:', e);\n}\n\nreturn [{\n  json: {\n    success: result.success || true,\n    message: `Scoring complete. Processed: ${result.processed_count || 0}, Ranked: ${result.ranked_count || 0}, Preferred: ${result.preferred_count || 0}`,\n    processed_count: result.processed_count || 0,\n    ranked_count: result.ranked_count || 0,\n    preferred_count: result.preferred_count || 0,\n    config_id: result.config_id,\n    config_name: result.config_name,\n    file_path: filePath,\n    supabase_url: supabaseUrl,\n    supabase_service_role_key: supabaseKey,\n    can_delete_file: !!(filePath && supabaseUrl && supabaseKey)\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2208,
+        192
+      ],
+      "id": "0aabe707-018f-4a09-b5c6-c5531b3276ff",
+      "name": "Workflow Complete"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare data for file deletion\n// Get file_path and Supabase credentials from previous nodes\nconst input = $input.first();\n\nlet filePath = null;\nlet supabaseUrl = null;\nlet supabaseKey = null;\n\n// Try to get from \"Skip Scoring\" node (which has the data from Extract Load Results)\ntry {\n  const skipScoringNode = $('Skip Scoring (Data Load Only)');\n  if (skipScoringNode && skipScoringNode.first()?.json) {\n    const skipData = skipScoringNode.first().json;\n    filePath = skipData.file_path || null;\n    supabaseUrl = skipData.supabase_url || null;\n    supabaseKey = skipData.supabase_service_role_key || null;\n  }\n} catch (e) {\n  console.log('Could not access Skip Scoring node:', e);\n}\n\n// Fallback: get from current input\nif (!filePath || !supabaseUrl || !supabaseKey) {\n  if (input.json) {\n    filePath = input.json.file_path || null;\n    supabaseUrl = input.json.supabase_url || null;\n    supabaseKey = input.json.supabase_service_role_key || null;\n    \n    // Try webhook_body if direct fields not found\n    if ((!filePath || !supabaseUrl || !supabaseKey) && input.json.webhook_body) {\n      const wb = input.json.webhook_body;\n      if (!filePath) filePath = wb.file_path || null;\n      if (!supabaseUrl) supabaseUrl = wb.supabase_url || wb.supabaseUrl || null;\n      if (!supabaseKey) supabaseKey = wb.supabase_service_role_key || wb.supabaseServiceRoleKey || null;\n    }\n  }\n}\n\n// Final fallback: get from Webhook node\ntry {\n  if (!filePath || !supabaseUrl || !supabaseKey) {\n    const webhookNode = $('Webhook');\n    if (webhookNode && webhookNode.first()?.json?.body) {\n      const webhookBody = webhookNode.first().json.body;\n      if (!filePath && webhookBody.file_path) filePath = webhookBody.file_path;\n      if (!supabaseUrl && (webhookBody.supabase_url || webhookBody.supabaseUrl)) {\n        supabaseUrl = webhookBody.supabase_url || webhookBody.supabaseUrl;\n      }\n      if (!supabaseKey && (webhookBody.supabase_service_role_key || webhookBody.supabaseServiceRoleKey)) {\n        supabaseKey = webhookBody.supabase_service_role_key || webhookBody.supabaseServiceRoleKey;\n      }\n    }\n  }\n} catch (e) {\n  console.log('Could not access Webhook node:', e);\n}\n\nconsole.log('File deletion info:', { filePath, hasUrl: !!supabaseUrl, hasKey: !!supabaseKey });\n\n// Validate we have all required values\nif (!filePath || !supabaseUrl || !supabaseKey) {\n  return [{\n    json: {\n      skip_delete: true,\n      message: 'Cannot delete file: missing required values',\n      file_path: filePath || 'missing',\n      supabase_url: supabaseUrl || 'missing',\n      supabase_service_role_key: supabaseKey ? 'present' : 'missing'\n    }\n  }];\n}\n\n// Construct the delete URL\nconst deleteUrl = `${supabaseUrl}/storage/v1/object/auction-csvs/${filePath}`;\n\nreturn [{\n  json: {\n    skip_delete: false,\n    delete_url: deleteUrl,\n    file_path: filePath,\n    supabase_url: supabaseUrl,\n    supabase_service_role_key: supabaseKey\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        192
+      ],
+      "id": "p1r2e3p4-a5r6-7890-d7e8l9e0t1e2",
+      "name": "Prepare Delete Request"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "skip-condition",
+              "leftValue": "={{ $json.skip_delete }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEqual"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [
+        2592,
+        192
+      ],
+      "id": "i1f2n3o4-d5e6-7890-l7e8t9e0",
+      "name": "Check Delete Required"
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $json.delete_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $json.supabase_service_role_key }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.supabase_service_role_key }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2784,
+        192
+      ],
+      "id": "d1e2l3e4-t5e6-7890-f7i8l9e0",
+      "name": "Delete CSV File"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/webhook/truncate-auctions",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -80,
+        400
+      ],
+      "id": "d0fe5da9-d25b-480f-ba12-927fbd1557d4",
+      "name": "Webhook1",
+      "webhookId": "a305786e-c495-40e4-88aa-0fa614f33cba"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "TRUNCATE TABLE auctions RESTART IDENTITY CASCADE;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        160,
+        400
+      ],
+      "id": "059e42ac-716c-400c-8800-c31ef509a03f",
+      "name": "Truncate Auctions Table",
+      "credentials": {
+        "postgres": {
+          "id": "DxQODs2W8TambApf",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"message\": \"Auctions table truncated successfully\", \"request_id\": $json.body?.request_id || $json.request_id || 'unknown' } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        368,
+        400
+      ],
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Download CSV from Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download CSV from Storage": {
+      "main": [
+        [
+          {
+            "node": "Prepare Load CSV Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Load CSV Query": {
+      "main": [
+        [
+          {
+            "node": "Load CSV to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load CSV to Database": {
+      "main": [
+        [
+          {
+            "node": "Extract Load Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Load Results": {
+      "main": [
+        [
+          {
+            "node": "Skip Scoring (Data Load Only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Scoring (Data Load Only)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Delete Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Delete Request": {
+      "main": [
+        [
+          {
+            "node": "Check Delete Required",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Delete Required": {
+      "main": [
+        [
+          {
+            "node": "Delete CSV File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Delete CSV File": {
+      "main": [
+        []
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Truncate Auctions Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Truncate Auctions Table": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ae00b538-6acd-4e16-84ca-2544a371914d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8ed9ed81fad64d2f2e539654b7152113b5201cf79b5e9548649591c372302289"
+  },
+  "id": "PxcyFdSj84YM3Lrx",
+  "tags": []
+}

@@ -1,0 +1,544 @@
+openapi: 3.0.3
+info:
+  title: Domain Analysis Workflow Improvements API
+  description: Enhanced API for domain analysis with dual-mode operation support
+  version: 2.0.0
+  contact:
+    name: Domain Analysis Team
+    email: support@domainanalysis.com
+
+servers:
+  - url: http://localhost:8000/api/v2
+    description: Development server
+  - url: https://api.domainanalysis.com/v2
+    description: Production server
+
+paths:
+  /analyze:
+    post:
+      summary: Start domain analysis with dual-mode support
+      description: Initiates domain analysis with support for both legacy and async patterns
+      tags:
+        - Analysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisRequest'
+      responses:
+        '200':
+          description: Analysis started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      summary: Get analysis status with progress tracking
+      description: Retrieves analysis status with progress indicators for async operations
+      tags:
+        - Analysis
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          schema:
+            type: string
+            format: hostname
+          description: Domain to analyze
+        - name: mode
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/AnalysisMode'
+          description: Analysis mode preference
+      responses:
+        '200':
+          description: Analysis status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisStatusResponse'
+        '404':
+          description: Analysis not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /analyze/{domain}/detailed/{data_type}:
+    get:
+      summary: Get detailed analysis data
+      description: Retrieves detailed analysis data (backlinks, keywords, referring domains)
+      tags:
+        - Detailed Data
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+            format: hostname
+          description: Domain name
+        - name: data_type
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/DetailedDataType'
+          description: Type of detailed data to retrieve
+      responses:
+        '200':
+          description: Detailed data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetailedDataResponse'
+        '404':
+          description: Detailed data not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /analyze/{domain}/progress:
+    get:
+      summary: Get analysis progress
+      description: Retrieves real-time progress information for async operations
+      tags:
+        - Progress Tracking
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+            format: hostname
+          description: Domain name
+      responses:
+        '200':
+          description: Progress information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressResponse'
+        '404':
+          description: Analysis not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /analyze/{domain}/refresh:
+    post:
+      summary: Manually refresh analysis data
+      description: Triggers manual refresh of cached analysis data
+      tags:
+        - Cache Management
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+            format: hostname
+          description: Domain name
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Refresh initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+        '404':
+          description: Analysis not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /config/mode:
+    get:
+      summary: Get analysis mode configuration
+      description: Retrieves current analysis mode configuration
+      tags:
+        - Configuration
+      responses:
+        '200':
+          description: Configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeConfigResponse'
+
+    put:
+      summary: Update analysis mode configuration
+      description: Updates analysis mode configuration for dual-mode operation
+      tags:
+        - Configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModeConfigRequest'
+      responses:
+        '200':
+          description: Configuration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeConfigResponse'
+
+components:
+  schemas:
+    AnalysisRequest:
+      type: object
+      required:
+        - domain
+      properties:
+        domain:
+          type: string
+          format: hostname
+          description: Domain to analyze
+          example: "example.com"
+        mode:
+          $ref: '#/components/schemas/AnalysisMode'
+        force_refresh:
+          type: boolean
+          default: false
+          description: Force refresh even if cached data exists
+
+    AnalysisResponse:
+      type: object
+      required:
+        - success
+        - message
+        - report_id
+      properties:
+        success:
+          type: boolean
+          description: Whether the analysis was started successfully
+        message:
+          type: string
+          description: Status message
+        report_id:
+          type: string
+          description: Unique report identifier
+        analysis_mode:
+          $ref: '#/components/schemas/AnalysisMode'
+        estimated_completion_time:
+          type: integer
+          description: Estimated completion time in seconds
+        progress_url:
+          type: string
+          format: uri
+          description: URL for progress tracking
+
+    AnalysisStatusResponse:
+      type: object
+      required:
+        - success
+        - message
+        - report_id
+        - status
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        report_id:
+          type: string
+        status:
+          $ref: '#/components/schemas/AnalysisStatus'
+        analysis_phase:
+          $ref: '#/components/schemas/AnalysisPhase'
+        analysis_mode:
+          $ref: '#/components/schemas/AnalysisMode'
+        detailed_data_available:
+          type: object
+          properties:
+            backlinks:
+              type: boolean
+            keywords:
+              type: boolean
+            referring_domains:
+              type: boolean
+        progress:
+          $ref: '#/components/schemas/ProgressInfo'
+
+    DetailedDataResponse:
+      type: object
+      required:
+        - success
+        - data
+        - metadata
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          description: Detailed analysis data
+        metadata:
+          $ref: '#/components/schemas/DataMetadata'
+
+    ProgressResponse:
+      type: object
+      required:
+        - success
+        - progress
+      properties:
+        success:
+          type: boolean
+        progress:
+          $ref: '#/components/schemas/ProgressInfo'
+
+    RefreshRequest:
+      type: object
+      properties:
+        data_types:
+          type: array
+          items:
+            $ref: '#/components/schemas/DetailedDataType'
+          description: Specific data types to refresh
+        force:
+          type: boolean
+          default: false
+          description: Force refresh even if data is fresh
+
+    RefreshResponse:
+      type: object
+      required:
+        - success
+        - message
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        refresh_id:
+          type: string
+          description: Unique refresh operation identifier
+
+    ModeConfigRequest:
+      type: object
+      properties:
+        mode_preference:
+          $ref: '#/components/schemas/AnalysisMode'
+        async_enabled:
+          type: boolean
+        cache_ttl_hours:
+          type: integer
+          minimum: 1
+          maximum: 168
+        manual_refresh_enabled:
+          type: boolean
+        progress_indicators_enabled:
+          type: boolean
+        domain_name:
+          type: string
+          format: hostname
+          description: Domain-specific configuration (null for global)
+
+    ModeConfigResponse:
+      type: object
+      required:
+        - success
+        - config
+      properties:
+        success:
+          type: boolean
+        config:
+          $ref: '#/components/schemas/AnalysisModeConfig'
+
+    AnalysisModeConfig:
+      type: object
+      required:
+        - id
+        - mode_preference
+        - async_enabled
+        - cache_ttl_hours
+        - manual_refresh_enabled
+        - progress_indicators_enabled
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        domain_name:
+          type: string
+          format: hostname
+          nullable: true
+        mode_preference:
+          $ref: '#/components/schemas/AnalysisMode'
+        async_enabled:
+          type: boolean
+        cache_ttl_hours:
+          type: integer
+        manual_refresh_enabled:
+          type: boolean
+        progress_indicators_enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProgressInfo:
+      type: object
+      required:
+        - status
+        - phase
+        - progress_percentage
+      properties:
+        status:
+          $ref: '#/components/schemas/ProgressStatus'
+        phase:
+          $ref: '#/components/schemas/AnalysisPhase'
+        progress_percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        estimated_time_remaining:
+          type: integer
+          description: Estimated time remaining in seconds
+        current_operation:
+          type: string
+          description: Current operation being performed
+        completed_operations:
+          type: array
+          items:
+            type: string
+          description: List of completed operations
+        error_message:
+          type: string
+          nullable: true
+          description: Error message if status is failed
+
+    DataMetadata:
+      type: object
+      required:
+        - domain
+        - data_type
+        - created_at
+      properties:
+        domain:
+          type: string
+        data_type:
+          $ref: '#/components/schemas/DetailedDataType'
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        data_freshness:
+          type: string
+          enum: [fresh, stale, expired]
+        record_count:
+          type: integer
+          description: Number of records in the data
+
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - error
+        - message
+      properties:
+        success:
+          type: boolean
+          default: false
+        error:
+          type: string
+          description: Error type
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+
+    # Enums
+    AnalysisMode:
+      type: string
+      enum:
+        - legacy
+        - async
+        - dual
+      description: Analysis mode preference
+
+    AnalysisStatus:
+      type: string
+      enum:
+        - pending
+        - in_progress
+        - completed
+        - failed
+      description: Analysis status
+
+    AnalysisPhase:
+      type: string
+      enum:
+        - essential
+        - detailed
+        - ai_analysis
+        - completed
+      description: Current analysis phase
+
+    DetailedDataType:
+      type: string
+      enum:
+        - backlinks
+        - keywords
+        - referring_domains
+      description: Type of detailed data
+
+    ProgressStatus:
+      type: string
+      enum:
+        - pending
+        - in_progress
+        - completed
+        - failed
+        - cancelled
+      description: Progress status
+
+tags:
+  - name: Analysis
+    description: Domain analysis operations
+  - name: Detailed Data
+    description: Detailed analysis data retrieval
+  - name: Progress Tracking
+    description: Real-time progress tracking
+  - name: Cache Management
+    description: Cache management operations
+  - name: Configuration
+    description: System configuration
+
+
+
+
+

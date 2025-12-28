@@ -1,0 +1,25 @@
+{
+  "software": ["software", "app", "apps", "application", "platform", "system", "tech", "technology", "digital", "cloud", "saas", "api", "code", "dev", "developer"],
+  "crypto": ["crypto", "cryptocurrency", "bitcoin", "blockchain", "nft", "defi", "token", "wallet", "exchange", "mining"],
+  "ai": ["ai", "artificial", "intelligence", "machine", "learning", "neural", "deep", "algorithm", "automation", "bot", "chatbot"],
+  "finance": ["finance", "financial", "bank", "banking", "money", "pay", "payment", "invest", "investment", "trading", "trade", "capital", "wealth", "fund"],
+  "real_estate": ["real", "estate", "property", "properties", "home", "homes", "house", "houses", "land", "rent", "rental", "buy", "sell"],
+  "health": ["health", "medical", "medicine", "doctor", "clinic", "hospital", "wellness", "fitness", "care", "therapy"],
+  "education": ["education", "learn", "learning", "school", "university", "college", "course", "training", "teach", "teacher"],
+  "ecommerce": ["shop", "store", "market", "marketplace", "buy", "sell", "sale", "sales", "product", "products", "retail"],
+  "marketing": ["marketing", "ad", "ads", "advertising", "brand", "promo", "promotion", "social", "media", "seo", "content"],
+  "business": ["business", "company", "corp", "enterprise", "startup", "venture", "consulting", "service", "services"]
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

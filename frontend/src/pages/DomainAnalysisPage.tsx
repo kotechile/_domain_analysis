@@ -1,41 +1,40 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box,
-  Card,
-  CardContent,
   TextField,
   Button,
   Typography,
-  Alert,
   CircularProgress,
   LinearProgress,
-  Chip,
-  Grid,
-  Paper,
+  Container,
+  Stack,
+  InputAdornment,
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  Analytics as AnalyticsIcon,
-  Speed as SpeedIcon,
-  Security as SecurityIcon,
+  Store as StoreIcon,
+  History as HistoryIcon,
 } from '@mui/icons-material';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import { useApi } from '../services/api';
+import Header from '../components/Header';
 
 const DomainAnalysisPage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const [domain, setDomain] = useState('');
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const api = useApi();
 
-  // Health check query
-  const { data: healthData, isLoading: healthLoading } = useQuery({
-    queryKey: ['health'],
-    queryFn: () => api.getHealth(),
-    refetchInterval: 30000, // Refetch every 30 seconds
-  });
+  // Check for domain in URL params on mount
+  useEffect(() => {
+    const domainParam = searchParams.get('domain');
+    if (domainParam) {
+      setDomain(domainParam);
+    }
+  }, [searchParams]);
 
   // Analysis mutation
   const analysisMutation = useMutation({
@@ -70,167 +69,187 @@ const DomainAnalysisPage: React.FC = () => {
     analysisMutation.mutate(formattedDomain);
   };
 
-  const getServiceStatusColor = (status: string) => {
-    switch (status) {
-      case 'healthy':
-        return 'success';
-      case 'unhealthy':
-        return 'error';
-      default:
-        return 'warning';
-    }
-  };
-
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-      {/* Header */}
-      <Box sx={{ textAlign: 'center', mb: 4 }}>
-        <Typography variant="h3" component="h1" gutterBottom>
-          Domain Analysis System
-        </Typography>
-        <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
-          Comprehensive SEO analysis with backlinks, keywords, and AI-powered insights
-        </Typography>
-      </Box>
-
-      {/* System Status */}
-      {healthData && (
-        <Paper sx={{ p: 2, mb: 4, bgcolor: 'background.paper' }}>
-          <Typography variant="h6" gutterBottom>
-            System Status
-          </Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6} md={3}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Chip
-                  label={healthData.status}
-                  color={healthData.status === 'healthy' ? 'success' : 'warning'}
-                  size="small"
-                />
-                <Typography variant="body2">Overall</Typography>
-              </Box>
-            </Grid>
-            {Object.entries(healthData.services).map(([service, status]) => (
-              <Grid item xs={12} sm={6} md={3} key={service}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Chip
-                    label={status}
-                    color={getServiceStatusColor(status) as any}
-                    size="small"
-                  />
-                  <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>
-                    {service.replace('_', ' ')}
-                  </Typography>
-                </Box>
-              </Grid>
-            ))}
-          </Grid>
-        </Paper>
-      )}
-
-      {/* Main Analysis Form */}
-      <Card sx={{ mb: 4 }}>
-        <CardContent>
-          <form onSubmit={handleSubmit}>
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-              <TextField
-                fullWidth
-                label="Domain Name"
-                placeholder="Enter domain (e.g., example.com)"
-                value={domain}
-                onChange={(e) => setDomain(e.target.value)}
-                disabled={analysisMutation.isPending}
-                error={!!error}
-                helperText={error || 'Enter a domain name to analyze its SEO performance'}
-                InputProps={{
-                  startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
-                }}
-              />
-              <Button
-                type="submit"
-                variant="contained"
-                size="large"
-                disabled={analysisMutation.isPending || !domain.trim()}
-                sx={{ minWidth: 120, height: 56 }}
-              >
-                {analysisMutation.isPending ? (
-                  <CircularProgress size={24} color="inherit" />
-                ) : (
-                  'Analyze'
-                )}
-              </Button>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#0C152B' }}>
+      <Header />
+      <Container maxWidth="md" sx={{ py: { xs: 6, sm: 8, md: 10 } }}>
+        {/* Hero Section */}
+        <Box sx={{ textAlign: 'center', mb: 6 }}>
+          <Typography 
+            variant="h2" 
+            component="h1" 
+            gutterBottom
+            sx={{ 
+              fontWeight: 700,
+              mb: 3,
+              fontSize: { xs: '2.5rem', sm: '3rem', md: '3.5rem' },
+              lineHeight: 1.2,
+            }}
+          >
+            <Box component="span" sx={{ color: '#FFFFFF' }}>
+              Invest in the{' '}
             </Box>
+            <Box component="span" sx={{ color: '#66CCFF' }}>
+              Perfect{' '}
+            </Box>
+            <Box component="span" sx={{ color: '#00C892' }}>
+              Domain
+            </Box>
+          </Typography>
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              maxWidth: 600, 
+              mx: 'auto',
+              mb: 6,
+              lineHeight: 1.7,
+              fontSize: '1.125rem',
+              color: '#FFFFFF',
+              opacity: 0.9,
+            }}
+          >
+            Deep-informed purchase analysis powered by AI. Evaluate brandability, SEO potential, and market value in seconds.
+          </Typography>
+        </Box>
+
+        {/* Main Analysis Form */}
+        <Box sx={{ maxWidth: 700, mx: 'auto' }}>
+          <form onSubmit={handleSubmit}>
+            <Stack spacing={3}>
+              {/* Search Input with Inline Analyze Button */}
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <TextField
+                  fullWidth
+                  placeholder="Enter domain name (e.g. example.com)..."
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  disabled={analysisMutation.isPending}
+                  error={!!error}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ color: '#9E9E9E' }} />
+                      </InputAdornment>
+                    ),
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      borderRadius: '12px',
+                      color: '#FFFFFF',
+                      fontSize: '1rem',
+                      '& fieldset': {
+                        borderColor: 'rgba(255, 255, 255, 0.1)',
+                      },
+                      '&:hover fieldset': {
+                        borderColor: 'rgba(255, 255, 255, 0.2)',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#2962FF',
+                      },
+                      '& input::placeholder': {
+                        color: '#9E9E9E',
+                        opacity: 1,
+                      },
+                    },
+                  }}
+                />
+                <Button
+                  type="submit"
+                  variant="contained"
+                  disabled={analysisMutation.isPending || !domain.trim()}
+                  sx={{ 
+                    minWidth: 120,
+                    backgroundColor: '#2962FF',
+                    color: '#FFFFFF',
+                    borderRadius: '12px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    px: 3,
+                    '&:hover': {
+                      backgroundColor: '#1E4ED8',
+                    },
+                    '&:disabled': {
+                      backgroundColor: 'rgba(41, 98, 255, 0.5)',
+                    },
+                  }}
+                  startIcon={analysisMutation.isPending ? <CircularProgress size={18} color="inherit" /> : null}
+                >
+                  {analysisMutation.isPending ? 'Analyzing...' : 'Analyze'}
+                </Button>
+              </Box>
+
+              {error && (
+                <Typography variant="body2" sx={{ color: '#FF5252', textAlign: 'center' }}>
+                  {error}
+                </Typography>
+              )}
+
+              {/* Action Buttons */}
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" sx={{ mt: 2 }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<StoreIcon />}
+                  onClick={() => navigate('/marketplace')}
+                  sx={{
+                    color: '#FFFFFF',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    px: 3,
+                    py: 1.25,
+                    textTransform: 'none',
+                    fontSize: '0.9375rem',
+                    '&:hover': {
+                      borderColor: 'rgba(255, 255, 255, 0.4)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    },
+                  }}
+                >
+                  Browse Marketplace
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<HistoryIcon />}
+                  onClick={() => navigate('/reports')}
+                  sx={{
+                    color: '#FFFFFF',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    borderRadius: '12px',
+                    px: 3,
+                    py: 1.25,
+                    textTransform: 'none',
+                    fontSize: '0.9375rem',
+                    '&:hover': {
+                      borderColor: 'rgba(255, 255, 255, 0.4)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    },
+                  }}
+                >
+                  Analysis History
+                </Button>
+              </Stack>
+            </Stack>
           </form>
 
           {analysisMutation.isPending && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
+            <Box sx={{ mt: 4 }}>
+              <LinearProgress 
+                sx={{ 
+                  borderRadius: 1, 
+                  height: 6,
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  '& .MuiLinearProgress-bar': {
+                    backgroundColor: '#2962FF',
+                  },
+                }} 
+              />
+              <Typography variant="body2" sx={{ mt: 2, textAlign: 'center', color: '#FFFFFF', opacity: 0.8 }}>
                 Starting analysis...
               </Typography>
-              <LinearProgress />
             </Box>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Features */}
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <AnalyticsIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-              <Typography variant="h6" gutterBottom>
-                SEO Metrics
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Get comprehensive SEO data including domain rating, organic traffic, backlinks,
-                and keyword rankings from DataForSEO.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <SpeedIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-              <Typography variant="h6" gutterBottom>
-                Fast Analysis
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Complete domain analysis in under 15 seconds with parallel data collection and
-                intelligent caching.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <SecurityIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-              <Typography variant="h6" gutterBottom>
-                AI Insights
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                AI-powered analysis with highlights, niche suggestions, and historical risk
-                assessment using advanced LLM technology.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Recent Reports Link */}
-      <Box sx={{ textAlign: 'center', mt: 4 }}>
-        <Button
-          variant="outlined"
-          onClick={() => navigate('/reports')}
-          sx={{ minWidth: 200 }}
-        >
-          View Recent Reports
-        </Button>
-      </Box>
+        </Box>
+      </Container>
     </Box>
   );
 };

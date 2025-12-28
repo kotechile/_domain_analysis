@@ -1,0 +1,284 @@
+{
+  "name": "DataForSEO Backlinks Single Page",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "backlinks-summary-single-page",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-summary",
+      "name": "Webhook (Summary)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 200],
+      "webhookId": "84214296-2632-452d-a292-fbbefe2f12a2"
+    },
+    {
+      "parameters": {
+        "operation": "get-backlink-summary",
+        "target": "={{ $('Webhook (Summary)').item.json.body.domain }}"
+      },
+      "id": "dataforseo-summary",
+      "name": "Get Backlink Summary",
+      "type": "n8n-nodes-dataforseo.dataForSeo",
+      "typeVersion": 1,
+      "position": [450, 200],
+      "credentials": {
+        "dataForSeoApi": {
+          "id": "HQQq3xHbsyZjX7My",
+          "name": "DataForSEO account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "error-check-summary",
+              "leftValue": "={{ $json.status_code }}",
+              "rightValue": 20000,
+              "operator": {
+                "type": "number",
+                "operation": "notEqual"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-error-summary",
+      "name": "IF Error Check (Summary)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Webhook (Summary)').item.json.body.callback_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"request_id\": \"{{ $('Webhook (Summary)').item.json.body.request_id }}\",\n  \"domain\": \"{{ $('Webhook (Summary)').item.json.body.domain }}\",\n  \"success\": true,\n  \"data\": {{ JSON.stringify($json.tasks[0].result[0] || {}) }},\n  \"error\": null\n}",
+        "options": {}
+      },
+      "id": "http-success-summary",
+      "name": "HTTP Request (Success Summary)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Webhook (Summary)').item.json.body.callback_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"request_id\": \"{{ $('Webhook (Summary)').item.json.body.request_id }}\",\n  \"domain\": \"{{ $('Webhook (Summary)').item.json.body.domain }}\",\n  \"success\": false,\n  \"data\": null,\n  \"error\": \"{{ $json.status_message || 'Unknown error' }} (Code: {{ $json.status_code }})\"\n}",
+        "options": {}
+      },
+      "id": "http-error-summary",
+      "name": "HTTP Request (Error Summary)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "backlinks-details-single-page",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-details",
+      "name": "Webhook (Details)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 600],
+      "webhookId": "84214296-2632-452d-a292-fbbefe2f12a2"
+    },
+    {
+      "parameters": {
+        "target": "={{ $('Webhook (Details)').item.json.body.domain }}",
+        "limit": "={{ $('Webhook (Details)').item.json.body.limit || 10000 }}",
+        "include_subdomains": true,
+        "mode": "as_is"
+      },
+      "id": "dataforseo-details",
+      "name": "Get Backlinks",
+      "type": "n8n-nodes-dataforseo.dataForSeo",
+      "typeVersion": 1,
+      "position": [450, 600],
+      "credentials": {
+        "dataForSeoApi": {
+          "id": "HQQq3xHbsyZjX7My",
+          "name": "DataForSEO account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "error-check-details",
+              "leftValue": "={{ $json.status_code }}",
+              "rightValue": 20000,
+              "operator": {
+                "type": "number",
+                "operation": "notEqual"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-error-details",
+      "name": "IF Error Check (Details)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 600]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Webhook (Details)').item.json.body.callback_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"request_id\": \"{{ $('Webhook (Details)').item.json.body.request_id }}\",\n  \"domain\": \"{{ $('Webhook (Details)').item.json.body.domain }}\",\n  \"success\": true,\n  \"data\": {{ JSON.stringify($json.tasks[0].result[0] || {}) }},\n  \"error\": null\n}",
+        "options": {}
+      },
+      "id": "http-success-details",
+      "name": "HTTP Request (Success Details)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Webhook (Details)').item.json.body.callback_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"request_id\": \"{{ $('Webhook (Details)').item.json.body.request_id }}\",\n  \"domain\": \"{{ $('Webhook (Details)').item.json.body.domain }}\",\n  \"success\": false,\n  \"data\": null,\n  \"error\": \"{{ $json.status_message || 'Unknown error' }} (Code: {{ $json.status_code }})\"\n}",
+        "options": {}
+      },
+      "id": "http-error-details",
+      "name": "HTTP Request (Error Details)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 700]
+    }
+  ],
+  "connections": {
+    "Webhook (Summary)": {
+      "main": [
+        [
+          {
+            "node": "Get Backlink Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Backlink Summary": {
+      "main": [
+        [
+          {
+            "node": "IF Error Check (Summary)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Error Check (Summary)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request (Success Summary)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request (Error Summary)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook (Details)": {
+      "main": [
+        [
+          {
+            "node": "Get Backlinks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Backlinks": {
+      "main": [
+        [
+          {
+            "node": "IF Error Check (Details)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Error Check (Details)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request (Success Details)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request (Error Details)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1",
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8ed9ed81fad64d2f2e539654b7152113b5201cf79b5e9548649591c372302289"
+  },
+  "id": "mbqUU9a1Pal5VulO"
+}

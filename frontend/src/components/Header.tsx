@@ -1,117 +1,102 @@
-import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AppBar,
   Toolbar,
   Typography,
   Button,
   Box,
-  IconButton,
-  Menu,
-  MenuItem,
-  Chip,
 } from '@mui/material';
 import {
-  Analytics as AnalyticsIcon,
-  List as ListIcon,
-  Home as HomeIcon,
-  MoreVert as MoreVertIcon,
+  Language as LanguageIcon,
 } from '@mui/icons-material';
 
 const Header: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleNavigation = (path: string) => {
-    navigate(path);
-    handleMenuClose();
-  };
-
-  const isActive = (path: string) => {
-    return location.pathname === path;
-  };
 
   return (
-    <AppBar position="static" elevation={1}>
-      <Toolbar>
+    <AppBar 
+      position="sticky" 
+      elevation={0}
+      sx={{
+        backgroundColor: '#0C152B',
+      }}
+    >
+      <Toolbar sx={{ px: { xs: 3, sm: 4 }, minHeight: 64, justifyContent: 'space-between' }}>
         {/* Logo and Title */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mr: 4 }}>
-          <AnalyticsIcon sx={{ mr: 1 }} />
-          <Typography variant="h6" component="div" sx={{ fontWeight: 600 }}>
-            Domain Analysis
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            cursor: 'pointer',
+          }}
+          onClick={() => navigate('/')}
+        >
+          <Box
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: 1,
+              bgcolor: '#66CCFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mr: 1.5,
+            }}
+          >
+            <LanguageIcon sx={{ fontSize: 20, color: '#0C152B' }} />
+          </Box>
+          <Typography 
+            variant="h6" 
+            component="div" 
+            sx={{ 
+              fontWeight: 600,
+              fontSize: '1.25rem',
+              color: '#FFFFFF',
+            }}
+          >
+            DomainScope
+            <Box component="span" sx={{ color: '#66CCFF', ml: 0.5 }}>
+              AI
+            </Box>
           </Typography>
-          <Chip
-            label="v1.0"
-            size="small"
-            color="secondary"
-            sx={{ ml: 2, fontSize: '0.75rem' }}
-          />
         </Box>
 
-        {/* Navigation Buttons */}
-        <Box sx={{ display: 'flex', gap: 1, flexGrow: 1 }}>
+        {/* Right side navigation */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
           <Button
-            color="inherit"
-            startIcon={<HomeIcon />}
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/marketplace')}
             sx={{
-              backgroundColor: isActive('/') ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              color: '#FFFFFF',
+              textTransform: 'none',
+              fontSize: '0.9375rem',
+              fontWeight: 400,
+              '&:hover': {
+                backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              },
             }}
           >
-            Analysis
+            Marketplace
           </Button>
           <Button
-            color="inherit"
-            startIcon={<ListIcon />}
             onClick={() => navigate('/reports')}
+            variant="contained"
             sx={{
-              backgroundColor: isActive('/reports') ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+              backgroundColor: '#2962FF',
+              color: '#FFFFFF',
+              textTransform: 'none',
+              fontSize: '0.9375rem',
+              fontWeight: 500,
+              borderRadius: '20px',
+              px: 2.5,
+              py: 0.75,
+              '&:hover': {
+                backgroundColor: '#1E4ED8',
+              },
             }}
           >
-            Reports
+            Analysis History
           </Button>
-        </Box>
-
-        {/* Right side menu */}
-        <Box>
-          <IconButton
-            color="inherit"
-            onClick={handleMenuOpen}
-            aria-label="more options"
-          >
-            <MoreVertIcon />
-          </IconButton>
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-            anchorOrigin={{
-              vertical: 'bottom',
-              horizontal: 'right',
-            }}
-            transformOrigin={{
-              vertical: 'top',
-              horizontal: 'right',
-            }}
-          >
-            <MenuItem onClick={() => handleNavigation('/')}>
-              <HomeIcon sx={{ mr: 1 }} />
-              New Analysis
-            </MenuItem>
-            <MenuItem onClick={() => handleNavigation('/reports')}>
-              <ListIcon sx={{ mr: 1 }} />
-              View Reports
-            </MenuItem>
-          </Menu>
         </Box>
       </Toolbar>
     </AppBar>
