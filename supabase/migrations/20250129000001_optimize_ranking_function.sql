@@ -100,3 +100,8 @@ CREATE INDEX IF NOT EXISTS idx_auctions_ranking_score ON auctions(ranking, score
 
 
 
+
+
+
+
+

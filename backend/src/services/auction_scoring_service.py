@@ -479,3 +479,8 @@ class AuctionScoringService:
 
 
 
+
+
+
+
+

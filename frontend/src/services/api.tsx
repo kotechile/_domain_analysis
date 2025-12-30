@@ -462,6 +462,7 @@ export interface Auction {
   has_statistics: boolean;
   current_bid?: number;
   offer_type?: string; // Type of domain offering: 'auction', 'backorder', 'buy_now'
+  link?: string; // Direct link to auction listing (e.g., GoDaddy auction URL)
   // Extracted columns from page_statistics for better query performance
   backlinks?: number;
   referring_domains?: number;
@@ -872,6 +873,28 @@ class ApiService {
     return response.data;
   }
 
+  async uploadAuctionsJSON(file: File, auctionSite: string, offeringType?: string): Promise<AuctionUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    let url = `/auctions/upload-json?auction_site=${encodeURIComponent(auctionSite)}`;
+    if (offeringType) {
+      url += `&offering_type=${encodeURIComponent(offeringType)}`;
+    }
+
+    const response: AxiosResponse<AuctionUploadResponse> = await this.client.post(
+      url,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 1800000, // 30 minutes for very large JSON files
+      }
+    );
+    return response.data;
+  }
+
   async triggerAuctionsAnalysis(limit: number = 100): Promise<AuctionTriggerResponse> { // DataForSEO limit: 100 unique domains per request
     const response: AxiosResponse<AuctionTriggerResponse> = await this.client.post(
       `/auctions/trigger-analysis?limit=${limit}`,
@@ -919,6 +942,96 @@ class ApiService {
   async triggerBulkTrafficDataAnalysis(limit: number = 1000): Promise<AuctionTriggerResponse> { // DataForSEO Labs API limit: 1000 domains per request
     const response: AxiosResponse<AuctionTriggerResponse> = await this.client.post(
       `/auctions/trigger-bulk-traffic-data?limit=${limit}`,
+      {},
+      {
+        timeout: 300000, // 5 minutes
+      }
+    );
+    return response.data;
+  }
+
+  async triggerBulkAllMetricsAnalysis(filters: {
+    preferred?: boolean;
+    auctionSite?: string;
+    offeringType?: string;
+    tld?: string;
+    tlds?: string[];
+    hasStatistics?: boolean;
+    scored?: boolean;
+    minRank?: number;
+    maxRank?: number;
+    minScore?: number;
+    maxScore?: number;
+    expirationFromDate?: string;
+    expirationToDate?: string;
+    sortBy?: string;
+    sortOrder?: string;
+    limit?: number;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    triggered_count: number;
+    skipped_count: number;
+    triggered_domains: string[];
+    results: {
+      traffic_data: { triggered: number; success: boolean; request_id?: string; error?: string };
+      rank: { triggered: number; success: boolean; request_id?: string; error?: string };
+      backlinks: { triggered: number; success: boolean; request_id?: string; error?: string };
+      spam_score: { triggered: number; success: boolean; request_id?: string; error?: string };
+    };
+  }> {
+    const params = new URLSearchParams();
+    
+    if (filters.preferred !== undefined) {
+      params.append('preferred', filters.preferred.toString());
+    }
+    if (filters.auctionSite) {
+      params.append('auction_site', filters.auctionSite);
+    }
+    if (filters.offeringType) {
+      params.append('offering_type', filters.offeringType);
+    }
+    if (filters.tlds && filters.tlds.length > 0) {
+      params.append('tlds', filters.tlds.join(','));
+    } else if (filters.tld) {
+      params.append('tld', filters.tld);
+    }
+    if (filters.hasStatistics !== undefined) {
+      params.append('has_statistics', filters.hasStatistics.toString());
+    }
+    if (filters.scored !== undefined) {
+      params.append('scored', filters.scored.toString());
+    }
+    if (filters.minRank !== undefined) {
+      params.append('min_rank', filters.minRank.toString());
+    }
+    if (filters.maxRank !== undefined) {
+      params.append('max_rank', filters.maxRank.toString());
+    }
+    if (filters.minScore !== undefined) {
+      params.append('min_score', filters.minScore.toString());
+    }
+    if (filters.maxScore !== undefined) {
+      params.append('max_score', filters.maxScore.toString());
+    }
+    if (filters.expirationFromDate) {
+      params.append('expiration_from_date', filters.expirationFromDate);
+    }
+    if (filters.expirationToDate) {
+      params.append('expiration_to_date', filters.expirationToDate);
+    }
+    if (filters.sortBy) {
+      params.append('sort_by', filters.sortBy);
+    }
+    if (filters.sortOrder) {
+      params.append('sort_order', filters.sortOrder);
+    }
+    if (filters.limit !== undefined) {
+      params.append('limit', filters.limit.toString());
+    }
+
+    const response: AxiosResponse = await this.client.post(
+      `/auctions/trigger-bulk-all-metrics?${params.toString()}`,
       {},
       {
         timeout: 300000, // 5 minutes

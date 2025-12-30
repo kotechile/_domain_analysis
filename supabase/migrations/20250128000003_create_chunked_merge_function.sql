@@ -39,6 +39,7 @@ BEGIN
             auction_site,
             current_bid,
             source_data,
+            link,
             processed,
             preferred,
             has_statistics
@@ -55,6 +56,7 @@ BEGIN
             auction_site,
             current_bid,
             source_data,
+            link,
             processed,
             preferred,
             has_statistics
@@ -66,6 +68,7 @@ BEGIN
             auction_site,
             current_bid,
             source_data,
+            link,
             processed,
             preferred,
             has_statistics
@@ -76,6 +79,7 @@ BEGIN
             expiration_date = EXCLUDED.expiration_date,
             current_bid = EXCLUDED.current_bid,
             source_data = EXCLUDED.source_data,
+            link = EXCLUDED.link,
             updated_at = NOW()
         RETURNING 
             CASE WHEN xmax = 0 THEN 'inserted' ELSE 'updated' END as action
@@ -129,6 +133,7 @@ EXCEPTION WHEN OTHERS THEN
     );
 END;
 $$;
+
 
 
 

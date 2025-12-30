@@ -4,6 +4,7 @@ CSV Parser Service for multiple auction site formats
 
 import csv
 import io
+import json
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import structlog
@@ -444,6 +445,110 @@ class CSVParserService:
         except (ValueError, TypeError) as e:
             logger.warning("Could not parse price", price_str=price_str, error=str(e))
             return None
+    
+    def parse_godaddy_json(self, content: str) -> List[AuctionInput]:
+        """
+        Parse GoDaddy JSON format
+        
+        Expected format:
+        {
+          "meta": { ... },
+          "data": [
+            {
+              "domainName": "DOMAIN.COM",
+              "link": "https://...",
+              "auctionType": "Bid",
+              "auctionEndTime": "2025-12-29T16:00:00Z",
+              "price": "$1",
+              "numberOfBids": 0,
+              "domainAge": 1,
+              "pageviews": 0,
+              "valuation": "$29",
+              "monthlyParkingRevenue": "$0",
+              "isAdult": false,
+              "description": "..."
+            }
+          ]
+        }
+        """
+        auctions = []
+        
+        try:
+            # Parse JSON content
+            data = json.loads(content)
+            
+            # Extract data array
+            if not isinstance(data, dict) or 'data' not in data:
+                raise ValueError("JSON must have a 'data' array")
+            
+            listings = data.get('data', [])
+            if not isinstance(listings, list):
+                raise ValueError("'data' must be an array")
+            
+            logger.info("Parsing GoDaddy JSON", total_listings=len(listings))
+            
+            for idx, listing in enumerate(listings, start=1):
+                try:
+                    if not isinstance(listing, dict):
+                        logger.warning("Skipping non-dict listing", index=idx)
+                        continue
+                    
+                    # Extract domain name
+                    domain_name = listing.get('domainName', '').strip()
+                    if not domain_name:
+                        logger.warning("Skipping listing with empty domainName", index=idx)
+                        continue
+                    
+                    # Parse auction end time (expiration_date)
+                    auction_end_time_str = listing.get('auctionEndTime', '')
+                    if not auction_end_time_str:
+                        logger.warning("Skipping listing without auctionEndTime", index=idx, domain=domain_name)
+                        continue
+                    
+                    expiration_date = self._parse_date(auction_end_time_str)
+                    if not expiration_date:
+                        logger.warning("Could not parse auctionEndTime", index=idx, domain=domain_name, date_str=auction_end_time_str)
+                        continue
+                    
+                    # Parse price (current bid)
+                    price_str = listing.get('price', '')
+                    current_bid = self._parse_price(price_str)
+                    
+                    # Extract link (auction URL)
+                    link = listing.get('link', '').strip() or None
+                    
+                    # Store all original data in source_data
+                    source_data = {k: v for k, v in listing.items()}
+                    # Also include meta information if available
+                    if 'meta' in data:
+                        source_data['_meta'] = data['meta']
+                    
+                    auction = AuctionInput(
+                        domain=domain_name,
+                        start_date=None,  # GoDaddy JSON doesn't provide start date
+                        expiration_date=expiration_date,
+                        end_date=expiration_date,
+                        current_bid=current_bid,
+                        auction_site='godaddy',
+                        source_data=source_data,
+                        link=link
+                    )
+                    
+                    auctions.append(auction)
+                    
+                except Exception as e:
+                    logger.warning("Failed to parse GoDaddy JSON listing", index=idx, error=str(e))
+                    continue
+            
+            logger.info("Parsed GoDaddy JSON", total_auctions=len(auctions))
+            return auctions
+            
+        except json.JSONDecodeError as e:
+            logger.error("Failed to parse JSON", error=str(e))
+            raise ValueError(f"Invalid JSON format: {str(e)}")
+        except Exception as e:
+            logger.error("Failed to parse GoDaddy JSON", error=str(e))
+            raise
 
 
 

@@ -1790,6 +1790,188 @@ class DatabaseService:
                        limit=limit)
             raise
     
+    async def get_auctions_missing_any_metric_with_filters(
+        self,
+        filters: Optional[Dict[str, Any]] = None,
+        sort_by: str = 'expiration_date',
+        sort_order: str = 'asc',
+        limit: int = 1000
+    ) -> List[Dict[str, Any]]:
+        """
+        Get auctions matching filters that are missing ANY of the four DataForSEO metrics:
+        - Traffic data (traffic_data in page_statistics)
+        - Rank (ranking column or rank in page_statistics)
+        - Backlinks (backlinks column or backlinks in page_statistics)
+        - Spam score (backlinks_spam_score column or spam_score in page_statistics)
+        
+        Args:
+            filters: Dict with optional filters (preferred, auction_site, tlds, offering_type, etc.)
+            sort_by: Field to sort by (default 'expiration_date')
+            sort_order: Sort order 'asc' or 'desc' (default 'asc')
+            limit: Maximum number of records to return (default 1000)
+            
+        Returns:
+            List of auction dictionaries with domain, expiration_date, and id
+        """
+        try:
+            if not self.client:
+                raise Exception("Supabase client not available")
+            
+            # Determine sort order based on offering_type
+            # For buy_now, use provided sort_by and sort_order
+            # For auctions, always use expiration_date ASC (closest to expire first)
+            offering_type = filters.get('offering_type') if filters else None
+            if offering_type and offering_type.lower() == 'buy_now':
+                # Use provided sort parameters for buy_now
+                final_sort_by = sort_by
+                final_sort_order = sort_order
+            else:
+                # For auctions, always sort by expiration_date ASC
+                final_sort_by = 'expiration_date'
+                final_sort_order = 'asc'
+            
+            # Use RPC function if TLDs are specified, otherwise use direct query
+            if filters and filters.get('tlds') and isinstance(filters['tlds'], list) and len(filters['tlds']) > 0:
+                # Use RPC function for proper TLD filtering
+                tlds = filters['tlds']
+                normalized_tlds = [tld if tld.startswith('.') else f'.{tld}' for tld in tlds]
+                
+                offering_type_param = None
+                if filters.get('offering_type'):
+                    offering_type_param = filters.get('offering_type').lower().strip()
+                
+                rpc_params = {
+                    'p_tlds': normalized_tlds,
+                    'p_preferred': filters.get('preferred'),
+                    'p_auction_site': filters.get('auction_site'),
+                    'p_offering_type': offering_type_param,
+                    'p_has_statistics': filters.get('has_statistics'),
+                    'p_scored': filters.get('scored'),
+                    'p_min_rank': filters.get('min_rank'),
+                    'p_max_rank': filters.get('max_rank'),
+                    'p_min_score': filters.get('min_score'),
+                    'p_max_score': filters.get('max_score'),
+                    'p_expiration_from_date': filters.get('expiration_from_date'),
+                    'p_expiration_to_date': filters.get('expiration_to_date'),
+                    'p_sort_by': final_sort_by,
+                    'p_sort_order': final_sort_order,
+                    'p_limit': limit * 2,  # Get more records to filter for missing metrics
+                    'p_offset': 0
+                }
+                
+                try:
+                    rpc_result = self.client.rpc('filter_auctions_by_tlds', rpc_params).execute()
+                    auctions = rpc_result.data if rpc_result.data else []
+                except Exception as rpc_error:
+                    logger.error("RPC function failed in get_auctions_missing_any_metric_with_filters", 
+                               error=str(rpc_error),
+                               rpc_params={k: v for k, v in rpc_params.items() if k != 'p_tlds'})
+                    raise Exception(f"RPC function filter_auctions_by_tlds failed: {str(rpc_error)}") from rpc_error
+            else:
+                # Use direct query when no TLDs filter
+                query = self.client.table('auctions').select('*')
+                
+                # Apply expiration date filter (except for buy_now)
+                from datetime import datetime, timezone
+                if not (filters and filters.get('offering_type') == 'buy_now'):
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    query = query.gte('expiration_date', now_iso)
+                
+                # Apply other filters
+                if filters:
+                    if filters.get('preferred') is not None:
+                        query = query.eq('preferred', filters['preferred'])
+                    if filters.get('auction_site'):
+                        query = query.eq('auction_site', filters['auction_site'])
+                    if filters.get('offering_type'):
+                        offering_type_value = filters['offering_type'].lower().strip()
+                        query = query.eq('offer_type', offering_type_value)
+                    if filters.get('has_statistics') is not None:
+                        query = query.eq('has_statistics', filters['has_statistics'])
+                    if filters.get('scored') is not None:
+                        if filters['scored']:
+                            query = query.not_.is_('score', 'null').gt('score', 0)
+                        else:
+                            query = query.is_('score', 'null')
+                    if filters.get('min_rank') is not None:
+                        query = query.gte('ranking', filters['min_rank'])
+                    if filters.get('max_rank') is not None:
+                        query = query.lte('ranking', filters['max_rank'])
+                    if filters.get('min_score') is not None:
+                        query = query.gte('score', filters['min_score'])
+                    if filters.get('max_score') is not None:
+                        query = query.lte('score', filters['max_score'])
+                    if filters.get('offering_type') != 'buy_now':
+                        if filters.get('expiration_from_date'):
+                            query = query.gte('expiration_date', filters['expiration_from_date'])
+                        if filters.get('expiration_to_date'):
+                            query = query.lte('expiration_date', filters['expiration_to_date'])
+                
+                # Apply sorting
+                if final_sort_order.lower() == 'desc':
+                    query = query.order(final_sort_by, desc=True)
+                else:
+                    query = query.order(final_sort_by, desc=False)
+                
+                # Get more records to filter for missing metrics
+                try:
+                    result = query.limit(limit * 2).execute()
+                    auctions = result.data if result.data else []
+                except Exception as query_error:
+                    logger.error("Direct query failed in get_auctions_missing_any_metric_with_filters", 
+                               error=str(query_error))
+                    raise
+            
+            # Filter for domains missing ANY of the four metrics
+            filtered_auctions = []
+            for auction in auctions:
+                page_stats = auction.get('page_statistics') or {}
+                
+                # Check if missing ANY metric
+                missing_traffic = not page_stats.get('traffic_data')
+                missing_rank = (
+                    auction.get('ranking') is None and 
+                    (page_stats.get('rank') is None or page_stats.get('rank') == 'null')
+                )
+                missing_backlinks = (
+                    auction.get('backlinks') is None and 
+                    (page_stats.get('backlinks') is None or page_stats.get('backlinks') == 'null')
+                )
+                missing_spam_score = (
+                    auction.get('backlinks_spam_score') is None and 
+                    (page_stats.get('backlinks_spam_score') is None or 
+                     page_stats.get('spam_score') is None)
+                )
+                
+                # Include if missing ANY metric
+                if missing_traffic or missing_rank or missing_backlinks or missing_spam_score:
+                    filtered_auctions.append({
+                        'domain': auction['domain'],
+                        'expiration_date': auction.get('expiration_date'),
+                        'id': auction.get('id')
+                    })
+                
+                # Stop once we have enough
+                if len(filtered_auctions) >= limit:
+                    break
+            
+            logger.info("Fetched auctions missing any metric with filters", 
+                       count=len(filtered_auctions),
+                       limit=limit,
+                       total_fetched=len(auctions),
+                       offering_type=offering_type,
+                       sort_by=final_sort_by,
+                       sort_order=final_sort_order)
+            
+            return filtered_auctions[:limit]
+            
+        except Exception as e:
+            logger.error("Failed to get auctions missing any metric with filters", 
+                       error=str(e),
+                       limit=limit,
+                       filters=filters)
+            raise
+    
     async def update_auction_page_statistics(self, domain: str, page_statistics: Dict[str, Any]) -> bool:
         """
         Update page_statistics for an auction domain
@@ -2124,13 +2306,40 @@ class DatabaseService:
             # NOTE: For buy_now records, expiration_date might be NULL or far in the future
             # So we only apply this filter if not filtering by offer_type='buy_now'
             from datetime import datetime, timezone
+            now_iso = datetime.now(timezone.utc).isoformat()
+            
             # Only apply expiration_date filter if not filtering by buy_now
             # buy_now records might have NULL or far-future expiration dates
             if not (filters and filters.get('offering_type') == 'buy_now'):
-                now_iso = datetime.now(timezone.utc).isoformat()
-                query = query.gte('expiration_date', now_iso)
+                # If expiration_from_date is provided, use the later of now_iso or expiration_from_date
+                # This ensures we never show records from the past, even if user sets a past date
+                expiration_from = filters.get('expiration_from_date') if filters else None
+                if expiration_from:
+                    # Compare dates - use the later one (max of now and provided date)
+                    try:
+                        # Parse the provided date - handle both date-only and full ISO datetime
+                        date_str = expiration_from.replace('Z', '+00:00')
+                        from_date = datetime.fromisoformat(date_str)
+                        # Ensure timezone-aware (if naive, assume UTC)
+                        if from_date.tzinfo is None:
+                            from_date = from_date.replace(tzinfo=timezone.utc)
+                        
+                        now_dt = datetime.fromisoformat(now_iso.replace('Z', '+00:00'))
+                        effective_from = max(from_date, now_dt).isoformat()
+                    except (ValueError, AttributeError, TypeError) as e:
+                        # If parsing fails, default to now_iso
+                        logger.warning("Failed to parse expiration_from_date, using now", 
+                                     expiration_from=expiration_from, 
+                                     error=str(e))
+                        effective_from = now_iso
+                else:
+                    effective_from = now_iso
+                
+                query = query.gte('expiration_date', effective_from)
                 logger.debug("Applied expiration_date >= NOW() filter", 
-                            offering_type_filter=filters.get('offering_type') if filters else None)
+                            offering_type_filter=filters.get('offering_type') if filters else None,
+                            effective_from=effective_from,
+                            provided_from=expiration_from)
             else:
                 logger.info("Skipping expiration_date >= NOW() filter for buy_now records")
             
@@ -2169,6 +2378,31 @@ class DatabaseService:
                                     offering_type=offering_type_param,
                                     original_value=filters.get('offering_type'))
                     
+                    # Ensure expiration_from_date is at least "now" to exclude past records
+                    from datetime import datetime, timezone
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    expiration_from = filters.get('expiration_from_date')
+                    if expiration_from and filters.get('offering_type') != 'buy_now':
+                        try:
+                            # Parse the provided date - handle both date-only and full ISO datetime
+                            date_str = expiration_from.replace('Z', '+00:00')
+                            from_date = datetime.fromisoformat(date_str)
+                            # Ensure timezone-aware (if naive, assume UTC)
+                            if from_date.tzinfo is None:
+                                from_date = from_date.replace(tzinfo=timezone.utc)
+                            
+                            now_dt = datetime.fromisoformat(now_iso.replace('Z', '+00:00'))
+                            effective_from = max(from_date, now_dt).isoformat()
+                        except (ValueError, AttributeError, TypeError) as e:
+                            logger.warning("Failed to parse expiration_from_date in RPC call, using now", 
+                                         expiration_from=expiration_from, 
+                                         error=str(e))
+                            effective_from = now_iso
+                    elif filters.get('offering_type') != 'buy_now':
+                        effective_from = now_iso
+                    else:
+                        effective_from = expiration_from  # For buy_now, use as-is
+                    
                     rpc_params = {
                         'p_tlds': normalized_tlds,
                         'p_preferred': filters.get('preferred'),
@@ -2180,7 +2414,7 @@ class DatabaseService:
                         'p_max_rank': filters.get('max_rank'),
                         'p_min_score': filters.get('min_score'),
                         'p_max_score': filters.get('max_score'),
-                        'p_expiration_from_date': filters.get('expiration_from_date'),
+                        'p_expiration_from_date': effective_from,
                         'p_expiration_to_date': filters.get('expiration_to_date'),
                         'p_sort_by': sort_by,
                         'p_sort_order': order,
@@ -2253,8 +2487,27 @@ class DatabaseService:
                 # So we skip expiration date range filters for buy_now
                 if filters.get('offering_type') != 'buy_now':
                     if filters.get('expiration_from_date'):
-                        # Filter by expiration date from
-                        query = query.gte('expiration_date', filters['expiration_from_date'])
+                        # Ensure expiration_from_date is at least "now" to exclude past records
+                        from datetime import datetime, timezone
+                        now_iso = datetime.now(timezone.utc).isoformat()
+                        expiration_from = filters.get('expiration_from_date')
+                        try:
+                            # Parse the provided date - handle both date-only and full ISO datetime
+                            date_str = expiration_from.replace('Z', '+00:00')
+                            from_date = datetime.fromisoformat(date_str)
+                            # Ensure timezone-aware (if naive, assume UTC)
+                            if from_date.tzinfo is None:
+                                from_date = from_date.replace(tzinfo=timezone.utc)
+                            
+                            now_dt = datetime.fromisoformat(now_iso.replace('Z', '+00:00'))
+                            effective_from = max(from_date, now_dt).isoformat()
+                        except (ValueError, AttributeError, TypeError) as e:
+                            logger.warning("Failed to parse expiration_from_date, using now", 
+                                         expiration_from=expiration_from, 
+                                         error=str(e))
+                            effective_from = now_iso
+                        # Filter by expiration date from (ensuring it's at least now)
+                        query = query.gte('expiration_date', effective_from)
                     if filters.get('expiration_to_date'):
                         # Filter by expiration date to
                         query = query.lte('expiration_date', filters['expiration_to_date'])
@@ -2446,6 +2699,66 @@ class DatabaseService:
         except Exception as e:
             logger.error("Failed to get unique TLDs", error=str(e), exc_info=True)
             return []
+    
+    async def download_from_storage(self, bucket: str, path: str) -> bytes:
+        """
+        Download file from Supabase storage
+        
+        Args:
+            bucket: Storage bucket name
+            path: File path in storage (relative to bucket)
+            
+        Returns:
+            File content as bytes
+        """
+        try:
+            if not self.client:
+                raise Exception("Supabase client not available")
+            
+            logger.info("Downloading file from storage", bucket=bucket, path=path)
+            
+            # Use HTTP API directly to download from storage
+            # The correct endpoint is: GET /storage/v1/object/{bucket}/{path}
+            import httpx
+            from urllib.parse import quote
+            
+            # Normalize SUPABASE_URL - remove trailing slash if present
+            supabase_url = self.settings.SUPABASE_URL.rstrip('/')
+            service_role_key = self.settings.SUPABASE_SERVICE_ROLE_KEY
+            
+            if not supabase_url or not service_role_key:
+                raise Exception("Supabase URL or service role key not configured")
+            
+            # URL encode the path
+            encoded_path = quote(path, safe='')
+            
+            # Construct the storage API URL
+            storage_url = f"{supabase_url}/storage/v1/object/{bucket}/{encoded_path}"
+            
+            # Make HTTP request with service role key for authentication
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                response = await client.get(
+                    storage_url,
+                    headers={
+                        "Authorization": f"Bearer {service_role_key}",
+                        "apikey": service_role_key
+                    }
+                )
+                response.raise_for_status()
+                file_data = response.content
+            
+            logger.info("Downloaded file from storage successfully", 
+                       bucket=bucket, 
+                       path=path,
+                       size_bytes=len(file_data))
+            return file_data
+            
+        except Exception as e:
+            logger.error("Failed to download file from storage", 
+                        bucket=bucket, 
+                        path=path,
+                        error=str(e))
+            raise
     
     async def upload_csv_to_storage(self, file_content: bytes, filename: str, bucket: str = "auction-csvs") -> str:
         """

@@ -42,6 +42,34 @@ class AuctionsService:
             logger.error("Failed to parse CSV", auction_site=auction_site, filename=filename, error=str(e))
             raise
     
+    def load_auctions_from_json(self, file_content: str, auction_site: str, filename: str = '') -> List[AuctionInput]:
+        """
+        Parse JSON file and return list of AuctionInput objects
+        
+        Args:
+            file_content: Raw JSON content as string
+            auction_site: Source auction site ('godaddy', etc.)
+            filename: Original filename (used for format detection)
+            
+        Returns:
+            List of AuctionInput objects
+        """
+        logger.info("Loading auctions from JSON", auction_site=auction_site, filename=filename, file_size=len(file_content))
+        
+        try:
+            auction_site_lower = auction_site.lower().strip()
+            
+            if auction_site_lower == 'godaddy':
+                auctions = self.csv_parser.parse_godaddy_json(file_content)
+            else:
+                raise ValueError(f"JSON parsing not supported for auction site: {auction_site}")
+            
+            logger.info("Parsed JSON", auction_site=auction_site, filename=filename, count=len(auctions))
+            return auctions
+        except Exception as e:
+            logger.error("Failed to parse JSON", auction_site=auction_site, filename=filename, error=str(e))
+            raise
+    
     async def truncate_and_load(self, auctions: List[AuctionInput]) -> Dict[str, Any]:
         """
         Truncate auctions table and bulk insert new records
@@ -73,6 +101,7 @@ class AuctionsService:
                         'auction_site': auction.auction_site,
                         'current_bid': auction.current_bid,
                         'source_data': auction.source_data,
+                        'link': auction.link,  # Direct link to auction listing (e.g., GoDaddy auction URL)
                         'preferred': False,
                         'has_statistics': False,
                         'processed': False  # New records are unprocessed
@@ -222,6 +251,32 @@ class AuctionsService:
             order=order,
             limit=limit,
             offset=offset
+        )
+    
+    async def get_auctions_missing_any_metric_with_filters(
+        self,
+        filters: Optional[Dict[str, Any]] = None,
+        sort_by: str = 'expiration_date',
+        sort_order: str = 'asc',
+        limit: int = 1000
+    ) -> List[Dict[str, Any]]:
+        """
+        Get auctions matching filters that are missing ANY of the four DataForSEO metrics
+        
+        Args:
+            filters: Dict with optional filters (preferred, auction_site, tlds, offering_type, etc.)
+            sort_by: Field to sort by (default 'expiration_date')
+            sort_order: Sort order 'asc' or 'desc' (default 'asc')
+            limit: Maximum number of records to return (default 1000)
+            
+        Returns:
+            List of auction dictionaries with domain, expiration_date, and id
+        """
+        return await self.db.get_auctions_missing_any_metric_with_filters(
+            filters=filters,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=limit
         )
     
 

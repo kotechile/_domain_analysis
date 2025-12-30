@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -11,10 +11,8 @@ import {
   Paper,
   Chip,
   IconButton,
-  CircularProgress,
   Collapse,
   Divider,
-  Alert,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -28,7 +26,6 @@ import {
   Public as PublicIcon,
   Warning as WarningIcon,
   Domain as DomainIcon,
-  Queue as QueueIcon,
 } from '@mui/icons-material';
 import {
   PieChart,
@@ -259,83 +256,7 @@ const DataForSEOPopup: React.FC<DataForSEOPopupProps> = ({
   pageStatistics,
 }) => {
   const [rawDataExpanded, setRawDataExpanded] = useState(false);
-  const [queueStatus, setQueueStatus] = useState<{
-    queue_count?: number;
-    position?: number;
-    domain_queued?: boolean;
-  } | null>(null);
-  const [isQueueing, setIsQueueing] = useState(false);
-  const [queueMessage, setQueueMessage] = useState<string | null>(null);
   const hasData = pageStatistics && typeof pageStatistics === 'object';
-  const api = useApi();
-
-  // Fetch queue status when popup opens and domain has no data
-  useEffect(() => {
-    if (open && !hasData && domain) {
-      const fetchQueueStatus = async () => {
-        try {
-          const status = await api.getDataForSEOQueueStatus(domain);
-          setQueueStatus(status);
-        } catch (error) {
-          console.error('Failed to fetch queue status:', error);
-        }
-      };
-      fetchQueueStatus();
-      
-      // Poll queue status every 5 seconds
-      const interval = setInterval(fetchQueueStatus, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [open, hasData, domain, api]);
-
-  const handleQueueRequest = async () => {
-    if (!domain) return;
-    
-    // If already queued, cancel it
-    if (queueStatus?.domain_queued) {
-      setIsQueueing(true);
-      setQueueMessage(null);
-      
-      try {
-        const result = await api.cancelDomainQueueRequest(domain);
-        
-        if (result.success && result.cancelled) {
-          setQueueMessage('Domain removed from queue');
-          // Refresh queue status
-          const status = await api.getDataForSEOQueueStatus(domain);
-          setQueueStatus(status);
-        } else {
-          setQueueMessage(result.message || 'Failed to cancel queue request');
-        }
-      } catch (error: any) {
-        setQueueMessage(error.response?.data?.detail || 'Failed to cancel queue request');
-      } finally {
-        setIsQueueing(false);
-      }
-      return;
-    }
-    
-    // Otherwise, add to queue
-    setIsQueueing(true);
-    setQueueMessage(null);
-    
-    try {
-      const result = await api.queueDomainForDataForSEO(domain);
-      
-      if (result.success && result.queued) {
-        setQueueMessage(`Domain added to queue! Position: ${result.position || 'N/A'}, Queue count: ${result.queue_count || 0}`);
-        // Refresh queue status
-        const status = await api.getDataForSEOQueueStatus(domain);
-        setQueueStatus(status);
-      } else {
-        setQueueMessage(result.message || 'Failed to queue domain');
-      }
-    } catch (error: any) {
-      setQueueMessage(error.response?.data?.detail || 'Failed to queue domain');
-    } finally {
-      setIsQueueing(false);
-    }
-  };
 
   // Extract and format chart data
   const chartData = useMemo(() => {
@@ -418,82 +339,15 @@ const DataForSEOPopup: React.FC<DataForSEOPopupProps> = ({
       <DialogContent sx={{ mt: 2, maxHeight: 'calc(90vh - 140px)', overflowY: 'auto' }}>
         {!hasData ? (
           <Box sx={{ textAlign: 'center', py: 4 }}>
-            <QueueIcon sx={{ color: '#66CCFF', fontSize: 48, mb: 2 }} />
+            <AnalyticsIcon sx={{ color: '#66CCFF', fontSize: 48, mb: 2 }} />
             <Typography variant="h6" sx={{ color: '#FFFFFF', mb: 2, fontWeight: 600 }}>
               No DataForSEO Data Available
             </Typography>
-            <Typography sx={{ color: '#FFFFFF', opacity: 0.7, mb: 3 }}>
+            <Typography sx={{ color: '#FFFFFF', opacity: 0.7 }}>
               This domain doesn't have DataForSEO analysis yet.
               <br />
-              Request analysis to add it to the processing queue.
+              Use the "Trigger Bulk Analysis" button to analyze domains.
             </Typography>
-            
-            {queueMessage && (
-              <Alert 
-                severity={queueMessage.includes('added') ? 'success' : 'warning'} 
-                sx={{ mb: 2, bgcolor: 'rgba(255, 255, 255, 0.1)' }}
-              >
-                {queueMessage}
-              </Alert>
-            )}
-            
-            {queueStatus?.domain_queued ? (
-              <Box>
-                <Chip
-                  label={`In Queue - Position: ${queueStatus.position || 'N/A'} of ${queueStatus.queue_count || 0}`}
-                  sx={{
-                    bgcolor: 'rgba(102, 204, 255, 0.2)',
-                    color: '#66CCFF',
-                    fontWeight: 600,
-                    mb: 2,
-                  }}
-                />
-                <Typography sx={{ color: '#FFFFFF', opacity: 0.6, fontSize: '0.875rem', mb: 2 }}>
-                  Your domain is in the queue. Analysis will begin when 100 domains are collected.
-                </Typography>
-                <Button
-                  variant="outlined"
-                  onClick={handleQueueRequest}
-                  disabled={isQueueing}
-                  startIcon={isQueueing ? <CircularProgress size={20} /> : <QueueIcon />}
-                  sx={{
-                    borderColor: '#66CCFF',
-                    color: '#66CCFF',
-                    fontWeight: 600,
-                    '&:hover': {
-                      borderColor: '#55BBEE',
-                      backgroundColor: 'rgba(102, 204, 255, 0.1)',
-                    },
-                    '&:disabled': {
-                      borderColor: 'rgba(102, 204, 255, 0.3)',
-                      color: 'rgba(102, 204, 255, 0.5)',
-                    },
-                  }}
-                >
-                  {isQueueing ? 'Cancelling...' : 'Queued - Click to Cancel'}
-                </Button>
-              </Box>
-            ) : (
-              <Button
-                variant="contained"
-                onClick={handleQueueRequest}
-                disabled={isQueueing}
-                startIcon={isQueueing ? <CircularProgress size={20} /> : <QueueIcon />}
-                sx={{
-                  bgcolor: '#66CCFF',
-                  color: '#0C152B',
-                  fontWeight: 600,
-                  '&:hover': {
-                    bgcolor: '#55BBEE',
-                  },
-                  '&:disabled': {
-                    bgcolor: 'rgba(102, 204, 255, 0.3)',
-                  },
-                }}
-              >
-                {isQueueing ? 'Requesting...' : `Request Analysis${queueStatus?.queue_count ? ` (${queueStatus.queue_count} in queue)` : ''}`}
-              </Button>
-            )}
           </Box>
         ) : (
           <>
@@ -875,6 +729,8 @@ const DataForSEOPopup: React.FC<DataForSEOPopupProps> = ({
 };
 
 export default DataForSEOPopup;
+
+
 
 
 

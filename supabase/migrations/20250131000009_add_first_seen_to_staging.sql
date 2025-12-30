@@ -153,3 +153,8 @@ COMMENT ON COLUMN auctions_staging.first_seen IS 'First seen date from NameCheap
 
 
 
+
+
+
+
+

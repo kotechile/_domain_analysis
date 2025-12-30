@@ -35,8 +35,9 @@ import {
   TrendingUp as TrendingUpIcon,
   FiberNew as FiberNewIcon,
   History as HistoryIcon,
+  Analytics as AnalyticsIcon,
 } from '@mui/icons-material';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApi } from '../services/api';
 import Header from '../components/Header';
@@ -45,6 +46,8 @@ import LoadFilePopup from '../components/LoadFilePopup';
 import FilterPopup, { FilterValues } from '../components/FilterPopup';
 
 // Component for Analyze button that checks if domain has analysis
+// The GET /reports/{domain} API calls are used to check if a domain already has an analysis report.
+// This determines whether to show "Analyze" (no report) or "View Analysis" (report exists) button.
 const DomainAnalyzeButton: React.FC<{
   domain: string;
   hasAnalysis: boolean;
@@ -100,14 +103,17 @@ const DomainAnalyzeButton: React.FC<{
 
 // Helper function to get default date range (Now to Now+7 days)
 // Expanded from 2 days to 7 days to show more domains across different TLDs
+// Uses current datetime (not just date) to exclude records from earlier today
 const getDefaultDateRange = () => {
   const now = new Date();
   const sevenDaysLater = new Date(now);
   sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
   
+  // Use full ISO datetime string to ensure we exclude records from earlier today
+  // Format: YYYY-MM-DDTHH:mm:ss.sssZ
   return {
-    from: now.toISOString().split('T')[0],
-    to: sevenDaysLater.toISOString().split('T')[0],
+    from: now.toISOString(), // Full datetime, not just date
+    to: sevenDaysLater.toISOString().split('T')[0], // End date only (inclusive of the full day)
   };
 };
 
@@ -115,6 +121,7 @@ const DomainsTablePage: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const api = useApi();
+  const queryClient = useQueryClient();
   
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
@@ -122,9 +129,8 @@ const DomainsTablePage: React.FC = () => {
   const [popupOpen, setPopupOpen] = useState(false);
   const [loadFilePopupOpen, setLoadFilePopupOpen] = useState(false);
   const [filterPopupOpen, setFilterPopupOpen] = useState(false);
+  const [confirmBulkAnalysisOpen, setConfirmBulkAnalysisOpen] = useState(false);
   const [waybackLoading, setWaybackLoading] = useState<Set<string>>(new Set());
-  const [queueStatuses, setQueueStatuses] = useState<Map<string, { position?: number; queue_count?: number; domain_queued?: boolean }>>(new Map());
-  const [queueingDomains, setQueueingDomains] = useState<Set<string>>(new Set());
   const [domainsWithAnalysis, setDomainsWithAnalysis] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<{
     preferred?: boolean;
@@ -245,6 +251,55 @@ const DomainsTablePage: React.FC = () => {
     }
   }, [auctionsError]);
 
+  // Mutation for bulk all metrics analysis
+  const bulkAllMetricsMutation = useMutation({
+    mutationFn: async () => {
+      // Get default date range if no dates are set
+      const defaultDates = getDefaultDateRange();
+      const expirationFromDate = filters.expirationFromDate || defaultDates.from;
+      const expirationToDate = filters.expirationToDate || defaultDates.to;
+      
+      return await api.triggerBulkAllMetricsAnalysis({
+        preferred: filters.preferred,
+        auctionSite: filters.auctionSite,
+        offeringType: filters.offeringType,
+        tld: filters.tld,
+        tlds: filters.tlds,
+        hasStatistics: filters.hasStatistics,
+        scored: filters.scored,
+        minRank: filters.minRank,
+        maxRank: filters.maxRank,
+        minScore: filters.minScore,
+        maxScore: filters.maxScore,
+        expirationFromDate,
+        expirationToDate,
+        sortBy: filters.sortBy || 'expiration_date',
+        sortOrder: filters.sortOrder || 'asc',
+        limit: 1000,
+      });
+    },
+    onSuccess: () => {
+      // Invalidate auctions query to refresh data after analysis completes
+      queryClient.invalidateQueries({ queryKey: ['auctions-report'] });
+      // Also refresh after delays to catch n8n webhook updates
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['auctions-report'] });
+      }, 30000); // Refresh after 30 seconds
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['auctions-report'] });
+      }, 60000); // Refresh again after 60 seconds
+      setConfirmBulkAnalysisOpen(false);
+    },
+  });
+
+  const handleBulkAllMetricsClick = () => {
+    setConfirmBulkAnalysisOpen(true);
+  };
+
+  const handleConfirmBulkAnalysis = () => {
+    bulkAllMetricsMutation.mutate();
+  };
+
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
   };
@@ -271,133 +326,16 @@ const DomainsTablePage: React.FC = () => {
     }
   };
 
-  const handleQueueRequest = async (domain: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    const queueStatus = queueStatuses.get(domain);
-    
-    // If already queued, cancel it
-    if (queueStatus?.domain_queued) {
-      setQueueingDomains(prev => new Set(prev).add(domain));
-      
-      try {
-        const result = await api.cancelDomainQueueRequest(domain);
-        
-        if (result.success && result.cancelled) {
-          // Remove from queue status
-          setQueueStatuses(prev => {
-            const newMap = new Map(prev);
-            newMap.delete(domain);
-            return newMap;
-          });
-        }
-      } catch (error: any) {
-        console.error('Failed to cancel queue request:', error);
-      } finally {
-        setQueueingDomains(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(domain);
-          return newSet;
-        });
-      }
-      return;
-    }
-    
-    // Otherwise, add to queue
-    setQueueingDomains(prev => new Set(prev).add(domain));
-    
-    try {
-      const result = await api.queueDomainForDataForSEO(domain);
-      
-      if (result.success && result.queued) {
-        // Update queue status for this domain
-        setQueueStatuses(prev => {
-          const newMap = new Map(prev);
-          newMap.set(domain, {
-            position: result.position,
-            queue_count: result.queue_count,
-            domain_queued: true,
-          });
-          return newMap;
-        });
-      }
-    } catch (error: any) {
-      console.error('Failed to queue domain:', error);
-    } finally {
-      setQueueingDomains(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(domain);
-        return newSet;
-      });
-    }
-  };
-
-  // Fetch queue status for domains without page_statistics
-  useEffect(() => {
-    if (!auctionsData?.auctions) return;
-    
-    const domainsWithoutStats = auctionsData.auctions
-      .filter(auction => !auction.page_statistics && !auction.statistics)
-      .map(auction => auction.domain);
-    
-    if (domainsWithoutStats.length === 0) return;
-    
-    const fetchQueueStatuses = async () => {
-      // Batch requests to avoid overwhelming the backend
-      // Process in chunks of 10 domains at a time with a small delay between chunks
-      const BATCH_SIZE = 10;
-      const BATCH_DELAY = 100; // 100ms delay between batches
-      
-      const newStatuses = new Map<string, { position?: number; queue_count?: number; domain_queued?: boolean }>();
-      
-      for (let i = 0; i < domainsWithoutStats.length; i += BATCH_SIZE) {
-        const batch = domainsWithoutStats.slice(i, i + BATCH_SIZE);
-        
-        const statusPromises = batch.map(async (domain) => {
-          try {
-            const status = await api.getDataForSEOQueueStatus(domain);
-            return { domain, status };
-          } catch (error) {
-            // Silently handle errors to avoid console spam
-            return { domain, status: null };
-          }
-        });
-        
-        const results = await Promise.all(statusPromises);
-        
-        results.forEach(({ domain, status }) => {
-          if (status) {
-            newStatuses.set(domain, {
-              position: status.position,
-              queue_count: status.queue_count,
-              domain_queued: status.domain_queued,
-            });
-          }
-        });
-        
-        // Add delay between batches to avoid overwhelming the backend
-        if (i + BATCH_SIZE < domainsWithoutStats.length) {
-          await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
-        }
-      }
-      
-      setQueueStatuses(prev => {
-        const merged = new Map(prev);
-        newStatuses.forEach((value, key) => merged.set(key, value));
-        return merged;
-      });
-    };
-    
-    fetchQueueStatuses();
-    
-    // Poll every 30 seconds (increased from 10 to reduce load)
-    const interval = setInterval(fetchQueueStatuses, 30000);
-    return () => clearInterval(interval);
-  }, [auctionsData?.auctions, api]);
 
   // Get provider auction URL based on auction_site
-  const getProviderAuctionUrl = (domain: string, auctionSite?: string): string => {
+  // For GoDaddy, use the stored link if available, otherwise construct URL
+  const getProviderAuctionUrl = (domain: string, auctionSite?: string, link?: string): string => {
     const site = (auctionSite || '').toLowerCase();
+    
+    // For GoDaddy, use the stored link if available
+    if ((site === 'godaddy' || site === 'go daddy') && link) {
+      return link;
+    }
     
     if (site === 'namecheap') {
       return `https://www.namecheap.com/market/${domain}/`;
@@ -414,11 +352,11 @@ const DomainsTablePage: React.FC = () => {
   };
 
   // Handle clicking on domain name - open provider auction site
-  const handleDomainClick = (domain: string, auctionSite?: string, e?: React.MouseEvent) => {
+  const handleDomainClick = (domain: string, auctionSite?: string, link?: string, e?: React.MouseEvent) => {
     if (e) {
       e.stopPropagation();
     }
-    const url = getProviderAuctionUrl(domain, auctionSite);
+    const url = getProviderAuctionUrl(domain, auctionSite, link);
     window.open(url, '_blank');
   };
 
@@ -661,9 +599,101 @@ const DomainsTablePage: React.FC = () => {
               >
                 <FilterListIcon />
               </IconButton>
+              <Button
+                variant="contained"
+                startIcon={<AnalyticsIcon />}
+                onClick={handleBulkAllMetricsClick}
+                disabled={bulkAllMetricsMutation.isPending}
+                sx={{
+                  bgcolor: '#9C27B0',
+                  color: '#FFFFFF',
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  '&:hover': {
+                    bgcolor: '#7B1FA2',
+                  },
+                  '&:disabled': {
+                    bgcolor: 'rgba(156, 39, 176, 0.3)',
+                    color: 'rgba(255, 255, 255, 0.5)',
+                  },
+                }}
+              >
+                {bulkAllMetricsMutation.isPending ? 'Processing...' : 'DataForSEO (1000)'}
+              </Button>
             </Box>
           </Box>
         </Box>
+
+        {/* Confirmation Dialog for Bulk Analysis */}
+        <Dialog
+          open={confirmBulkAnalysisOpen}
+          onClose={() => !bulkAllMetricsMutation.isPending && setConfirmBulkAnalysisOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              bgcolor: '#1A1F35',
+              color: '#FFFFFF',
+            },
+          }}
+        >
+          <DialogTitle sx={{ color: '#FFFFFF', pb: 1 }}>
+            Confirm DataForSEO Analysis
+          </DialogTitle>
+          <DialogContent>
+            <Typography sx={{ color: 'rgba(255, 255, 255, 0.9)', mb: 2 }}>
+              This will find 1000 domains matching your current filters that are missing DataForSEO metrics and trigger all four analyses (traffic, rank, backlinks, spam score).
+            </Typography>
+            <Typography sx={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+              Current filters:
+            </Typography>
+            <Box sx={{ mt: 1, p: 1.5, bgcolor: 'rgba(255, 255, 255, 0.05)', borderRadius: 1 }}>
+              <Typography sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.875rem' }}>
+                {filters.offeringType ? `Type: ${filters.offeringType}` : 'Type: All'}
+                {filters.tlds && filters.tlds.length > 0 && ` | TLDs: ${filters.tlds.join(', ')}`}
+                {filters.scored !== undefined && ` | Scored: ${filters.scored ? 'Yes' : 'No'}`}
+                {filters.preferred !== undefined && ` | Preferred: ${filters.preferred ? 'Yes' : 'No'}`}
+              </Typography>
+            </Box>
+            <Typography sx={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', mt: 2 }}>
+              Continue?
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ p: 2, borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+            <Button
+              onClick={() => setConfirmBulkAnalysisOpen(false)}
+              disabled={bulkAllMetricsMutation.isPending}
+              sx={{
+                color: '#FFFFFF',
+                textTransform: 'none',
+                '&:hover': {
+                  bgcolor: 'rgba(255, 255, 255, 0.1)',
+                },
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmBulkAnalysis}
+              disabled={bulkAllMetricsMutation.isPending}
+              variant="contained"
+              sx={{
+                bgcolor: '#9C27B0',
+                color: '#FFFFFF',
+                textTransform: 'none',
+                '&:hover': {
+                  bgcolor: '#7B1FA2',
+                },
+                '&:disabled': {
+                  bgcolor: 'rgba(156, 39, 176, 0.3)',
+                  color: 'rgba(255, 255, 255, 0.5)',
+                },
+              }}
+            >
+              {bulkAllMetricsMutation.isPending ? 'Processing...' : 'Confirm'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Table Section */}
         <Paper
@@ -711,7 +741,7 @@ const DomainsTablePage: React.FC = () => {
                         </TableSortLabel>
                       </TableCell>
                       <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
-                        Offer Type
+                        Platform
                       </TableCell>
                       <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
                         <TableSortLabel
@@ -844,54 +874,39 @@ const DomainsTablePage: React.FC = () => {
                         return count.toString();
                       };
                       
-                      // Determine offer type from offer_type column
-                      const getOfferType = (): { label: string; color: string } => {
-                        // Use offer_type from the column (preferred) or fallback to source_data
-                        const offerTypeValue = auction.offer_type || 
-                                        (auction.source_data as any)?.offering_type || 
-                                        (auction.source_data as any)?.offeringType || 
-                                        (auction.source_data as any)?.Type || 
-                                        null;
-                        
-                        // Normalize the offer type value to lowercase for comparison
-                        const normalizedType = offerTypeValue ? offerTypeValue.toString().toLowerCase().trim() : null;
-                        
-                        // Map offer_type values to display labels and colors
-                        if (normalizedType === 'buy_now' || normalizedType === 'buy-now') {
-                          return { label: 'BUY NOW', color: '#2196F3' }; // Blue
+                      // Format auction site name for display
+                      const formatAuctionSite = (site: string | null | undefined): { label: string; color: string } => {
+                        if (!site) {
+                          return { label: '—', color: '#666666' }; // Gray for missing data
                         }
                         
-                        if (normalizedType === 'backorder') {
-                          return { label: 'BACKORDER', color: '#9C27B0' }; // Purple
+                        const siteLower = site.toLowerCase().trim();
+                        
+                        // Map common auction site names to display format
+                        const siteMap: { [key: string]: { label: string; color: string } } = {
+                          'godaddy': { label: 'GoDaddy', color: '#00A3E0' }, // GoDaddy blue
+                          'go_daddy': { label: 'GoDaddy', color: '#00A3E0' },
+                          'namecheap': { label: 'NameCheap', color: '#FF6B35' }, // NameCheap orange
+                          'name_cheap': { label: 'NameCheap', color: '#FF6B35' },
+                          'namesilo': { label: 'NameSilo', color: '#4CAF50' }, // Green
+                          'name_silo': { label: 'NameSilo', color: '#4CAF50' },
+                        };
+                        
+                        // Check if we have a mapped site
+                        if (siteMap[siteLower]) {
+                          return siteMap[siteLower];
                         }
                         
-                        if (normalizedType === 'auction') {
-                          return { label: 'AUCTION', color: '#FF9800' }; // Orange
-                        }
+                        // If not in map, format it nicely (capitalize first letter of each word)
+                        const formatted = siteLower
+                          .split(/[_\s-]+/)
+                          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                          .join(' ');
                         
-                        // If we have a value but it doesn't match known types, show it as-is (capitalized)
-                        if (normalizedType) {
-                          const displayLabel = normalizedType.split('_').map((word: string) => 
-                            word.charAt(0).toUpperCase() + word.slice(1)
-                          ).join(' ').toUpperCase();
-                          return { label: displayLabel, color: '#FF9800' }; // Default to orange
-                        }
-                        
-                        // Check if expiring soon (within 7 days) - only if no offer_type is set
-                        const expirationDate = auction.expiration_date ? new Date(auction.expiration_date) : null;
-                        const daysUntilExpiry = expirationDate 
-                          ? Math.ceil((expirationDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-                          : null;
-                        
-                        if (daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry >= 0) {
-                          return { label: 'EXPIRING SOON', color: '#FF5252' }; // Red
-                        }
-                        
-                        // Default to AUCTION if no type found
-                        return { label: 'AUCTION', color: '#FF9800' }; // Orange
+                        return { label: formatted, color: '#66CCFF' }; // Default cyan color
                       };
                       
-                      const offerType = getOfferType();
+                      const platformInfo = formatAuctionSite(auction.auction_site);
 
                       return (
                         <TableRow
@@ -914,19 +929,19 @@ const DomainsTablePage: React.FC = () => {
                                   color: '#66CCFF',
                                 },
                               }}
-                              onClick={(e) => handleDomainClick(auction.domain, auction.auction_site, e)}
+                              onClick={(e) => handleDomainClick(auction.domain, auction.auction_site, auction.link, e)}
                             >
                               {auction.domain}
                             </Box>
                           </TableCell>
                           
-                          {/* Offer Type */}
+                          {/* Platform */}
                           <TableCell>
                             <Chip
-                              label={offerType.label}
+                              label={platformInfo.label}
                               size="small"
                               sx={{
-                                bgcolor: offerType.color,
+                                bgcolor: platformInfo.color,
                                 color: '#FFFFFF',
                                 fontWeight: 600,
                                 fontSize: '0.75rem',

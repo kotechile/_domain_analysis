@@ -28,3 +28,8 @@ COMMENT ON COLUMN namecheap_domains.rank IS 'Ranking position among domains that
 
 
 
+
+
+
+
+

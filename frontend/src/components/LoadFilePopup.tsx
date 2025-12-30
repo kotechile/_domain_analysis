@@ -571,9 +571,17 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
   // Upload mutation
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      // Auto-detect provider and offering type from filename - backend will handle this
-      const response = await api.uploadAuctionsCSV(file, 'auto', undefined);
-      return response;
+      // Auto-detect file type and provider from filename - backend will handle this
+      const fileExtension = file.name.toLowerCase().split('.').pop();
+      if (fileExtension === 'json') {
+        // Use JSON upload endpoint for JSON files
+        const response = await api.uploadAuctionsJSON(file, 'auto', undefined);
+        return response;
+      } else {
+        // Use CSV upload endpoint for CSV files (default)
+        const response = await api.uploadAuctionsCSV(file, 'auto', undefined);
+        return response;
+      }
     },
     onSuccess: (data) => {
       console.log('Upload started, jobId:', data.job_id);
@@ -685,8 +693,8 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Check if there's an active job - use hasActiveJob which checks both jobId and progressData
-      if (hasActiveJob) {
+      // Check if there's an active job or file being processed
+      if (isProcessing) {
         // Don't allow selecting a new file when there's an active job
         alert('A file is currently being processed. Please wait for it to complete before uploading a new file.');
         if (fileInputRef.current) {
@@ -706,8 +714,8 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
   };
 
   const handleDelete = () => {
-    // Don't allow deleting if there's an active job
-    if (hasActiveJob) {
+    // Don't allow deleting if there's an active job or file being processed
+    if (isProcessing) {
       alert('Cannot delete file while processing is in progress. Please wait for the current job to complete.');
       return;
     }
@@ -799,8 +807,12 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
   const hasActiveJob = !hasConfirmedNoActiveJob && (
     uploadMutation.isPending ||
     (!!jobId && !!progressData && progressData.status !== 'completed' && progressData.status !== 'failed') ||
-    (isLoadingProgressById && !!jobId && !progressDataById && !progressErrorByIdIs404 && !progressErrorByActiveIsTimeout) // Only if we're loading and don't have data yet AND no 404/timeout error
+    (isLoadingProgressById && !!jobId && !progressDataById && !progressErrorByIdIs404 && !progressErrorByActiveIsTimeout) || // Only if we're loading and don't have data yet AND no 404/timeout error
+    (!!jobId && !progressData && !progressErrorByIdIs404 && !progressErrorByActiveIsTimeout) // If we have a jobId but no progress data yet (initial upload phase)
   );
+  
+  // Also disable if we have a selected file that's being processed (additional safety check)
+  const isProcessing = Boolean(hasActiveJob || (selectedFile && (uploadMutation.isPending || !!jobId)));
 
   // Clear selectedFile if there's an active job (prevents showing new file selection when job is active)
   useEffect(() => {
@@ -870,7 +882,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
         <Stack spacing={3}>
 
           {/* Warning: Active Job */}
-          {hasActiveJob && (
+          {isProcessing && (
             <Paper
               sx={{
                 p: 2,
@@ -906,7 +918,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
             <Button
               variant="outlined"
               onClick={handleSelectFile}
-              disabled={hasActiveJob}
+              disabled={isProcessing}
               sx={{
                 color: '#FFFFFF',
                 borderColor: 'rgba(255, 255, 255, 0.3)',
@@ -927,7 +939,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv"
+            accept=".csv,.json"
             style={{ display: 'none' }}
             onChange={handleFileChange}
           />
@@ -1200,89 +1212,19 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
         sx={{
           borderTop: '1px solid rgba(255, 255, 255, 0.1)',
           p: 2,
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
         }}
       >
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button
-            variant="contained"
-            onClick={handleTrafficDataAnalysis}
-            disabled={!hasDataForSEO || trafficDataMutation.isPending}
-            startIcon={<AnalyticsIcon />}
-            sx={{
-              bgcolor: '#FF5252',
-              color: '#FFFFFF',
-              '&:hover': {
-                bgcolor: '#FF4444',
-              },
-              '&:disabled': {
-                bgcolor: 'rgba(255, 82, 82, 0.3)',
-                color: 'rgba(255, 255, 255, 0.5)',
-              },
-            }}
-          >
-            {trafficDataMutation.isPending ? 'Processing...' : 'Traffic data (1000)'}
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleBulkRankAnalysis}
-            disabled={!hasDataForSEO || bulkRankAnalysisMutation.isPending}
-            startIcon={<AnalyticsIcon />}
-            sx={{
-              bgcolor: '#4CAF50',
-              color: '#FFFFFF',
-              '&:hover': {
-                bgcolor: '#45A049',
-              },
-              '&:disabled': {
-                bgcolor: 'rgba(76, 175, 80, 0.3)',
-                color: 'rgba(255, 255, 255, 0.5)',
-              },
-            }}
-          >
-            {bulkRankAnalysisMutation.isPending ? 'Processing...' : 'Bulk Rank Analysis (1000)'}
-          </Button>
-          <Button
-            variant="contained"
-            disabled={!hasDataForSEO || bulkBacklinksAnalysisMutation.isPending}
-            onClick={() => {
-              bulkBacklinksAnalysisMutation.mutate();
-            }}
-            sx={{
-              bgcolor: '#2196F3',
-              color: '#FFFFFF',
-              '&:hover': {
-                bgcolor: '#1976D2',
-              },
-              '&:disabled': {
-                bgcolor: 'rgba(255, 255, 255, 0.1)',
-                color: 'rgba(255, 255, 255, 0.5)',
-              },
-            }}
-          >
-            {bulkBacklinksAnalysisMutation.isPending ? 'Processing...' : 'Bulk Backlinks Analysis (1000)'}
-          </Button>
-          <Button
-            variant="contained"
-            disabled={!hasDataForSEO || bulkSpamScoreAnalysisMutation.isPending}
-            onClick={() => {
-              bulkSpamScoreAnalysisMutation.mutate();
-            }}
-            sx={{
-              bgcolor: '#9C27B0',
-              color: '#FFFFFF',
-              '&:hover': {
-                bgcolor: '#7B1FA2',
-              },
-              '&:disabled': {
-                bgcolor: 'rgba(255, 255, 255, 0.1)',
-                color: 'rgba(255, 255, 255, 0.5)',
-              },
-            }}
-          >
-            {bulkSpamScoreAnalysisMutation.isPending ? 'Processing...' : 'Bulk Spam Score Analysis (1000)'}
-          </Button>
-        </Box>
+        <Typography
+          variant="body2"
+          sx={{
+            color: 'rgba(255, 255, 255, 0.7)',
+            mr: 2,
+            fontSize: '0.875rem',
+          }}
+        >
+          
+        </Typography>
         <Button
           onClick={onClose}
           sx={{

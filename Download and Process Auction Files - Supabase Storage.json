@@ -1,0 +1,789 @@
+{
+  "name": "Download and Process Auction Files - Supabase Storage",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        5440,
+        1456
+      ],
+      "id": "ba33d792-ea34-4733-8d8b-9ec3acaa795d",
+      "name": "Daily Schedule (6 AM)"
+    },
+    {
+      "parameters": {
+        "url": "https://inventory.auctions.godaddy.com/all_listings_ending_tomorrow.json.zip",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        5680,
+        1152
+      ],
+      "id": "3788b2cb-af7d-4a7d-9880-545a60ffcf0f",
+      "name": "Download GoDaddy Tomorrow"
+    },
+    {
+      "parameters": {
+        "url": "https://inventory.auctions.godaddy.com/all_listings_ending_today.json.zip",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        5680,
+        1360
+      ],
+      "id": "89f2b138-0be4-4a1b-a09b-c9a07244dbdf",
+      "name": "Download GoDaddy Today"
+    },
+    {
+      "parameters": {
+        "url": "https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales.csv",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        5680,
+        1552
+      ],
+      "id": "6edef303-3b2f-4c7d-8b5d-ea73f7db9069",
+      "name": "Download Namecheap Auctions"
+    },
+    {
+      "parameters": {
+        "url": "https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales_Buy_Now.csv",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        5680,
+        1760
+      ],
+      "id": "183e253e-883a-4051-a44f-4201ec4af4d1",
+      "name": "Download Namecheap Buy Now"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.compression",
+      "typeVersion": 1.1,
+      "position": [
+        5904,
+        1152
+      ],
+      "id": "d188d25f-35d7-45e6-be94-41f8a24f2cae",
+      "name": "Decompress Tomorrow"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.compression",
+      "typeVersion": 1.1,
+      "position": [
+        5904,
+        1360
+      ],
+      "id": "d7a2029e-685a-4208-9762-1d073dfd448f",
+      "name": "Decompress Today"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare metadata for Supabase upload\n// Using fixed filenames to overwrite old files\nconst input = $input.first();\n\nreturn [{\n  json: {\n    source: 'godaddy_tomorrow',\n    filename: 'godaddy_tomorrow.json',\n    auction_site: 'godaddy',\n    offering_type: 'auction',\n    bucket: 'listingfiles',\n    path: 'godaddy_tomorrow.json'\n  },\n  binary: input.binary\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6128,
+        1152
+      ],
+      "id": "313dbc8e-a5d9-4fea-b892-0aa0a5ae2eee",
+      "name": "Prepare GoDaddy Tomorrow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare metadata for Supabase upload\n// Using fixed filenames to overwrite old files\nconst input = $input.first();\n\nreturn [{\n  json: {\n    source: 'godaddy_today',\n    filename: 'godaddy_today.json',\n    auction_site: 'godaddy',\n    offering_type: 'auction',\n    bucket: 'listingfiles',\n    path: 'godaddy_today.json'\n  },\n  binary: input.binary\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6128,
+        1360
+      ],
+      "id": "058cee5a-e6cc-4090-9aa1-bd4eccf0a0a8",
+      "name": "Prepare GoDaddy Today"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare metadata for Supabase upload\n// Using fixed filenames to overwrite old files\nconst input = $input.first();\n\nreturn [{\n  json: {\n    source: 'namecheap_auctions',\n    filename: 'Namecheap_Market_Sales.csv',\n    auction_site: 'namecheap',\n    offering_type: 'auction',\n    bucket: 'listingfiles',\n    path: 'Namecheap_Market_Sales.csv'\n  },\n  binary: input.binary\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6128,
+        1552
+      ],
+      "id": "1ef7de2a-c056-41f7-a78a-fe9ff618be5c",
+      "name": "Prepare Namecheap Auctions"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare metadata for Supabase upload\n// Using fixed filenames to overwrite old files\nconst input = $input.first();\n\nreturn [{\n  json: {\n    source: 'namecheap_buynow',\n    filename: 'Namecheap_Market_Sales_Buy_Now.csv',\n    auction_site: 'namecheap',\n    offering_type: 'buy_now',\n    bucket: 'listingfiles',\n    path: 'Namecheap_Market_Sales_Buy_Now.csv'\n  },\n  binary: input.binary\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6128,
+        1760
+      ],
+      "id": "0fdd5ad8-d901-474f-b619-1431da99c28b",
+      "name": "Prepare Namecheap Buy Now"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sbdomain.aichieve.net/storage/v1/object/{{ $json.bucket }}/{{ $json.path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "={{ $binary.file_0.mimeType || 'text/csv' }}"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "file_0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6368,
+        1152
+      ],
+      "id": "462145d6-f2bc-4d40-94e8-2e11fc448b40",
+      "name": "Upload GoDaddy Tomorrow to Storage",
+      "credentials": {
+        "supabaseApi": {
+          "id": "1ePgHuyBQzWnTd4s",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sbdomain.aichieve.net/storage/v1/object/{{ $json.bucket }}/{{ $json.path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "={{ $binary.file_0.mimeType || 'text/csv' }}"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "file_0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6368,
+        1360
+      ],
+      "id": "4fe78c5c-10c0-44f5-8419-4ce77e07e60e",
+      "name": "Upload GoDaddy Today to Storage",
+      "credentials": {
+        "supabaseApi": {
+          "id": "1ePgHuyBQzWnTd4s",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sbdomain.aichieve.net/storage/v1/object/{{ $json.bucket }}/{{ $json.path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "={{ $binary.file_0.mimeType || 'text/csv' }}"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "file_0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6368,
+        1552
+      ],
+      "id": "18f8fb0f-b83f-4ec2-9e2c-1f8600620b2f",
+      "name": "Upload Namecheap Auctions to Storage",
+      "credentials": {
+        "supabaseApi": {
+          "id": "1ePgHuyBQzWnTd4s",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sbdomain.aichieve.net/storage/v1/object/{{ $json.bucket }}/{{ $json.path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "={{ $binary.file_0.mimeType || 'text/csv' }}"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "file_0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6368,
+        1760
+      ],
+      "id": "2b705959-d5ea-4c55-92c1-2fadf6d5eaa9",
+      "name": "Upload Namecheap Buy Now to Storage",
+      "credentials": {
+        "supabaseApi": {
+          "id": "1ePgHuyBQzWnTd4s",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://overmild-untenuously-penney.ngrok-free.dev/api/v1/auctions/process-from-storage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"bucket\": \"{{ $json.bucket }}\",\n  \"path\": \"{{ $json.path }}\",\n  \"auction_site\": \"{{ $json.auction_site }}\",\n  \"offering_type\": \"{{ $json.offering_type }}\",\n  \"filename\": \"{{ $json.filename }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6608,
+        1152
+      ],
+      "id": "3ecea91b-9b0d-45b3-b9f0-38787ab035b2",
+      "name": "Trigger Backend Processing Tomorrow"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Restore metadata after upload for GoDaddy Tomorrow\nconst input = $input.first();\nreturn [{\n  json: {\n    bucket: 'listingfiles',\n    path: 'godaddy_tomorrow.json',\n    filename: 'godaddy_tomorrow.json',\n    auction_site: 'godaddy',\n    offering_type: 'auction',\n    source: 'godaddy_tomorrow',\n    upload_success: input.json ? true : false\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6496,
+        1152
+      ],
+      "id": "ecabf10c-f543-4496-941f-bdd787570983",
+      "name": "Restore Tomorrow Metadata"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://overmild-untenuously-penney.ngrok-free.dev/api/v1/auctions/process-from-storage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"bucket\": \"{{ $json.bucket }}\",\n  \"path\": \"{{ $json.path }}\",\n  \"auction_site\": \"{{ $json.auction_site }}\",\n  \"offering_type\": \"{{ $json.offering_type }}\",\n  \"filename\": \"{{ $json.filename }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6608,
+        1360
+      ],
+      "id": "12299a6f-e9da-4e8e-865b-6ee1a37a5bd0",
+      "name": "Trigger Backend Processing Today"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Restore metadata after upload for GoDaddy Today\nconst input = $input.first();\nreturn [{\n  json: {\n    bucket: 'listingfiles',\n    path: 'godaddy_today.json',\n    filename: 'godaddy_today.json',\n    auction_site: 'godaddy',\n    offering_type: 'auction',\n    source: 'godaddy_today',\n    upload_success: input.json ? true : false\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6496,
+        1360
+      ],
+      "id": "ef71e0a1-a89a-4568-b12c-2b31d5b3ef67",
+      "name": "Restore Today Metadata"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://overmild-untenuously-penney.ngrok-free.dev/api/v1/auctions/process-from-storage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"bucket\": \"{{ $json.bucket }}\",\n  \"path\": \"{{ $json.path }}\",\n  \"auction_site\": \"{{ $json.auction_site }}\",\n  \"offering_type\": \"{{ $json.offering_type }}\",\n  \"filename\": \"{{ $json.filename }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6608,
+        1552
+      ],
+      "id": "c6da989d-88ad-4ee3-877c-0d48506c4302",
+      "name": "Trigger Backend Processing Auctions"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Restore metadata after upload for Namecheap Auctions\nconst input = $input.first();\nreturn [{\n  json: {\n    bucket: 'listingfiles',\n    path: 'Namecheap_Market_Sales.csv',\n    filename: 'Namecheap_Market_Sales.csv',\n    auction_site: 'namecheap',\n    offering_type: 'auction',\n    source: 'namecheap_auctions',\n    upload_success: input.json ? true : false\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6496,
+        1552
+      ],
+      "id": "2c31bbd9-8a10-4ab1-af1a-7690aa88c61b",
+      "name": "Restore Auctions Metadata"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://overmild-untenuously-penney.ngrok-free.dev/api/v1/auctions/process-from-storage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"bucket\": \"{{ $json.bucket }}\",\n  \"path\": \"{{ $json.path }}\",\n  \"auction_site\": \"{{ $json.auction_site }}\",\n  \"offering_type\": \"{{ $json.offering_type }}\",\n  \"filename\": \"{{ $json.filename }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6608,
+        1760
+      ],
+      "id": "2791f8b5-9281-429c-9b14-a8cc38985e48",
+      "name": "Trigger Backend Processing Buy Now"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Restore metadata after upload for Namecheap Buy Now\nconst input = $input.first();\nreturn [{\n  json: {\n    bucket: 'listingfiles',\n    path: 'Namecheap_Market_Sales_Buy_Now.csv',\n    filename: 'Namecheap_Market_Sales_Buy_Now.csv',\n    auction_site: 'namecheap',\n    offering_type: 'buy_now',\n    source: 'namecheap_buynow',\n    upload_success: input.json ? true : false\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6496,
+        1760
+      ],
+      "id": "0652d656-9068-48d1-a240-0a6a59a88563",
+      "name": "Restore Buy Now Metadata"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate results from all processing\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const json = item.json || {};\n  results.push({\n    source: json.source || 'unknown',\n    success: json.success !== false,\n    job_id: json.job_id || null,\n    message: json.message || 'No message',\n    filename: json.filename || 'unknown',\n    auction_site: json.auction_site || 'unknown',\n    error: json.error || null\n  });\n}\n\nconst successCount = results.filter(r => r.success).length;\nconst totalCount = results.length;\n\nreturn [{\n  json: {\n    summary: {\n      total_files: totalCount,\n      successful: successCount,\n      failed: totalCount - successCount\n    },\n    results: results,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6848,
+        1456
+      ],
+      "id": "01ebddc3-ac97-4cfb-a6ff-8e55e2abfb75",
+      "name": "Aggregate Results"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Schedule (6 AM)": {
+      "main": [
+        [
+          {
+            "node": "Download GoDaddy Tomorrow",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Download GoDaddy Today",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Download Namecheap Auctions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Download Namecheap Buy Now",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download GoDaddy Tomorrow": {
+      "main": [
+        [
+          {
+            "node": "Decompress Tomorrow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download GoDaddy Today": {
+      "main": [
+        [
+          {
+            "node": "Decompress Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decompress Tomorrow": {
+      "main": [
+        [
+          {
+            "node": "Prepare GoDaddy Tomorrow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decompress Today": {
+      "main": [
+        [
+          {
+            "node": "Prepare GoDaddy Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Namecheap Auctions": {
+      "main": [
+        [
+          {
+            "node": "Prepare Namecheap Auctions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Namecheap Buy Now": {
+      "main": [
+        [
+          {
+            "node": "Prepare Namecheap Buy Now",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare GoDaddy Tomorrow": {
+      "main": [
+        [
+          {
+            "node": "Upload GoDaddy Tomorrow to Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare GoDaddy Today": {
+      "main": [
+        [
+          {
+            "node": "Upload GoDaddy Today to Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Namecheap Auctions": {
+      "main": [
+        [
+          {
+            "node": "Upload Namecheap Auctions to Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Namecheap Buy Now": {
+      "main": [
+        [
+          {
+            "node": "Upload Namecheap Buy Now to Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload GoDaddy Tomorrow to Storage": {
+      "main": [
+        [
+          {
+            "node": "Restore Tomorrow Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Tomorrow Metadata": {
+      "main": [
+        [
+          {
+            "node": "Trigger Backend Processing Tomorrow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload GoDaddy Today to Storage": {
+      "main": [
+        [
+          {
+            "node": "Restore Today Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Today Metadata": {
+      "main": [
+        [
+          {
+            "node": "Trigger Backend Processing Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Namecheap Auctions to Storage": {
+      "main": [
+        [
+          {
+            "node": "Restore Auctions Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Auctions Metadata": {
+      "main": [
+        [
+          {
+            "node": "Trigger Backend Processing Auctions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Namecheap Buy Now to Storage": {
+      "main": [
+        [
+          {
+            "node": "Restore Buy Now Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Restore Buy Now Metadata": {
+      "main": [
+        [
+          {
+            "node": "Trigger Backend Processing Buy Now",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Backend Processing Tomorrow": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Backend Processing Today": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Backend Processing Auctions": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Backend Processing Buy Now": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b670001d-33bb-4ec8-902c-ccc4ff90b5ef",
+  "meta": {
+    "instanceId": "8ed9ed81fad64d2f2e539654b7152113b5201cf79b5e9548649591c372302289"
+  },
+  "id": "hM8ssCvxLrMb1tsa",
+  "tags": []
+}

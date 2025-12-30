@@ -255,6 +255,7 @@ async def process_csv_upload_async(
                     'auction_site': auction.auction_site,
                     'current_bid': auction.current_bid,
                     'source_data': auction.source_data,
+                    'link': auction.link,  # Direct link to auction listing (e.g., GoDaddy auction URL)
                     'processed': True,  # Mark as processed since we scored it
                     'preferred': False,  # Will be set later based on thresholds
                     'has_statistics': False,
@@ -1291,6 +1292,747 @@ async def upload_auctions_csv(
         raise HTTPException(status_code=500, detail=detail)
 
 
+async def process_json_upload_async(
+    job_id: str,
+    json_content: str,
+    filename: str,
+    auction_site: str,
+    offering_type: Optional[str] = None
+):
+    """
+    Background task to process JSON upload with progress tracking
+    
+    Args:
+        job_id: Unique job identifier
+        json_content: JSON file content as string
+        filename: Original filename
+        auction_site: Auction site source
+        offering_type: Type of domain offering
+    """
+    db = get_database()
+    auctions_service = AuctionsService()
+    
+    try:
+        # Update status to parsing
+        await db.update_csv_upload_progress(
+            job_id=job_id,
+            status='parsing',
+            current_stage='parsing'
+        )
+        
+        # Parse JSON using auctions service
+        logger.info("Parsing JSON content", job_id=job_id, auction_site=auction_site, filename=filename)
+        auction_inputs = auctions_service.load_auctions_from_json(json_content, auction_site, filename)
+        
+        if not auction_inputs:
+            error_msg = f"JSON file is empty or contains no valid auction records. Auction site: {auction_site}, Filename: {filename}"
+            logger.error(error_msg, job_id=job_id, auction_site=auction_site, filename=filename)
+            await db.update_csv_upload_progress(
+                job_id=job_id,
+                status='failed',
+                error_message=error_msg
+            )
+            return
+        
+        total_records = len(auction_inputs)
+        
+        # Update status to processing
+        await db.update_csv_upload_progress(
+            job_id=job_id,
+            status='processing',
+            total_records=total_records,
+            current_stage='scoring'
+        )
+        
+        # Initialize scoring service
+        scoring_service = DomainScoringService()
+        logger.info("Starting domain scoring (pre-screening + semantic analysis)", 
+                   job_id=job_id, 
+                   total_records=total_records)
+        
+        # Convert to database format with scoring
+        auction_dicts = []
+        skipped_count = 0
+        scored_count = 0
+        passed_count = 0
+        failed_count = 0
+        
+        logger.info("Starting conversion and scoring", job_id=job_id, total_records=total_records)
+        
+        for idx, auction_input in enumerate(auction_inputs):
+            try:
+                auction = auction_input.to_auction()
+                
+                # Use the offering_type from parameter (default to 'auction' for GoDaddy JSON)
+                record_offer_type = offering_type or 'auction'
+                
+                # Convert to NamecheapDomain for scoring
+                source_data = auction.source_data or {}
+                registered_date = None
+                if isinstance(source_data, dict):
+                    # Check for domainAge and calculate registered_date if available
+                    domain_age = source_data.get('domainAge')
+                    if domain_age and isinstance(domain_age, (int, float)):
+                        # Calculate approximate registered date from domain age
+                        from datetime import timedelta
+                        registered_date = datetime.now(timezone.utc) - timedelta(days=int(domain_age) * 365)
+                
+                namecheap_domain = NamecheapDomain(
+                    name=auction.domain,
+                    registered_date=registered_date,
+                    url=None,
+                    start_date=auction.start_date,
+                    end_date=auction.expiration_date,
+                    price=None,
+                    start_price=None,
+                    renew_price=None,
+                    bid_count=None,
+                    ahrefs_domain_rating=None,
+                    umbrella_ranking=None,
+                    cloudflare_ranking=None,
+                    estibot_value=None,
+                    extensions_taken=None,
+                    keyword_search_count=None,
+                    last_sold_price=None,
+                    last_sold_year=None,
+                    is_partner_sale=None,
+                    semrush_a_score=None,
+                    majestic_citation=None,
+                    ahrefs_backlinks=None,
+                    semrush_backlinks=None,
+                    majestic_backlinks=None,
+                    majestic_trust_flow=None,
+                    go_value=None
+                )
+                
+                # Score domain (Stage 1: pre-screening, Stage 2: semantic analysis for passing domains)
+                scored = scoring_service.score_domain(namecheap_domain)
+                scored_count += 1
+                
+                # Log scoring result for debugging (sample every 1000 records to avoid log spam)
+                if idx % 1000 == 0 or scored.filter_status == 'PASS':
+                    logger.debug("Domain scored", 
+                                domain=auction.domain,
+                                filter_status=scored.filter_status,
+                                score=scored.total_meaning_score,
+                                filter_reason=scored.filter_reason)
+                
+                # Build auction_dict with score data
+                auction_dict = {
+                    'domain': auction.domain,
+                    'start_date': auction.start_date.isoformat() if auction.start_date else None,
+                    'expiration_date': auction.expiration_date.isoformat(),
+                    'auction_site': auction.auction_site,
+                    'current_bid': auction.current_bid,
+                    'source_data': auction.source_data,
+                    'link': auction.link,  # Direct link to auction listing (e.g., GoDaddy auction URL)
+                    'preferred': False,
+                    'has_statistics': False,
+                    'processed': True,  # Mark as processed since we've scored it
+                    'score': scored.total_meaning_score if scored.filter_status == 'PASS' else None,
+                    'offer_type': record_offer_type
+                }
+                
+                if scored.filter_status == 'PASS':
+                    passed_count += 1
+                else:
+                    failed_count += 1
+                
+                auction_dicts.append(auction_dict)
+                
+                # Update progress every 100 records
+                if (idx + 1) % 100 == 0:
+                    await db.update_csv_upload_progress(
+                        job_id=job_id,
+                        processed_records=idx + 1,
+                        current_stage='scoring'
+                    )
+                
+            except Exception as e:
+                skipped_count += 1
+                logger.warning("Failed to process auction record", 
+                             job_id=job_id, 
+                             index=idx, 
+                             domain=auction_input.domain if auction_input else 'unknown',
+                             error=str(e))
+                continue
+        
+        logger.info("Scoring complete", 
+                   job_id=job_id,
+                   total=total_records,
+                   scored=scored_count,
+                   passed=passed_count,
+                   failed=failed_count,
+                   skipped=skipped_count)
+        
+        # Use staging table approach - same as CSV upload
+        # Step 1: Insert into staging table using bulk inserts
+        # Step 2: Merge staging into main auctions table using efficient SQL
+        inserted_count = 0
+        updated_count = 0
+        processed_count = 0
+        deleted_count = 0
+        
+        try:
+            if not db.client:
+                raise Exception("Supabase client not available")
+            
+            # For NameSilo: Mark all existing NameSilo records for deletion before processing
+            if auction_site.lower() == 'namesilo':
+                logger.info("Marking all NameSilo records for deletion", job_id=job_id)
+                try:
+                    mark_result = db.client.table('auctions').update({
+                        'deletion_flag': True
+                    }).eq('auction_site', 'namesilo').execute()
+                    marked_count = len(mark_result.data) if mark_result.data else 0
+                    logger.info("Marked NameSilo records for deletion", 
+                              job_id=job_id,
+                              marked_count=marked_count)
+                except Exception as e:
+                    logger.warning("Failed to mark NameSilo records for deletion, continuing anyway", 
+                                job_id=job_id, error=str(e))
+            
+            # Step 1: Insert into staging table using bulk inserts (much faster)
+            logger.info("Loading into staging table using bulk inserts", 
+                      job_id=job_id, 
+                      total_records=len(auction_dicts))
+            
+            # Clear staging table for this auction_site first using batched SQL function
+            logger.info("Clearing staging table for auction_site", 
+                      job_id=job_id,
+                      auction_site=auction_site)
+            
+            try:
+                # Use SQL function to clear in batches (avoids timeout)
+                clear_result = db.client.rpc(
+                    'clear_auctions_staging',
+                    {
+                        'p_auction_site': auction_site,
+                        'p_batch_size': 10000  # Delete 10K records per batch
+                    }
+                ).execute()
+                
+                if clear_result.data:
+                    clear_data = clear_result.data[0] if isinstance(clear_result.data, list) else clear_result.data
+                    if clear_data.get('success'):
+                        deleted_count = clear_data.get('deleted_count', 0)
+                        logger.info("Staging table cleared successfully", 
+                                  job_id=job_id,
+                                  deleted_count=deleted_count)
+                    else:
+                        logger.warning("Staging table clear had issues, continuing anyway", 
+                                     job_id=job_id,
+                                     error=clear_data.get('error'))
+                else:
+                    logger.warning("No result from clear function, continuing anyway", job_id=job_id)
+                    
+            except Exception as e:
+                error_str = str(e)
+                logger.warning("Staging table clear failed, continuing anyway (merge will handle conflicts)", 
+                             job_id=job_id,
+                             error=error_str)
+            
+            # Insert in batches to avoid timeouts
+            batch_size = 2000 if len(auction_dicts) > 500000 else 5000  # Smaller batches for huge files
+            total_batches = (len(auction_dicts) + batch_size - 1) // batch_size
+            
+            logger.info("Inserting into staging in batches", 
+                      job_id=job_id,
+                      total_batches=total_batches,
+                      batch_size=batch_size,
+                      total_records=len(auction_dicts))
+            
+            staging_inserted = 0
+            staging_failed = 0
+            offer_type_column_exists = None  # Track if we've detected whether offer_type column exists
+            
+            for batch_num, i in enumerate(range(0, len(auction_dicts), batch_size), 1):
+                batch = auction_dicts[i:i + batch_size]
+                
+                try:
+                    # Remove 'ranking' field if present (not in staging table)
+                    staging_batch = []
+                    for record in batch:
+                        staging_record = {k: v for k, v in record.items() if k != 'ranking'}
+                        # Only include offer_type if it's not None (column may not exist if migration hasn't run)
+                        if 'offer_type' in staging_record and staging_record['offer_type'] is None:
+                            staging_record.pop('offer_type', None)
+                        # Also remove offer_type if it's an empty string
+                        elif 'offer_type' in staging_record and staging_record['offer_type'] == '':
+                            staging_record.pop('offer_type', None)
+                        staging_batch.append(staging_record)
+                    
+                    # Add a small delay between batches to avoid overwhelming the database
+                    if batch_num > 1:
+                        await asyncio.sleep(0.1)  # 100ms delay between batches
+                    
+                    db.client.table('auctions_staging').insert(staging_batch).execute()
+                    staging_inserted += len(staging_batch)
+                    processed_count += len(staging_batch)
+                    
+                    # Update progress every 10 batches
+                    if batch_num % 10 == 0 or batch_num == total_batches:
+                        await db.update_csv_upload_progress(
+                            job_id=job_id,
+                            processed_records=processed_count,
+                            current_stage='loading_staging'
+                        )
+                        logger.info("Staging insert progress", 
+                                  job_id=job_id,
+                                  batch=batch_num,
+                                  total_batches=total_batches,
+                                  inserted=staging_inserted,
+                                  percentage=round((batch_num / total_batches) * 100, 2))
+                    
+                    # Small delay every 5 batches
+                    if batch_num % 5 == 0:
+                        await asyncio.sleep(0.1)
+                        
+                except Exception as e:
+                    error_str = str(e)
+                    error_message_lower = error_str.lower()
+                    
+                    # Check if it's a column error for offer_type (migration not run)
+                    if 'column' in error_message_lower and 'offer_type' in error_message_lower:
+                        if offer_type_column_exists is None:
+                            offer_type_column_exists = False
+                            logger.warning("offer_type column not found in auctions_staging, removing from all records", 
+                                         job_id=job_id,
+                                         error=error_str)
+                            # Retry this batch without offer_type
+                            staging_batch_retry = []
+                            for record in batch:
+                                staging_record = {k: v for k, v in record.items() if k != 'ranking' and k != 'offer_type'}
+                                staging_batch_retry.append(staging_record)
+                            
+                            try:
+                                db.client.table('auctions_staging').insert(staging_batch_retry).execute()
+                                staging_inserted += len(staging_batch_retry)
+                                processed_count += len(staging_batch_retry)
+                                logger.info("Successfully inserted batch after removing offer_type", 
+                                          job_id=job_id,
+                                          batch=batch_num)
+                                continue  # Success, move to next batch
+                            except Exception as retry_error:
+                                logger.error("Retry without offer_type also failed", 
+                                           job_id=job_id,
+                                           batch=batch_num,
+                                           error=str(retry_error))
+                    
+                    staging_failed += len(batch)
+                    logger.warning("Failed to insert batch into staging", 
+                                 job_id=job_id,
+                                 batch=batch_num,
+                                 batch_size=len(batch),
+                                 error=error_str)
+                    # Continue with next batch for minor failures
+                    continue
+            
+            logger.info("Staging table loaded", 
+                      job_id=job_id,
+                      inserted=staging_inserted,
+                      failed=staging_failed,
+                      total_expected=len(auction_dicts))
+            
+            if staging_inserted == 0:
+                error_msg = "No records were inserted into staging table. Check logs for errors."
+                if staging_failed > 0:
+                    error_msg += f" {staging_failed} records failed to insert."
+                raise Exception(error_msg)
+            
+            # Step 2: Merge staging into main auctions table
+            await db.update_csv_upload_progress(
+                job_id=job_id,
+                current_stage='merging'
+            )
+            
+            logger.info("Merging staging into main auctions table", 
+                       job_id=job_id,
+                       staging_records=staging_inserted,
+                       auction_site=auction_site)
+            
+            # Use SQL function to merge in small chunks (avoids REST API timeouts)
+            chunk_size = 1000  # Process 1000 records per chunk
+            merge_processed = 0
+            chunk_num = 0
+            max_chunks = 10000  # Safety limit
+            
+            while chunk_num < max_chunks:
+                chunk_num += 1
+                
+                try:
+                    # Call SQL function to process one chunk with timeout
+                    result = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            lambda: db.client.rpc(
+                                'merge_auctions_chunk_from_staging',
+                                {
+                                    'p_auction_site': auction_site,
+                                    'p_chunk_size': chunk_size
+                                }
+                            ).execute()),
+                        timeout=60.0  # 60 second timeout per chunk
+                    )
+                    
+                    if result.data:
+                        chunk_result = result.data[0] if isinstance(result.data, list) else result.data
+                        
+                        if chunk_result.get('success'):
+                            chunk_inserted = chunk_result.get('inserted', 0)
+                            chunk_updated = chunk_result.get('updated', 0)
+                            chunk_processed = chunk_result.get('processed', 0)
+                            remaining = chunk_result.get('remaining', 0)
+                            is_done = chunk_result.get('done', False)
+                            
+                            inserted_count += chunk_inserted
+                            updated_count += chunk_updated
+                            merge_processed += chunk_processed
+                            
+                            # Update progress every 5 chunks for large files, every 10 for smaller
+                            update_frequency = 5 if staging_inserted > 100000 else 10
+                            if chunk_num % update_frequency == 0:
+                                await db.update_csv_upload_progress(
+                                    job_id=job_id,
+                                    total_records=staging_inserted,
+                                    processed_records=merge_processed,
+                                    inserted_count=inserted_count,
+                                    updated_count=updated_count,
+                                    current_stage='merging'
+                                )
+                            
+                            if is_done or remaining == 0:
+                                logger.info("All chunks processed", 
+                                          job_id=job_id,
+                                          total_chunks=chunk_num,
+                                          total_processed=merge_processed)
+                                
+                                # For NameSilo: Delete records marked for deletion
+                                if auction_site.lower() == 'namesilo':
+                                    logger.info("Deleting NameSilo records marked for deletion", job_id=job_id)
+                                    try:
+                                        delete_result = db.client.table('auctions').delete().eq('auction_site', 'namesilo').eq('deletion_flag', True).execute()
+                                        deleted_namesilo_count = len(delete_result.data) if delete_result.data else 0
+                                        deleted_count += deleted_namesilo_count
+                                    except Exception as e:
+                                        logger.error("Failed to delete NameSilo records marked for deletion", 
+                                                   job_id=job_id, error=str(e))
+                                
+                                break  # All done
+                        else:
+                            error_msg = chunk_result.get('error', 'Unknown error in merge function')
+                            logger.error("Merge function returned error", 
+                                       job_id=job_id,
+                                       chunk_num=chunk_num,
+                                       error=error_msg)
+                            raise Exception(f"Merge function error: {error_msg}")
+                    else:
+                        logger.warning("No data returned from merge function", job_id=job_id, chunk_num=chunk_num)
+                        break
+                        
+                except asyncio.TimeoutError:
+                    logger.warning("Merge chunk timed out", job_id=job_id, chunk_num=chunk_num)
+                    # Continue to next chunk
+                    continue
+                except Exception as e:
+                    error_str = str(e)
+                    logger.error("Failed to merge chunk", 
+                               job_id=job_id,
+                               chunk_num=chunk_num,
+                               error=error_str)
+                    # Continue to next chunk for minor errors
+                    continue
+            
+            result = {
+                'inserted': inserted_count,
+                'updated': updated_count,
+                'skipped': staging_failed,
+                'total': staging_inserted
+            }
+            
+        except Exception as e:
+            error_str = str(e)
+            logger.error("Failed to process staging/merge", 
+                        job_id=job_id,
+                        error=error_str,
+                        exc_info=True)
+            raise
+        
+        # Update final status
+        # Progress will be calculated automatically from processed_records and total_records
+        await db.update_csv_upload_progress(
+            job_id=job_id,
+            status='completed',
+            current_stage='completed',
+            processed_records=total_records,
+            inserted_count=result['inserted'],
+            updated_count=result['updated'],
+            skipped_count=result['skipped'],
+            completed=True
+        )
+        
+        logger.info("JSON upload processing complete", 
+                   job_id=job_id,
+                   filename=filename,
+                   total=total_records,
+                   inserted=result['inserted'],
+                   updated=result['updated'],
+                   skipped=result['skipped'])
+        
+    except Exception as e:
+        error_msg = f"Failed to process JSON upload: {str(e)}"
+        logger.error("JSON upload processing failed", 
+                    job_id=job_id, 
+                    filename=filename,
+                    error=error_msg,
+                    exc_info=True)
+        await db.update_csv_upload_progress(
+            job_id=job_id,
+            status='failed',
+            error_message=error_msg
+        )
+
+
+@router.post("/auctions/upload-json")
+async def upload_auctions_json(
+    file: UploadFile = File(...),
+    auction_site: str = Query(..., description="Auction site source: 'godaddy', etc."),
+    offering_type: Optional[str] = Query(None, description="Type of domain offering: 'auction', 'backorder', 'buy_now'"),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """
+    Upload JSON file and process it asynchronously with progress tracking
+    
+    This will:
+    1. Create a job and return job_id immediately
+    2. Process JSON in background: parse, convert, upsert (update existing, add new), delete expired
+    3. Use /auctions/upload-progress/{job_id} to check progress
+    
+    Returns:
+        Job ID for tracking progress
+    """
+    try:
+        # Auto-detect auction_site from filename if not provided or if filename contains site name
+        detected_site = auction_site.lower().strip() if auction_site and auction_site.lower() != 'auto' else 'godaddy'
+        detected_offering_type = offering_type
+        
+        if file.filename:
+            filename_lower = file.filename.lower()
+            if 'godaddy' in filename_lower or 'go_daddy' in filename_lower:
+                detected_site = 'godaddy'
+                # Default Godaddy to auction if not specified
+                if not detected_offering_type:
+                    detected_offering_type = 'auction'
+        
+        # Set default to 'auction' if not detected
+        if not detected_offering_type:
+            detected_offering_type = 'auction'
+        
+        # Generate unique job ID
+        job_id = str(uuid.uuid4())
+        
+        # Read file content in chunks to handle large files
+        content_chunks = []
+        total_size = 0
+        chunk_size = 1024 * 1024  # 1MB chunks
+        
+        logger.info("Starting JSON upload", job_id=job_id, filename=file.filename, auction_site=detected_site)
+        
+        # Read file in chunks
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            content_chunks.append(chunk)
+            total_size += len(chunk)
+            logger.debug("Read chunk", chunk_size=len(chunk), total_size=total_size)
+        
+        # Combine chunks and decode to string
+        content_bytes = b''.join(content_chunks)
+        file_size_mb = round(total_size / (1024 * 1024), 2)
+        
+        logger.info("Received auctions JSON upload", 
+                   job_id=job_id,
+                   filename=file.filename, 
+                   size=total_size,
+                   size_mb=file_size_mb,
+                   auction_site=detected_site)
+        
+        # Decode JSON content
+        try:
+            json_content = content_bytes.decode('utf-8')
+        except UnicodeDecodeError:
+            # Try other encodings
+            try:
+                json_content = content_bytes.decode('latin-1')
+            except UnicodeDecodeError:
+                json_content = content_bytes.decode('utf-8', errors='replace')
+                logger.warning("Used UTF-8 with error replacement for JSON decoding")
+        
+        # Validate JSON format
+        try:
+            import json
+            json.loads(json_content)
+        except json.JSONDecodeError as e:
+            error_msg = f"Invalid JSON format: {str(e)}"
+            logger.error("Invalid JSON format", job_id=job_id, error=error_msg)
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Create progress tracking job
+        db = get_database()
+        await db.create_csv_upload_job(
+            job_id=job_id,
+            filename=file.filename,
+            auction_site=detected_site
+        )
+        
+        # Start background processing
+        background_tasks.add_task(
+            process_json_upload_async,
+            job_id=job_id,
+            json_content=json_content,
+            filename=file.filename,
+            auction_site=detected_site,
+            offering_type=detected_offering_type
+        )
+        
+        return {
+            "success": True,
+            "job_id": job_id,
+            "message": "JSON upload started. Use /auctions/upload-progress/{job_id} to check progress.",
+            "filename": file.filename,
+            "auction_site": detected_site
+        }
+        
+    except HTTPException:
+        raise
+    except MemoryError:
+        logger.error("Out of memory while processing JSON", filename=file.filename)
+        raise HTTPException(
+            status_code=413, 
+            detail="File is too large to process. Please split the file into smaller chunks or contact support."
+        )
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        
+        logger.error("Failed to upload auctions JSON", 
+                    error=error_msg, 
+                    error_type=error_type,
+                    filename=file.filename,
+                    exc_info=True)
+        
+        # Provide more helpful error messages
+        if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+            detail = f"Upload timed out. The file may be too large. Please try again or split into smaller files. Error: {error_msg}"
+        elif "too large" in error_msg.lower() or "size" in error_msg.lower():
+            detail = f"File is too large. Please split into smaller files. Error: {error_msg}"
+        elif "memory" in error_msg.lower():
+            detail = f"Insufficient memory to process file. Please split into smaller files. Error: {error_msg}"
+        else:
+            detail = f"Failed to process JSON: {error_msg}"
+        
+        raise HTTPException(status_code=500, detail=detail)
+
+
+@router.post("/auctions/process-from-storage")
+async def process_from_storage(
+    bucket: str = Body(..., description="Supabase storage bucket name"),
+    path: str = Body(..., description="File path in storage"),
+    auction_site: str = Body(..., description="Auction site source"),
+    offering_type: Optional[str] = Body(None, description="Type of domain offering"),
+    filename: Optional[str] = Body(None, description="Original filename"),
+    background_tasks: BackgroundTasks = BackgroundTasks()
+):
+    """
+    Process auction file from Supabase storage
+    
+    Downloads the file from storage and processes it (CSV or JSON)
+    """
+    try:
+        db = get_database()
+        
+        # Download file from storage
+        logger.info("Processing file from storage", bucket=bucket, path=path, auction_site=auction_site)
+        file_content = await db.download_from_storage(bucket, path)
+        
+        # Determine file type from path/filename
+        file_path = filename or path
+        is_json = file_path.lower().endswith('.json')
+        is_csv = file_path.lower().endswith('.csv')
+        
+        if not (is_json or is_csv):
+            raise HTTPException(status_code=400, detail="File must be CSV or JSON")
+        
+        # Generate job ID
+        job_id = str(uuid.uuid4())
+        
+        # Decode content
+        try:
+            content_str = file_content.decode('utf-8')
+        except UnicodeDecodeError:
+            try:
+                content_str = file_content.decode('latin-1')
+            except UnicodeDecodeError:
+                content_str = file_content.decode('utf-8', errors='replace')
+        
+        # Create progress tracking job
+        await db.create_csv_upload_job(
+            job_id=job_id,
+            filename=file_path,
+            auction_site=auction_site,
+            offering_type=offering_type
+        )
+        
+        # Process based on file type
+        if is_json:
+            # Validate JSON
+            import json
+            try:
+                json.loads(content_str)
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=400, detail=f"Invalid JSON format: {str(e)}")
+            
+            # Start background processing
+            background_tasks.add_task(
+                process_json_upload_async,
+                job_id=job_id,
+                json_content=content_str,
+                filename=file_path,
+                auction_site=auction_site,
+                offering_type=offering_type
+            )
+        else:  # CSV
+            background_tasks.add_task(
+                process_csv_upload_async,
+                job_id=job_id,
+                csv_content=content_str,
+                filename=file_path,
+                auction_site=auction_site,
+                offering_type=offering_type
+            )
+        
+        return {
+            "success": True,
+            "job_id": job_id,
+            "message": f"{'JSON' if is_json else 'CSV'} processing started from storage. Use /auctions/upload-progress/{job_id} to check progress.",
+            "filename": file_path,
+            "auction_site": auction_site,
+            "bucket": bucket,
+            "path": path
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        logger.error("Failed to process file from storage", 
+                    bucket=bucket, 
+                    path=path,
+                    error=error_msg,
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to process file from storage: {error_msg}")
+
+
 @router.get("/auctions/upload-progress/{job_id}")
 async def get_upload_progress(job_id: str):
     """
@@ -1756,6 +2498,219 @@ async def trigger_bulk_backlinks_analysis(
             )
         
         raise HTTPException(status_code=500, detail=f"Failed to trigger bulk backlinks analysis: {error_msg}")
+
+
+@router.post("/auctions/trigger-bulk-all-metrics")
+async def trigger_bulk_all_metrics_analysis(
+    preferred: Optional[bool] = Query(None, description="Filter by preferred status"),
+    auction_site: Optional[str] = Query(None, description="Filter by auction site"),
+    offering_type: Optional[str] = Query(None, description="Filter by market type: 'auction', 'backorder', 'buy_now'"),
+    tld: Optional[str] = Query(None, description="Filter by TLD extension (e.g., '.com', '.ai') - deprecated, use tlds"),
+    tlds: Optional[str] = Query(None, description="Comma-separated list of TLDs (e.g., '.com,.io,.ai')"),
+    has_statistics: Optional[bool] = Query(None, description="Filter by has_statistics"),
+    scored: Optional[bool] = Query(None, description="Filter by scored status (has score)"),
+    min_rank: Optional[int] = Query(None, description="Minimum ranking", ge=1),
+    max_rank: Optional[int] = Query(None, description="Maximum ranking", ge=1),
+    min_score: Optional[float] = Query(None, description="Minimum score", ge=0, le=100),
+    max_score: Optional[float] = Query(None, description="Maximum score", ge=0, le=100),
+    expiration_from_date: Optional[str] = Query(None, description="Filter by expiration date from (YYYY-MM-DD)"),
+    expiration_to_date: Optional[str] = Query(None, description="Filter by expiration date to (YYYY-MM-DD)"),
+    sort_by: str = Query("expiration_date", description="Field to sort by"),
+    sort_order: str = Query("asc", description="Sort order (asc, desc)"),
+    limit: int = Query(1000, description="Maximum number of domains to trigger (1000 per analysis type)", ge=1, le=1000)
+):
+    """
+    Trigger all four DataForSEO analyses (traffic, rank, backlinks, spam_score) for domains matching current filters
+    
+    This will:
+    1. Find up to 1000 domains that:
+       - Match all current filter criteria
+       - Are missing ANY of the four metrics (traffic_data, rank, backlinks, spam_score)
+       - For auctions: ordered by expiration_date ASC (closest to expire first)
+       - For buy_now: ordered by current sort_by and sort_order parameters
+    2. Trigger all four N8N workflows sequentially:
+       - Traffic data analysis
+       - Rank analysis
+       - Backlinks analysis
+       - Spam score analysis
+    3. Return summary with counts for each triggered analysis
+    """
+    try:
+        logger.info("Triggering bulk all metrics analysis", limit=limit)
+        
+        # Build filters (same as get_auctions_report)
+        filters = {}
+        if preferred is not None:
+            filters['preferred'] = preferred
+        if auction_site:
+            filters['auction_site'] = auction_site
+        if offering_type:
+            filters['offering_type'] = offering_type.lower().strip()
+        if tlds:
+            filters['tlds'] = [t.strip() for t in tlds.split(',') if t.strip()]
+        elif tld:
+            filters['tld'] = tld
+        if has_statistics is not None:
+            filters['has_statistics'] = has_statistics
+        if scored is not None:
+            filters['scored'] = scored
+        if min_rank is not None:
+            filters['min_rank'] = min_rank
+        if max_rank is not None:
+            filters['max_rank'] = max_rank
+        if min_score is not None:
+            filters['min_score'] = min_score
+        if max_score is not None:
+            filters['max_score'] = max_score
+        if expiration_from_date:
+            filters['expiration_from_date'] = expiration_from_date
+        if expiration_to_date:
+            filters['expiration_to_date'] = expiration_to_date
+        
+        auctions_service = AuctionsService()
+        
+        # Get auctions matching filters and missing any metric
+        auctions = await auctions_service.get_auctions_missing_any_metric_with_filters(
+            filters=filters,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            limit=limit
+        )
+        
+        if not auctions:
+            return {
+                "success": True,
+                "message": "No domains matching filters and missing any DataForSEO metric found",
+                "triggered_count": 0,
+                "skipped_count": 0,
+                "triggered_domains": [],
+                "results": {
+                    "traffic_data": {"triggered": 0, "success": False},
+                    "rank": {"triggered": 0, "success": False},
+                    "backlinks": {"triggered": 0, "success": False},
+                    "spam_score": {"triggered": 0, "success": False}
+                }
+            }
+        
+        domain_names = [a['domain'] for a in auctions]
+        
+        # Trigger all four analyses sequentially
+        n8n_service = N8NService()
+        results = {
+            "traffic_data": {"triggered": 0, "success": False, "request_id": None, "error": None},
+            "rank": {"triggered": 0, "success": False, "request_id": None, "error": None},
+            "backlinks": {"triggered": 0, "success": False, "request_id": None, "error": None},
+            "spam_score": {"triggered": 0, "success": False, "request_id": None, "error": None}
+        }
+        
+        # 1. Traffic data
+        try:
+            logger.info("Triggering traffic data analysis", domains=len(domain_names))
+            n8n_result = await n8n_service.trigger_bulk_traffic_batch_workflow(domain_names)
+            if n8n_result:
+                results["traffic_data"] = {
+                    "triggered": len(domain_names),
+                    "success": True,
+                    "request_id": n8n_result.get('request_id')
+                }
+                logger.info("Triggered traffic data analysis", 
+                           triggered=len(domain_names),
+                           request_id=n8n_result.get('request_id'))
+            else:
+                results["traffic_data"]["error"] = "Failed to trigger N8N workflow"
+        except Exception as e:
+            error_msg = str(e)
+            logger.error("Failed to trigger traffic data analysis", error=error_msg)
+            results["traffic_data"]["error"] = error_msg
+        
+        # 2. Rank analysis
+        try:
+            logger.info("Triggering rank analysis", domains=len(domain_names))
+            n8n_result = await n8n_service.trigger_bulk_rank_workflow(domain_names)
+            if n8n_result:
+                results["rank"] = {
+                    "triggered": len(domain_names),
+                    "success": True,
+                    "request_id": n8n_result.get('request_id')
+                }
+                logger.info("Triggered rank analysis", 
+                           triggered=len(domain_names),
+                           request_id=n8n_result.get('request_id'))
+            else:
+                results["rank"]["error"] = "Failed to trigger N8N workflow"
+        except Exception as e:
+            error_msg = str(e)
+            logger.error("Failed to trigger rank analysis", error=error_msg)
+            results["rank"]["error"] = error_msg
+        
+        # 3. Backlinks analysis
+        try:
+            logger.info("Triggering backlinks analysis", domains=len(domain_names))
+            n8n_result = await n8n_service.trigger_bulk_backlinks_workflow(domain_names)
+            if n8n_result:
+                results["backlinks"] = {
+                    "triggered": len(domain_names),
+                    "success": True,
+                    "request_id": n8n_result.get('request_id')
+                }
+                logger.info("Triggered backlinks analysis", 
+                           triggered=len(domain_names),
+                           request_id=n8n_result.get('request_id'))
+            else:
+                results["backlinks"]["error"] = "Failed to trigger N8N workflow"
+        except Exception as e:
+            error_msg = str(e)
+            logger.error("Failed to trigger backlinks analysis", error=error_msg)
+            results["backlinks"]["error"] = error_msg
+        
+        # 4. Spam score analysis
+        try:
+            logger.info("Triggering spam score analysis", domains=len(domain_names))
+            n8n_result = await n8n_service.trigger_bulk_spam_score_workflow(domain_names)
+            if n8n_result:
+                results["spam_score"] = {
+                    "triggered": len(domain_names),
+                    "success": True,
+                    "request_id": n8n_result.get('request_id')
+                }
+                logger.info("Triggered spam score analysis", 
+                           triggered=len(domain_names),
+                           request_id=n8n_result.get('request_id'))
+            else:
+                results["spam_score"]["error"] = "Failed to trigger N8N workflow"
+        except Exception as e:
+            error_msg = str(e)
+            logger.error("Failed to trigger spam score analysis", error=error_msg)
+            results["spam_score"]["error"] = error_msg
+        
+        # Calculate summary
+        total_triggered = sum(r["triggered"] for r in results.values())
+        success_count = sum(1 for r in results.values() if r["success"])
+        failed_count = 4 - success_count
+        
+        return {
+            "success": success_count > 0,  # Success if at least one workflow succeeded
+            "message": f"Triggered analyses for {len(domain_names)} domains. {success_count} succeeded, {failed_count} failed.",
+            "triggered_count": len(domain_names),
+            "skipped_count": 0,
+            "triggered_domains": domain_names[:100],  # Return first 100 for display
+            "results": results
+        }
+        
+    except Exception as e:
+        error_msg = str(e)
+        logger.error("Failed to trigger bulk all metrics analysis", 
+                    error=error_msg,
+                    limit=limit)
+        
+        # Check if it's a timeout or connection error
+        if 'timeout' in error_msg.lower() or 'connection' in error_msg.lower() or 'reset' in error_msg.lower():
+            raise HTTPException(
+                status_code=504, 
+                detail=f"Database query timed out while fetching auctions. Error: {error_msg}"
+            )
+        
+        raise HTTPException(status_code=500, detail=f"Failed to trigger bulk all metrics analysis: {error_msg}")
 
 
 @router.get("/auctions/report")

@@ -1,0 +1,96 @@
+{
+  "name": "Download Listing Text Files",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6c5e9ffd-dce9-4006-901c-0e1d4f21c9c5",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "url": "https://inventory.auctions.godaddy.com/all_listings_ending_tomorrow.json.zip",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        96,
+        -320
+      ],
+      "id": "77d3ba17-25ef-4f5b-8f12-c50c2fc02a36",
+      "name": "GoDaddy - all_listings_ending_tomorrow"
+    },
+    {
+      "parameters": {
+        "url": "https://inventory.auctions.godaddy.com/all_listings_ending_today.json.zip",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        208,
+        0
+      ],
+      "id": "6643dedc-6b1b-41d0-98ac-b0647bd21303",
+      "name": "GoDaddy - all_listings_ending_today"
+    },
+    {
+      "parameters": {
+        "url": "https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales.csv",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        336,
+        -240
+      ],
+      "id": "03a45989-5486-4c0d-9ea4-4729ac665d5b",
+      "name": "Namecheap Auctions"
+    },
+    {
+      "parameters": {
+        "url": "https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales_Buy_Now.csv",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -288,
+        80
+      ],
+      "id": "ab64a93f-a1fc-4f48-8893-d07b17ca4e7c",
+      "name": "Namecheap Buy Now"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "GoDaddy - all_listings_ending_today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "af1e62b4-e4ef-415e-ba27-46ac439dad62",
+  "meta": {
+    "instanceId": "8ed9ed81fad64d2f2e539654b7152113b5201cf79b5e9548649591c372302289"
+  },
+  "id": "hM8ssCvxLrMb1tsa",
+  "tags": []
+}

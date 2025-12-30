@@ -151,3 +151,8 @@ COMMENT ON FUNCTION recalculate_auction_rankings_chunked IS 'Chunked ranking rec
 
 
 
+
+
+
+
+
