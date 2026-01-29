@@ -11,9 +11,8 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 # Copy source code
-COPY src/ ./src/
-COPY public/ ./public/
-COPY tsconfig.json ./
+# Copy source code
+COPY . .
 
 # Build the application
 RUN npm run build
