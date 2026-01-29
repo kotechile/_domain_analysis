@@ -35,6 +35,32 @@ export interface ProgressInfo {
   last_updated: string;
 }
 
+export interface HistoricalMetricPoint {
+  date: string;
+  value: number;
+}
+
+export interface HistoricalRankOverview {
+  organic_keywords_count: HistoricalMetricPoint[];
+  organic_traffic: HistoricalMetricPoint[];
+  organic_traffic_value: HistoricalMetricPoint[];
+  raw_items?: any[];
+}
+
+export interface TrafficAnalyticsHistory {
+  visits_history: HistoricalMetricPoint[];
+  bounce_rate_history: HistoricalMetricPoint[];
+  unique_visitors_history: HistoricalMetricPoint[];
+  raw_items?: any[];
+}
+
+export interface HistoricalData {
+  rank_overview?: HistoricalRankOverview;
+  traffic_analytics?: TrafficAnalyticsHistory;
+  backlinks_history?: Record<string, HistoricalMetricPoint[]>;
+  timestamp: string;
+}
+
 export interface DomainAnalysisReport {
   domain_name: string;
   analysis_timestamp: string;
@@ -42,6 +68,7 @@ export interface DomainAnalysisReport {
   data_for_seo_metrics?: DataForSEOMetrics;
   wayback_machine_summary?: WaybackMachineSummary;
   llm_analysis?: LLMAnalysis;
+  historical_data?: HistoricalData;
   raw_data_links?: {
     full_keywords_list_api: string;
     full_backlinks_list_api: string;
@@ -158,7 +185,7 @@ export interface LLMAnalysis {
   bad_highlights?: string[];
   suggested_niches?: string[];
   advantages_disadvantages_table?: AdvantageDisadvantage[];
-  
+
   // New domain buyer-focused fields
   buy_recommendation?: BuyRecommendation;
   valuable_assets?: string[];
@@ -168,7 +195,7 @@ export interface LLMAnalysis {
   investment_analysis?: InvestmentAnalysis;
   action_plan?: ActionPlan;
   pros_and_cons?: ProsAndCons[];
-  
+
   summary?: string;
   confidence_score?: number;
 }
@@ -666,6 +693,11 @@ class ApiService {
     return response.data;
   }
 
+  async getHistoricalData(domain: string): Promise<HistoricalData> {
+    const response: AxiosResponse<HistoricalData> = await this.client.get(`/reports/${domain}/history`);
+    return response.data;
+  }
+
   async exportBacklinks(domain: string): Promise<BacklinksResponse> {
     const response: AxiosResponse<BacklinksResponse> = await this.client.get(
       `/reports/${domain}/backlinks/export`
@@ -692,7 +724,7 @@ class ApiService {
     includeBacklinks: boolean = false,
     includeKeywords: boolean = false
   ): Promise<{ success: boolean; message: string; llm_analysis: LLMAnalysis }> {
-    const response: AxiosResponse<{ success: boolean; message: string; llm_analysis: LLMAnalysis }> = 
+    const response: AxiosResponse<{ success: boolean; message: string; llm_analysis: LLMAnalysis }> =
       await this.client.post(`/reports/${domain}/reanalyze`, {
         include_backlinks: includeBacklinks,
         include_keywords: includeKeywords
@@ -981,7 +1013,7 @@ class ApiService {
     };
   }> {
     const params = new URLSearchParams();
-    
+
     if (filters.preferred !== undefined) {
       params.append('preferred', filters.preferred.toString());
     }

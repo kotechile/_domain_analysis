@@ -157,6 +157,36 @@ class LLMAnalysis(BaseModel):
     confidence_score: Optional[float] = Field(None, ge=0, le=1)
 
 
+class HistoricalMetricPoint(BaseModel):
+    """Data point for historical metrics"""
+    date: str  # YYYY-MM-DD
+    value: float
+
+
+class HistoricalRankOverview(BaseModel):
+    """Historical ranking overview data"""
+    organic_keywords_count: List[HistoricalMetricPoint] = []
+    organic_traffic: List[HistoricalMetricPoint] = []
+    organic_traffic_value: List[HistoricalMetricPoint] = []
+    raw_items: Optional[List[Dict[str, Any]]] = None
+
+
+class TrafficAnalyticsHistory(BaseModel):
+    """Historical traffic analytics data"""
+    visits_history: List[HistoricalMetricPoint] = []
+    bounce_rate_history: List[HistoricalMetricPoint] = []
+    unique_visitors_history: List[HistoricalMetricPoint] = []
+    raw_items: Optional[List[Dict[str, Any]]] = None
+
+
+class HistoricalData(BaseModel):
+    """Combined historical data container"""
+    rank_overview: Optional[HistoricalRankOverview] = None
+    traffic_analytics: Optional[TrafficAnalyticsHistory] = None
+    backlinks_history: Optional[Dict[str, List[HistoricalMetricPoint]]] = None
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+
 class DetailedAnalysisData(BaseModel):
     """Detailed analysis data storage model"""
     id: Optional[str] = None
@@ -225,6 +255,7 @@ class DomainAnalysisReport(BaseModel):
     # Backlinks page summary (from DataForSEO backlinks summary endpoint)
     # Using forward reference since BulkPageSummaryResult is defined later
     backlinks_page_summary: Optional['BulkPageSummaryResult'] = None
+    historical_data: Optional['HistoricalData'] = None
     
     class Config:
         """Pydantic config for forward references"""
@@ -423,3 +454,52 @@ class ScoredDomain(BaseModel):
     lexical_frequency_score: Optional[float] = None
     semantic_value_score: Optional[float] = None
     rank: Optional[int] = None  # Position in ranked list
+
+
+class HistoricalMetricPoint(BaseModel):
+    """Single data point for historical metrics"""
+    date: datetime
+    value: float
+    
+    @validator('date', pre=True)
+    def parse_date(cls, v):
+        if isinstance(v, str):
+            try:
+                # Handle YYYY-MM-DD format
+                return datetime.strptime(v, "%Y-%m-%d")
+            except ValueError:
+                try:
+                    # Handle YYYY-MM-DDTHH:MM:SS format
+                    return datetime.fromisoformat(v.replace('Z', '+00:00'))
+                except ValueError:
+                    return v
+        return v
+
+
+class HistoricalRankOverview(BaseModel):
+    """Historical rank overview data"""
+    organic_keywords_count: List[HistoricalMetricPoint] = Field(default_factory=list)
+    organic_traffic: List[HistoricalMetricPoint] = Field(default_factory=list)
+    organic_traffic_value: List[HistoricalMetricPoint] = Field(default_factory=list)
+    
+    # Store raw items for flexible charting if needed
+    raw_items: Optional[List[Dict[str, Any]]] = None
+
+
+class TrafficAnalyticsHistory(BaseModel):
+    """Traffic analytics history data"""
+    visits_history: List[HistoricalMetricPoint] = Field(default_factory=list)
+    bounce_rate_history: List[HistoricalMetricPoint] = Field(default_factory=list)
+    unique_visitors_history: List[HistoricalMetricPoint] = Field(default_factory=list)
+    
+    # Store raw items
+    raw_items: Optional[List[Dict[str, Any]]] = None
+
+
+class HistoricalData(BaseModel):
+    """Container for all historical data"""
+    rank_overview: Optional[HistoricalRankOverview] = None
+    traffic_analytics: Optional[TrafficAnalyticsHistory] = None
+    backlinks_history: Optional[Dict[str, List[HistoricalMetricPoint]]] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+

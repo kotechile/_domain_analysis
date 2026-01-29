@@ -99,7 +99,7 @@ if __name__ == '__main__':
         print("MANUAL MIGRATION REQUIRED")
         print("=" * 60)
         print("\nFor self-hosted Supabase, apply the migration via:")
-        print("1. Supabase Studio (https://sbdomain.aichieve.net) → SQL Editor")
+        print(f"1. Supabase Studio ({settings.SUPABASE_URL}) → SQL Editor")
         print("2. Or via psql connection to your PostgreSQL database")
         print("\nMigration file location:")
         migration_file = Path(__file__).parent.parent / 'supabase' / 'migrations' / '20250125000000_create_bulk_domain_analysis_table.sql'

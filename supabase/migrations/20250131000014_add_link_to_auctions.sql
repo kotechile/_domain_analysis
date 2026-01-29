@@ -16,3 +16,7 @@ COMMENT ON COLUMN auctions.link IS 'Direct link to the auction listing page (e.g
 
 
 
+
+
+
+

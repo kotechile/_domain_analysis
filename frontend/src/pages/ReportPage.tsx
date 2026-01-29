@@ -60,6 +60,7 @@ import DomainRankings from '../components/DomainRankings';
 import AnalysisProgress from '../components/AnalysisProgress';
 import DevelopmentPlan from '../components/DevelopmentPlan';
 import Header from '../components/Header';
+import HistoricalDataChart from '../components/HistoricalDataChart';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -147,9 +148,9 @@ const ReportPage: React.FC = () => {
   // Additional safety check
   useEffect(() => {
     if (!domain || isLoading) return;
-    
+
     const currentStatus = report?.status;
-    
+
     if (currentStatus !== 'in_progress' && currentStatus !== undefined) {
       return;
     }
@@ -158,7 +159,7 @@ const ReportPage: React.FC = () => {
       try {
         const freshData = await api.getReport(domain);
         const freshStatus = freshData?.report?.status;
-        
+
         if (freshStatus === 'completed' && (currentStatus === 'in_progress' || currentStatus === undefined)) {
           queryClient.invalidateQueries({ queryKey: ['report', domain] });
           refetch();
@@ -263,10 +264,10 @@ const ReportPage: React.FC = () => {
   }
 
   if (!report) {
-    const isAnalysisInProgress = reportData?.message?.includes('Status: AnalysisStatus.PENDING') || 
-                                reportData?.message?.includes('Status: AnalysisStatus.IN_PROGRESS');
+    const isAnalysisInProgress = reportData?.message?.includes('Status: AnalysisStatus.PENDING') ||
+      reportData?.message?.includes('Status: AnalysisStatus.IN_PROGRESS');
     const isAnalysisFailed = reportData?.message?.includes('Status: AnalysisStatus.FAILED');
-    
+
     if (isAnalysisInProgress) {
       return (
         <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -280,15 +281,15 @@ const ReportPage: React.FC = () => {
                 Analysis in Progress: {domain}
               </Typography>
             </Box>
-            <AnalysisProgress 
-              domain={domain!} 
+            <AnalysisProgress
+              domain={domain!}
               onComplete={() => refetch()}
             />
           </Container>
         </Box>
       );
     }
-    
+
     if (isAnalysisFailed) {
       return (
         <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -309,7 +310,7 @@ const ReportPage: React.FC = () => {
         </Box>
       );
     }
-    
+
     return (
       <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
         <Header />
@@ -332,13 +333,13 @@ const ReportPage: React.FC = () => {
         {/* Header */}
         <Box sx={{ mb: 4 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <IconButton 
-              onClick={() => navigate('/reports')} 
-              sx={{ 
+            <IconButton
+              onClick={() => navigate('/reports')}
+              sx={{
                 mr: 2,
                 '&:hover': {
-                  backgroundColor: theme.palette.mode === 'light' 
-                    ? 'rgba(0, 0, 0, 0.04)' 
+                  backgroundColor: theme.palette.mode === 'light'
+                    ? 'rgba(0, 0, 0, 0.04)'
                     : 'rgba(255, 255, 255, 0.08)',
                 },
               }}
@@ -371,12 +372,12 @@ const ReportPage: React.FC = () => {
             </Box>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
               <Tooltip title="Refresh">
-                <IconButton 
+                <IconButton
                   onClick={() => refetch()}
                   sx={{
                     '&:hover': {
-                      backgroundColor: theme.palette.mode === 'light' 
-                        ? 'rgba(0, 0, 0, 0.04)' 
+                      backgroundColor: theme.palette.mode === 'light'
+                        ? 'rgba(0, 0, 0, 0.04)'
                         : 'rgba(255, 255, 255, 0.08)',
                     },
                   }}
@@ -422,9 +423,9 @@ const ReportPage: React.FC = () => {
         {report.status === 'in_progress' && (
           <Card sx={{ mb: 3 }}>
             <CardContent>
-              <AnalysisProgress 
-                domain={domain!} 
-                onComplete={() => refetch()} 
+              <AnalysisProgress
+                domain={domain!}
+                onComplete={() => refetch()}
               />
             </CardContent>
           </Card>
@@ -455,46 +456,46 @@ const ReportPage: React.FC = () => {
             {/* Tabs for detailed views */}
             <Card>
               <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
-                <Tabs 
-                  value={tabValue} 
+                <Tabs
+                  value={tabValue}
                   onChange={handleTabChange}
                   variant="scrollable"
                   scrollButtons="auto"
                 >
-                  <Tab 
-                    icon={<AnalyticsIcon />} 
+                  <Tab
+                    icon={<AnalyticsIcon />}
                     iconPosition="start"
-                    label="Overview" 
+                    label="Overview"
                   />
-                  <Tab 
-                    icon={<TrendingUpIcon />} 
+                  <Tab
+                    icon={<TrendingUpIcon />}
                     iconPosition="start"
-                    label="Domain Rankings" 
+                    label="Domain Rankings"
                   />
-                  <Tab 
-                    icon={<SearchIcon />} 
+                  <Tab
+                    icon={<SearchIcon />}
                     iconPosition="start"
-                    label="Keywords" 
+                    label="Keywords"
                   />
-                  <Tab 
-                    icon={<LinkIcon />} 
+                  <Tab
+                    icon={<LinkIcon />}
                     iconPosition="start"
-                    label="Backlinks" 
+                    label="Backlinks"
                   />
-                  <Tab 
-                    icon={<LightbulbIcon />} 
+                  <Tab
+                    icon={<LightbulbIcon />}
                     iconPosition="start"
-                    label="AI Analysis" 
+                    label="AI Analysis"
                   />
-                  <Tab 
-                    icon={<HistoryIcon />} 
+                  <Tab
+                    icon={<HistoryIcon />}
                     iconPosition="start"
-                    label="Historical Data" 
+                    label="Historical Data"
                   />
-                  <Tab 
-                    icon={<AssessmentIcon />} 
+                  <Tab
+                    icon={<AssessmentIcon />}
                     iconPosition="start"
-                    label="Development Plan" 
+                    label="Development Plan"
                   />
                 </Tabs>
               </Box>
@@ -631,94 +632,7 @@ const ReportPage: React.FC = () => {
               </TabPanel>
 
               <TabPanel value={tabValue} index={5}>
-                {report.wayback_machine_summary ? (
-                  <Box>
-                    {/* Historical Risk Assessment */}
-                    {report.wayback_machine_summary.historical_risk_assessment && (
-                      <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
-                        <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                          Historical Risk Assessment
-                        </Typography>
-                        <Typography variant="body2">
-                          {report.wayback_machine_summary.historical_risk_assessment}
-                        </Typography>
-                      </Alert>
-                    )}
-                    
-                    {/* Historical Data Table */}
-                    <Card variant="outlined" sx={{ mb: 3 }}>
-                      <CardContent>
-                        <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
-                          <Table size="small">
-                            <TableBody>
-                              <TableRow>
-                                <TableCell sx={{ fontWeight: 500 }}>Total Captures</TableCell>
-                                <TableCell align="right">
-                                  <Typography variant="body2" fontWeight={600}>
-                                    {report.wayback_machine_summary.total_captures?.toLocaleString() || 'N/A'}
-                                  </Typography>
-                                </TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell sx={{ fontWeight: 500 }}>First Capture Year</TableCell>
-                                <TableCell align="right">
-                                  <Typography variant="body2" fontWeight={600}>
-                                    {report.wayback_machine_summary.first_capture_year || 'N/A'}
-                                  </Typography>
-                                </TableCell>
-                              </TableRow>
-                              <TableRow>
-                                <TableCell sx={{ fontWeight: 500 }}>Last Capture</TableCell>
-                                <TableCell align="right">
-                                  <Typography variant="body2" fontWeight={600}>
-                                    {report.wayback_machine_summary.last_capture_date
-                                      ? new Date(report.wayback_machine_summary.last_capture_date).toLocaleDateString()
-                                      : 'N/A'}
-                                  </Typography>
-                                </TableCell>
-                              </TableRow>
-                            </TableBody>
-                          </Table>
-                        </TableContainer>
-                      </CardContent>
-                    </Card>
-                    
-                    {/* Wayback Machine Button */}
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Button
-                        variant="contained"
-                        size="large"
-                        startIcon={<OpenInNewIcon />}
-                        onClick={() => window.open(`https://web.archive.org/web/*/${report.domain_name}`, '_blank')}
-                        sx={{ minWidth: 250, borderRadius: 2 }}
-                      >
-                        View on Wayback Machine
-                      </Button>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                        Explore the complete historical archive of this domain
-                      </Typography>
-                    </Box>
-                  </Box>
-                ) : (
-                  <Box sx={{ textAlign: 'center', py: 4 }}>
-                    <HistoryIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                    <Typography variant="h6" color="text.secondary" gutterBottom>
-                      No historical data available
-                    </Typography>
-                    <Button
-                      variant="outlined"
-                      size="large"
-                      startIcon={<OpenInNewIcon />}
-                      onClick={() => window.open(`https://web.archive.org/web/*/${report.domain_name}`, '_blank')}
-                      sx={{ mt: 2, borderRadius: 2 }}
-                    >
-                      Check Wayback Machine
-                    </Button>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                      This domain may not have been archived yet
-                    </Typography>
-                  </Box>
-                )}
+                <HistoricalDataChart domain={domain!} data={report.historical_data} />
               </TabPanel>
 
               <TabPanel value={tabValue} index={6}>
@@ -729,8 +643,8 @@ const ReportPage: React.FC = () => {
         )}
 
         {/* Retry Dialog */}
-        <Dialog 
-          open={retryDialogOpen} 
+        <Dialog
+          open={retryDialogOpen}
           onClose={() => setRetryDialogOpen(false)}
           PaperProps={{
             sx: {

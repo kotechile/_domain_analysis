@@ -35,16 +35,6 @@ class DatabaseService:
             from supabase.lib.client_options import SyncClientOptions
             import httpx
             
-            # Normalize SUPABASE_URL - remove trailing slash if present
-            supabase_url = self.settings.SUPABASE_URL.rstrip('/')
-            if not supabase_url:
-                raise ValueError("SUPABASE_URL is empty or not set")
-            
-            # Get API key (prefer service role key, fallback to anon key)
-            supabase_key = self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY
-            if not supabase_key:
-                raise ValueError("SUPABASE_KEY or SUPABASE_SERVICE_ROLE_KEY must be set")
-            
             # Configure HTTP client with SSL verification setting and increased timeout
             timeout = httpx.Timeout(300.0, connect=30.0)  # 5 minutes for requests, 30s for connection
             if not getattr(self.settings, 'SUPABASE_VERIFY_SSL', True):
@@ -55,8 +45,8 @@ class DatabaseService:
                 client_options = SyncClientOptions(httpx_client=custom_client)
                 # Use service role key for admin operations
                 self.client = create_client(
-                    supabase_url,
-                    supabase_key,
+                    self.settings.SUPABASE_URL,
+                    self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY,
                     options=client_options
                 )
             else:
@@ -65,13 +55,13 @@ class DatabaseService:
                 client_options = SyncClientOptions(httpx_client=custom_client)
                 # Use service role key for admin operations
                 self.client = create_client(
-                    supabase_url,
-                    supabase_key,
+                    self.settings.SUPABASE_URL,
+                    self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY,
                     options=client_options
                 )
-            logger.info("Supabase client initialized successfully", url=supabase_url[:50] + "..." if len(supabase_url) > 50 else supabase_url)
+            logger.info("Supabase client initialized successfully")
         except Exception as e:
-            logger.error("Failed to initialize Supabase client", error=str(e), error_type=type(e).__name__)
+            logger.error("Failed to initialize Supabase client", error=str(e))
             # Fallback to None for now
             self.client = None
             logger.warning("Supabase client disabled, using fallback mode")
@@ -80,34 +70,17 @@ class DatabaseService:
         """Initialize database tables and indexes"""
         try:
             # Create tables if they don't exist
-            # Note: Tables are typically managed via Supabase migrations, so this may fail
-            # if the RPC function doesn't exist. That's okay - we'll just log it.
-            try:
-                await self._create_tables()
-                await self._create_indexes()
-                logger.info("Database initialization completed")
-            except Exception as table_error:
-                # Tables likely already exist via migrations, or RPC function doesn't exist
-                # This is not a fatal error - we can still use the database
-                logger.debug("Table creation skipped (tables may already exist via migrations)", 
-                           error=str(table_error), error_type=type(table_error).__name__)
+            await self._create_tables()
+            await self._create_indexes()
+            logger.info("Database initialization completed")
         except Exception as e:
-            # Only raise if client initialization failed
-            if self.client is None:
-                logger.error("Database initialization failed - client not available", error=str(e))
-                raise
-            else:
-                # Client is available, table creation just failed - that's okay
-                logger.debug("Database client initialized, table creation skipped", error=str(e))
+            logger.error("Database initialization failed", error=str(e))
+            raise
     
     async def _create_tables(self):
         """Create database tables"""
         # This would typically be done via Supabase migrations
         # For now, we'll assume tables exist or create them via SQL
-        # Note: This RPC function may not exist in all Supabase instances
-        if self.client is None:
-            raise Exception("Database client not initialized")
-        
         tables_sql = """
         -- Create reports table
         CREATE TABLE IF NOT EXISTS reports (
@@ -118,6 +91,7 @@ class DatabaseService:
             data_for_seo_metrics JSONB,
             wayback_machine_summary JSONB,
             llm_analysis JSONB,
+            historical_data JSONB,
             raw_data_links JSONB,
             processing_time_seconds FLOAT,
             error_message TEXT,
@@ -144,17 +118,9 @@ class DatabaseService:
         CREATE INDEX IF NOT EXISTS idx_raw_data_cache_expires_at ON raw_data_cache(expires_at);
         """
         
-        # Execute SQL via Supabase RPC (if available)
-        # This may fail if the RPC function doesn't exist, which is fine since
-        # tables are typically managed via migrations
-        try:
-            result = self.client.rpc('exec_sql', {'sql': tables_sql})
-            logger.info("Database tables created/verified")
-        except Exception as rpc_error:
-            # RPC function may not exist - that's okay, tables are managed via migrations
-            logger.debug("Table creation RPC not available (tables managed via migrations)", 
-                        error=str(rpc_error))
-            raise  # Re-raise to be handled by init_database
+        # Execute SQL via Supabase
+        result = self.client.rpc('exec_sql', {'sql': tables_sql})
+        logger.info("Database tables created/verified")
     
     async def _create_indexes(self):
         """Create database indexes for performance"""
@@ -179,12 +145,13 @@ class DatabaseService:
                 'data_for_seo_metrics': report_data.get('data_for_seo_metrics'),
                 'wayback_machine_summary': report_data.get('wayback_machine_summary'),
                 'llm_analysis': report_data.get('llm_analysis'),
+                'historical_data': report.historical_data.model_dump(mode='json') if report.historical_data else None,
                 'raw_data_links': report_data.get('raw_data_links'),
                 'detailed_data_available': report_data.get('detailed_data_available'),
                 'analysis_phase': report_data.get('analysis_phase'),
+                'progress_data': report.progress_data.dict() if report.progress_data else None,
                 'processing_time_seconds': report.processing_time_seconds,
                 'error_message': report.error_message,
-                'backlinks_page_summary': report_data.get('backlinks_page_summary'),
                 'updated_at': datetime.utcnow().isoformat()
             }, on_conflict='domain_name').execute()
             
@@ -206,16 +173,6 @@ class DatabaseService:
             
             report_data = result.data[0]
             
-            # Parse backlinks_page_summary if present
-            backlinks_page_summary = None
-            if report_data.get('backlinks_page_summary'):
-                try:
-                    from models.domain_analysis import BulkPageSummaryResult
-                    backlinks_page_summary = BulkPageSummaryResult(**report_data['backlinks_page_summary'])
-                except Exception as e:
-                    logger.warning("Failed to parse backlinks_page_summary", 
-                                 domain=domain_name, error=str(e))
-            
             # Convert back to DomainAnalysisReport object
             report = DomainAnalysisReport(
                 domain_name=report_data['domain_name'],
@@ -224,12 +181,13 @@ class DatabaseService:
                 data_for_seo_metrics=report_data.get('data_for_seo_metrics'),
                 wayback_machine_summary=report_data.get('wayback_machine_summary'),
                 llm_analysis=report_data.get('llm_analysis'),
+                historical_data=report_data.get('historical_data'),
                 raw_data_links=report_data.get('raw_data_links'),
                 detailed_data_available=report_data.get('detailed_data_available'),
                 analysis_phase=report_data.get('analysis_phase'),
+                progress_data=report_data.get('progress_data'),
                 processing_time_seconds=report_data.get('processing_time_seconds'),
-                error_message=report_data.get('error_message'),
-                backlinks_page_summary=backlinks_page_summary
+                error_message=report_data.get('error_message')
             )
             
             logger.info("Report retrieved successfully", domain=domain_name)
@@ -1248,19 +1206,13 @@ class DatabaseService:
                 return True
             
         except Exception as e:
-            # If truncation fails for any reason, skip it and use upsert instead
-            # This is especially important for large tables where deletion can fail
-            error_msg = str(e)
-            logger.warning("Truncation failed, will skip and use upsert instead", 
-                         error=error_msg,
-                         total_records=total_count if 'total_count' in locals() else 'unknown')
-            # Return True to indicate we're skipping truncation (upsert will handle duplicates)
-            return True
+            logger.error("Failed to truncate auctions", error=str(e))
+            raise
     
     async def bulk_insert_auctions(self, auctions: List[Dict[str, Any]]) -> Dict[str, int]:
         """
         Bulk upsert auctions using batch inserts
-        Updates existing records, adds new ones, preserves page_statistics field
+        Updates existing records, adds new ones, preserves backlinks_bulk_page_summary (in bulk_domain_analysis)
         
         Args:
             auctions: List of auction dictionaries ready for database insertion
@@ -1293,7 +1245,8 @@ class DatabaseService:
                 try:
                     # Use upsert to handle duplicates based on unique constraint
                     # The unique constraint is on (domain, auction_site, expiration_date)
-                    # Note: page_statistics field is preserved during upsert
+                    # Note: backlinks_bulk_page_summary is in bulk_domain_analysis table, not auctions
+                    # So it's automatically preserved when we update auctions
                     result = self.client.table('auctions').upsert(
                         batch,
                         on_conflict='domain,auction_site,expiration_date'
@@ -1346,7 +1299,6 @@ class DatabaseService:
     async def delete_expired_auctions(self) -> int:
         """
         Delete auctions with expiration_date in the past
-        Uses SQL function if available, otherwise falls back to direct DELETE query
         
         Returns:
             Number of records deleted
@@ -1356,101 +1308,23 @@ class DatabaseService:
                 raise Exception("Supabase client not available")
             
             from datetime import datetime, timezone
+            
+            # Delete records where expiration_date < NOW()
+            # Use filter with current timestamp in ISO format
             now_iso = datetime.now(timezone.utc).isoformat()
             
-            # First, check how many expired records exist (for logging)
-            try:
-                check_result = self.client.table('auctions')\
-                    .select('id', count='exact')\
-                    .lt('expiration_date', now_iso)\
-                    .limit(1)\
-                    .execute()
-                expired_count_before = check_result.count if hasattr(check_result, 'count') else 0
-            except Exception:
-                expired_count_before = 0
+            # Delete using lt (less than) filter on expiration_date
+            # Supabase PostgREST supports lt filter on timestamp fields
+            result = self.client.table('auctions').delete().lt('expiration_date', now_iso).execute()
             
-            logger.info("Checking for expired auctions", 
-                       expired_count=expired_count_before,
-                       current_time=now_iso)
+            # Supabase delete returns the deleted records in result.data
+            deleted_count = len(result.data) if result.data else 0
+            logger.info("Deleted expired auctions", count=deleted_count)
             
-            # Try SQL function first (if migration has been applied)
-            try:
-                result = self.client.rpc('delete_expired_auctions').execute()
-                
-                # The function returns an integer count
-                if result.data is not None:
-                    if isinstance(result.data, int):
-                        deleted_count = result.data
-                    elif isinstance(result.data, list) and len(result.data) > 0:
-                        deleted_count = result.data[0] if isinstance(result.data[0], int) else 0
-                    else:
-                        deleted_count = 0
-                else:
-                    deleted_count = 0
-                
-                logger.info("Deleted expired auctions using SQL function", 
-                           count=deleted_count,
-                           expired_before=expired_count_before)
-                
-                return deleted_count
-                
-            except Exception as func_error:
-                # Function doesn't exist or failed - use direct DELETE query as fallback
-                logger.warning("SQL function not available, using direct DELETE query", 
-                             error=str(func_error))
-                
-                # Use direct SQL query via RPC with raw SQL
-                # Note: This requires a helper function or we use PostgREST filter
-                # For now, use PostgREST delete with proper timestamp
-                try:
-                    # Delete using PostgREST - get all expired IDs first, then delete
-                    expired_records = self.client.table('auctions')\
-                        .select('id')\
-                        .lt('expiration_date', now_iso)\
-                        .execute()
-                    
-                    if expired_records.data and len(expired_records.data) > 0:
-                        expired_ids = [record['id'] for record in expired_records.data]
-                        
-                        # Delete in batches to avoid URL length issues
-                        batch_size = 1000
-                        total_deleted = 0
-                        
-                        for i in range(0, len(expired_ids), batch_size):
-                            batch_ids = expired_ids[i:i + batch_size]
-                            delete_result = self.client.table('auctions')\
-                                .delete()\
-                                .in_('id', batch_ids)\
-                                .execute()
-                            batch_deleted = len(delete_result.data) if delete_result.data else 0
-                            total_deleted += batch_deleted
-                        
-                        logger.info("Deleted expired auctions using direct DELETE", 
-                                   count=total_deleted,
-                                   expired_before=expired_count_before)
-                        return total_deleted
-                    else:
-                        logger.info("No expired auctions found to delete")
-                        return 0
-                        
-                except Exception as delete_error:
-                    logger.error("Direct DELETE also failed", error=str(delete_error))
-                    # Last resort: try simple delete with filter (may not work with PostgREST)
-                    try:
-                        # This might not work with PostgREST, but worth trying
-                        delete_result = self.client.table('auctions')\
-                            .delete()\
-                            .lt('expiration_date', now_iso)\
-                            .execute()
-                        deleted_count = len(delete_result.data) if delete_result.data else 0
-                        logger.info("Deleted expired auctions using PostgREST filter", count=deleted_count)
-                        return deleted_count
-                    except Exception as final_error:
-                        logger.error("All deletion methods failed", error=str(final_error))
-                        return 0
+            return deleted_count
             
         except Exception as e:
-            logger.error("Failed to delete expired auctions", error=str(e), exception_type=type(e).__name__)
+            logger.error("Failed to delete expired auctions", error=str(e))
             # Don't raise - deletion of expired records is not critical
             # Return 0 to indicate no records were deleted
             return 0
@@ -1528,744 +1402,6 @@ class DatabaseService:
             logger.error("Failed to mark has_statistics", error=str(e))
             raise
     
-    async def get_scored_auctions_without_page_statistics(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """
-        Get scored auctions without page_statistics, ordered by most recent (created_at DESC)
-        
-        Args:
-            limit: Maximum number of records to return
-            
-        Returns:
-            List of auction dictionaries
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            # Only select fields we need to avoid loading large JSONB fields (source_data, page_statistics)
-            # This prevents timeouts when there are many records with large JSONB data
-            try:
-                result = (
-                    self.client.table('auctions')
-                    .select('domain,score,created_at,id')  # Only select essential fields
-                    .not_.is_('score', 'null')  # score IS NOT NULL
-                    .is_('page_statistics', 'null')  # page_statistics IS NULL
-                    .order('created_at', desc=True)  # Most recent first
-                    .limit(limit)
-                    .execute()
-                )
-                
-                auctions = result.data if result.data else []
-                logger.info("Fetched scored auctions without page_statistics", count=len(auctions), limit=limit)
-                
-                # Return auctions with domain field (we only selected essential fields to avoid timeout)
-                return auctions
-            except Exception as query_error:
-                error_str = str(query_error)
-                logger.error("Database query failed in get_scored_auctions_without_page_statistics", 
-                           error=error_str,
-                           limit=limit)
-                
-                # Check for specific error types
-                if 'timeout' in error_str.lower() or 'timed out' in error_str.lower():
-                    raise Exception(f"Database query timed out. Try reducing limit (current: {limit}) or check database performance.")
-                elif 'connection' in error_str.lower() or 'reset' in error_str.lower():
-                    raise Exception(f"Database connection error. The query may be too large or the server may be overloaded.")
-                
-                # Re-raise original error
-                raise
-            
-        except Exception as e:
-            error_str = str(e)
-            logger.error("Failed to get scored auctions without page_statistics", 
-                       error=error_str,
-                       limit=limit)
-            raise
-    
-    async def get_scored_auctions_closest_to_expire(self, limit: int = 1000) -> List[Dict[str, Any]]:
-        """
-        Get scored auctions closest to expire (ordered by expiration_date ASC) that don't have rank data, up to limit
-        
-        Args:
-            limit: Maximum number of records to return (up to 1000 for bulk rank endpoint)
-            
-        Returns:
-            List of auction dictionaries with domain and expiration_date
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            # Only select fields we need to avoid loading large JSONB fields
-            try:
-                result = (
-                    self.client.table('auctions')
-                    .select('domain,score,expiration_date,id,ranking,page_statistics')  # Select fields needed for filtering
-                    .not_.is_('score', 'null')  # score IS NOT NULL (scored domains only)
-                    .is_('ranking', 'null')  # ranking IS NULL (no rank data)
-                    .order('expiration_date', desc=False)  # Closest to expire first (ASC)
-                    .limit(limit)
-                    .execute()
-                )
-                
-                auctions = result.data if result.data else []
-                
-                # Additional filter: also check page_statistics JSONB for rank field
-                # Some domains might have page_statistics but no extracted ranking column
-                filtered_auctions = []
-                for auction in auctions:
-                    page_stats = auction.get('page_statistics') or {}
-                    # Include if no rank in extracted column AND no rank in page_statistics
-                    if not page_stats.get('rank'):
-                        filtered_auctions.append({
-                            'domain': auction['domain'],
-                            'expiration_date': auction['expiration_date'],
-                            'id': auction['id']
-                        })
-                
-                logger.info("Fetched scored auctions without rank closest to expire", 
-                           count=len(filtered_auctions), 
-                           limit=limit,
-                           total_fetched=len(auctions))
-                
-                return filtered_auctions[:limit]  # Ensure we don't exceed limit after filtering
-            except Exception as query_error:
-                error_str = str(query_error)
-                logger.error("Database query failed in get_scored_auctions_closest_to_expire", 
-                           error=error_str,
-                           limit=limit)
-                
-                # Check for specific error types
-                if 'timeout' in error_str.lower() or 'timed out' in error_str.lower():
-                    raise Exception(f"Database query timed out. Try reducing limit (current: {limit}) or check database performance.")
-                elif 'connection' in error_str.lower() or 'reset' in error_str.lower():
-                    raise Exception(f"Database connection error. The query may be too large or the server may be overloaded.")
-                
-                # Re-raise original error
-                raise
-            
-        except Exception as e:
-            error_str = str(e)
-            logger.error("Failed to get scored auctions closest to expire", 
-                       error=error_str,
-                       limit=limit)
-            raise
-    
-    async def get_auctions_without_backlinks_closest_to_expire(self, limit: int = 1000) -> List[Dict[str, Any]]:
-        """
-        Get scored auctions closest to expire (ordered by expiration_date ASC) that don't have backlinks data, up to limit
-        
-        Args:
-            limit: Maximum number of records to return (up to 1000 for bulk backlinks endpoint)
-            
-        Returns:
-            List of auction dictionaries with domain, expiration_date, and id
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            # Only select fields we need to avoid loading large JSONB fields
-            try:
-                result = (
-                    self.client.table('auctions')
-                    .select('domain,expiration_date,id,backlinks,page_statistics,score')  # Select fields needed for filtering
-                    .not_.is_('score', 'null')  # score IS NOT NULL (scored domains only)
-                    .is_('backlinks', 'null')  # backlinks IS NULL (no backlinks data)
-                    .order('expiration_date', desc=False)  # Closest to expire first (ASC)
-                    .limit(limit)
-                    .execute()
-                )
-                
-                auctions = result.data if result.data else []
-                
-                # Additional filter: also check page_statistics JSONB for backlinks field
-                # Some domains might have page_statistics but no extracted backlinks column
-                filtered_auctions = []
-                for auction in auctions:
-                    page_stats = auction.get('page_statistics') or {}
-                    # Include if no backlinks in extracted column AND no backlinks in page_statistics
-                    if not page_stats.get('backlinks'):
-                        filtered_auctions.append({
-                            'domain': auction['domain'],
-                            'expiration_date': auction['expiration_date'],
-                            'id': auction['id']
-                        })
-                
-                logger.info("Fetched scored auctions without backlinks closest to expire", 
-                           count=len(filtered_auctions), 
-                           limit=limit,
-                           total_fetched=len(auctions))
-                
-                return filtered_auctions[:limit]  # Ensure we don't exceed limit after filtering
-            except Exception as query_error:
-                error_str = str(query_error)
-                logger.error("Database query failed in get_auctions_without_backlinks_closest_to_expire", 
-                           error=error_str,
-                           limit=limit)
-                
-                # Check for specific error types
-                if 'timeout' in error_str.lower() or 'timed out' in error_str.lower():
-                    raise Exception(f"Database query timed out. Try reducing limit (current: {limit}) or check database performance.")
-                elif 'connection' in error_str.lower() or 'reset' in error_str.lower():
-                    raise Exception(f"Database connection error. The query may be too large or the server may be overloaded.")
-                
-                # Re-raise original error
-                raise
-            
-        except Exception as e:
-            error_str = str(e)
-            logger.error("Failed to get auctions without backlinks closest to expire", 
-                       error=error_str,
-                       limit=limit)
-            raise
-    
-    async def get_auctions_without_spam_score_closest_to_expire(self, limit: int = 1000) -> List[Dict[str, Any]]:
-        """
-        Get scored auctions closest to expire (ordered by expiration_date ASC) that don't have spam score data, up to limit
-        
-        Args:
-            limit: Maximum number of records to return (up to 1000 for bulk spam score endpoint)
-            
-        Returns:
-            List of auction dictionaries with domain, expiration_date, and id
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            # Only select fields we need to avoid loading large JSONB fields
-            try:
-                result = (
-                    self.client.table('auctions')
-                    .select('domain,expiration_date,id,backlinks_spam_score,page_statistics,score')  # Select fields needed for filtering
-                    .not_.is_('score', 'null')  # score IS NOT NULL (scored domains only)
-                    .is_('backlinks_spam_score', 'null')  # backlinks_spam_score IS NULL (no spam score data)
-                    .order('expiration_date', desc=False)  # Closest to expire first (ASC)
-                    .limit(limit)
-                    .execute()
-                )
-                
-                auctions = result.data if result.data else []
-                
-                # Additional filter: also check page_statistics JSONB for spam score field
-                # Some domains might have page_statistics but no extracted spam score column
-                filtered_auctions = []
-                for auction in auctions:
-                    page_stats = auction.get('page_statistics') or {}
-                    # Include if no spam score in extracted column AND no spam score in page_statistics
-                    # Check both backlinks_spam_score and spam_score (DataForSEO format)
-                    if not page_stats.get('backlinks_spam_score') and not page_stats.get('spam_score'):
-                        filtered_auctions.append({
-                            'domain': auction['domain'],
-                            'expiration_date': auction['expiration_date'],
-                            'id': auction['id']
-                        })
-                
-                logger.info("Fetched scored auctions without spam score closest to expire", 
-                           count=len(filtered_auctions), 
-                           limit=limit,
-                           total_fetched=len(auctions))
-                
-                return filtered_auctions[:limit]  # Ensure we don't exceed limit after filtering
-            except Exception as query_error:
-                error_str = str(query_error)
-                logger.error("Database query failed in get_auctions_without_spam_score_closest_to_expire", 
-                           error=error_str,
-                           limit=limit)
-                
-                # Check for specific error types
-                if 'timeout' in error_str.lower() or 'timed out' in error_str.lower():
-                    raise Exception(f"Database query timed out. Try reducing limit (current: {limit}) or check database performance.")
-                elif 'connection' in error_str.lower() or 'reset' in error_str.lower():
-                    raise Exception(f"Database connection error. The query may be too large or the server may be overloaded.")
-                
-                # Re-raise original error
-                raise
-            
-        except Exception as e:
-            error_str = str(e)
-            logger.error("Failed to get auctions without spam score closest to expire", 
-                       error=error_str,
-                       limit=limit)
-            raise
-    
-    async def get_auctions_missing_any_metric_with_filters(
-        self,
-        filters: Optional[Dict[str, Any]] = None,
-        sort_by: str = 'expiration_date',
-        sort_order: str = 'asc',
-        limit: int = 1000
-    ) -> List[Dict[str, Any]]:
-        """
-        Get auctions matching filters that are missing ANY of the four DataForSEO metrics:
-        - Traffic data (traffic_data in page_statistics)
-        - Rank (ranking column or rank in page_statistics)
-        - Backlinks (backlinks column or backlinks in page_statistics)
-        - Spam score (backlinks_spam_score column or spam_score in page_statistics)
-        
-        Args:
-            filters: Dict with optional filters (preferred, auction_site, tlds, offering_type, etc.)
-            sort_by: Field to sort by (default 'expiration_date')
-            sort_order: Sort order 'asc' or 'desc' (default 'asc')
-            limit: Maximum number of records to return (default 1000)
-            
-        Returns:
-            List of auction dictionaries with domain, expiration_date, and id
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            # Determine sort order based on offering_type
-            # For buy_now, use provided sort_by and sort_order
-            # For auctions, always use expiration_date ASC (closest to expire first)
-            offering_type = filters.get('offering_type') if filters else None
-            if offering_type and offering_type.lower() == 'buy_now':
-                # Use provided sort parameters for buy_now
-                final_sort_by = sort_by
-                final_sort_order = sort_order
-            else:
-                # For auctions, always sort by expiration_date ASC
-                final_sort_by = 'expiration_date'
-                final_sort_order = 'asc'
-            
-            # Use RPC function if TLDs are specified, otherwise use direct query
-            if filters and filters.get('tlds') and isinstance(filters['tlds'], list) and len(filters['tlds']) > 0:
-                # Use RPC function for proper TLD filtering
-                tlds = filters['tlds']
-                normalized_tlds = [tld if tld.startswith('.') else f'.{tld}' for tld in tlds]
-                
-                offering_type_param = None
-                if filters.get('offering_type'):
-                    offering_type_param = filters.get('offering_type').lower().strip()
-                
-                rpc_params = {
-                    'p_tlds': normalized_tlds,
-                    'p_preferred': filters.get('preferred'),
-                    'p_auction_site': filters.get('auction_site'),
-                    'p_offering_type': offering_type_param,
-                    'p_has_statistics': filters.get('has_statistics'),
-                    'p_scored': filters.get('scored'),
-                    'p_min_rank': filters.get('min_rank'),
-                    'p_max_rank': filters.get('max_rank'),
-                    'p_min_score': filters.get('min_score'),
-                    'p_max_score': filters.get('max_score'),
-                    'p_expiration_from_date': filters.get('expiration_from_date'),
-                    'p_expiration_to_date': filters.get('expiration_to_date'),
-                    'p_sort_by': final_sort_by,
-                    'p_sort_order': final_sort_order,
-                    'p_limit': limit * 2,  # Get more records to filter for missing metrics
-                    'p_offset': 0
-                }
-                
-                try:
-                    rpc_result = self.client.rpc('filter_auctions_by_tlds', rpc_params).execute()
-                    auctions = rpc_result.data if rpc_result.data else []
-                except Exception as rpc_error:
-                    logger.error("RPC function failed in get_auctions_missing_any_metric_with_filters", 
-                               error=str(rpc_error),
-                               rpc_params={k: v for k, v in rpc_params.items() if k != 'p_tlds'})
-                    raise Exception(f"RPC function filter_auctions_by_tlds failed: {str(rpc_error)}") from rpc_error
-            else:
-                # Use direct query when no TLDs filter
-                query = self.client.table('auctions').select('*')
-                
-                # Apply expiration date filter (except for buy_now)
-                from datetime import datetime, timezone
-                if not (filters and filters.get('offering_type') == 'buy_now'):
-                    now_iso = datetime.now(timezone.utc).isoformat()
-                    query = query.gte('expiration_date', now_iso)
-                
-                # Apply other filters
-                if filters:
-                    if filters.get('preferred') is not None:
-                        query = query.eq('preferred', filters['preferred'])
-                    if filters.get('auction_site'):
-                        query = query.eq('auction_site', filters['auction_site'])
-                    if filters.get('offering_type'):
-                        offering_type_value = filters['offering_type'].lower().strip()
-                        query = query.eq('offer_type', offering_type_value)
-                    if filters.get('has_statistics') is not None:
-                        query = query.eq('has_statistics', filters['has_statistics'])
-                    if filters.get('scored') is not None:
-                        if filters['scored']:
-                            query = query.not_.is_('score', 'null').gt('score', 0)
-                        else:
-                            query = query.is_('score', 'null')
-                    if filters.get('min_rank') is not None:
-                        query = query.gte('ranking', filters['min_rank'])
-                    if filters.get('max_rank') is not None:
-                        query = query.lte('ranking', filters['max_rank'])
-                    if filters.get('min_score') is not None:
-                        query = query.gte('score', filters['min_score'])
-                    if filters.get('max_score') is not None:
-                        query = query.lte('score', filters['max_score'])
-                    if filters.get('offering_type') != 'buy_now':
-                        if filters.get('expiration_from_date'):
-                            query = query.gte('expiration_date', filters['expiration_from_date'])
-                        if filters.get('expiration_to_date'):
-                            query = query.lte('expiration_date', filters['expiration_to_date'])
-                
-                # Apply sorting
-                if final_sort_order.lower() == 'desc':
-                    query = query.order(final_sort_by, desc=True)
-                else:
-                    query = query.order(final_sort_by, desc=False)
-                
-                # Get more records to filter for missing metrics
-                try:
-                    result = query.limit(limit * 2).execute()
-                    auctions = result.data if result.data else []
-                except Exception as query_error:
-                    logger.error("Direct query failed in get_auctions_missing_any_metric_with_filters", 
-                               error=str(query_error))
-                    raise
-            
-            # Filter for domains missing ANY of the four metrics
-            filtered_auctions = []
-            for auction in auctions:
-                page_stats = auction.get('page_statistics') or {}
-                
-                # Check if missing ANY metric
-                missing_traffic = not page_stats.get('traffic_data')
-                missing_rank = (
-                    auction.get('ranking') is None and 
-                    (page_stats.get('rank') is None or page_stats.get('rank') == 'null')
-                )
-                missing_backlinks = (
-                    auction.get('backlinks') is None and 
-                    (page_stats.get('backlinks') is None or page_stats.get('backlinks') == 'null')
-                )
-                missing_spam_score = (
-                    auction.get('backlinks_spam_score') is None and 
-                    (page_stats.get('backlinks_spam_score') is None or 
-                     page_stats.get('spam_score') is None)
-                )
-                
-                # Include if missing ANY metric
-                if missing_traffic or missing_rank or missing_backlinks or missing_spam_score:
-                    filtered_auctions.append({
-                        'domain': auction['domain'],
-                        'expiration_date': auction.get('expiration_date'),
-                        'id': auction.get('id')
-                    })
-                
-                # Stop once we have enough
-                if len(filtered_auctions) >= limit:
-                    break
-            
-            logger.info("Fetched auctions missing any metric with filters", 
-                       count=len(filtered_auctions),
-                       limit=limit,
-                       total_fetched=len(auctions),
-                       offering_type=offering_type,
-                       sort_by=final_sort_by,
-                       sort_order=final_sort_order)
-            
-            return filtered_auctions[:limit]
-            
-        except Exception as e:
-            logger.error("Failed to get auctions missing any metric with filters", 
-                       error=str(e),
-                       limit=limit,
-                       filters=filters)
-            raise
-    
-    async def update_auction_page_statistics(self, domain: str, page_statistics: Dict[str, Any]) -> bool:
-        """
-        Update page_statistics for an auction domain
-        Also extracts and updates individual columns for better query performance
-        
-        Args:
-            domain: Domain name to update
-            page_statistics: JSONB data to store
-            
-        Returns:
-            True if updated successfully, False otherwise
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            # Extract values for individual columns
-            update_data = {
-                'page_statistics': page_statistics,
-                'has_statistics': True,  # Also update has_statistics flag
-                'updated_at': datetime.now(timezone.utc).isoformat()
-            }
-            
-            # Extract backlinks
-            if 'backlinks' in page_statistics and page_statistics['backlinks'] is not None:
-                try:
-                    update_data['backlinks'] = int(page_statistics['backlinks'])
-                except (ValueError, TypeError):
-                    logger.debug("Could not convert backlinks to integer", 
-                               domain=domain, value=page_statistics.get('backlinks'))
-            
-            # Extract referring_domains
-            if 'referring_domains' in page_statistics and page_statistics['referring_domains'] is not None:
-                try:
-                    update_data['referring_domains'] = int(page_statistics['referring_domains'])
-                except (ValueError, TypeError):
-                    logger.debug("Could not convert referring_domains to integer", 
-                               domain=domain, value=page_statistics.get('referring_domains'))
-            
-            # Extract backlinks_spam_score
-            if 'backlinks_spam_score' in page_statistics and page_statistics['backlinks_spam_score'] is not None:
-                try:
-                    update_data['backlinks_spam_score'] = float(page_statistics['backlinks_spam_score'])
-                except (ValueError, TypeError):
-                    logger.debug("Could not convert backlinks_spam_score to float", 
-                               domain=domain, value=page_statistics.get('backlinks_spam_score'))
-            
-            # Extract first_seen (can be ISO string or timestamp)
-            if 'first_seen' in page_statistics and page_statistics['first_seen'] is not None:
-                try:
-                    first_seen = page_statistics['first_seen']
-                    # If it's already a string, try to parse it
-                    if isinstance(first_seen, str):
-                        # Parse ISO format string
-                        from dateutil import parser
-                        update_data['first_seen'] = parser.parse(first_seen).isoformat()
-                    else:
-                        # Assume it's already a datetime-like object
-                        update_data['first_seen'] = first_seen
-                except (ValueError, TypeError, AttributeError) as e:
-                    logger.debug("Could not convert first_seen to timestamp", 
-                               domain=domain, value=page_statistics.get('first_seen'), error=str(e))
-            
-            result = (
-                self.client.table('auctions')
-                .update(update_data)
-                .eq('domain', domain)
-                .execute()
-            )
-            
-            if result.data and len(result.data) > 0:
-                logger.info("Updated page_statistics for auction", 
-                           domain=domain,
-                           updated_count=len(result.data))
-                return True
-            else:
-                logger.warning("No auction found to update - domain may not exist in auctions table", 
-                             domain=domain)
-                return False
-                
-        except Exception as e:
-            logger.error("Failed to update auction page_statistics", domain=domain, error=str(e))
-            return False
-    
-    async def bulk_update_auction_page_statistics(self, domain_stats: Dict[str, Dict[str, Any]]) -> int:
-        """
-        Bulk update page_statistics for multiple auction domains
-        
-        Args:
-            domain_stats: Dictionary mapping domain names to their page_statistics data
-            
-        Returns:
-            Number of records updated
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            if not domain_stats:
-                return 0
-            
-            updated_count = 0
-            batch_size = 50
-            
-            domains = list(domain_stats.keys())
-            for i in range(0, len(domains), batch_size):
-                batch_domains = domains[i:i + batch_size]
-                
-                for domain in batch_domains:
-                    try:
-                        stats = domain_stats[domain]
-                        success = await self.update_auction_page_statistics(domain, stats)
-                        if success:
-                            updated_count += 1
-                    except Exception as e:
-                        logger.warning("Failed to update page_statistics", domain=domain, error=str(e))
-                        continue
-            
-            logger.info("Bulk updated auction page_statistics", updated=updated_count, total=len(domains))
-            return updated_count
-            
-        except Exception as e:
-            logger.error("Failed to bulk update auction page_statistics", error=str(e))
-            raise
-    
-    async def update_auction_traffic_data(self, domain: str, traffic_data: Dict[str, Any]) -> bool:
-        """
-        Update traffic_data for an auction domain
-        
-        Args:
-            domain: Domain name to update
-            traffic_data: JSONB data to store
-            
-        Returns:
-            True if updated successfully, False otherwise
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            update_data = {
-                'traffic_data': traffic_data,
-                'updated_at': datetime.now(timezone.utc).isoformat()
-            }
-            
-            result = (
-                self.client.table('auctions')
-                .update(update_data)
-                .eq('domain', domain)
-                .execute()
-            )
-            
-            if result.data and len(result.data) > 0:
-                logger.info("Updated traffic_data for auction", 
-                           domain=domain,
-                           updated_count=len(result.data))
-                return True
-            else:
-                logger.warning("No auction found to update - domain may not exist in auctions table", 
-                             domain=domain)
-                return False
-                
-        except Exception as e:
-            logger.error("Failed to update auction traffic_data", domain=domain, error=str(e))
-            return False
-    
-    async def bulk_update_auction_traffic_data(self, domain_traffic: Dict[str, Dict[str, Any]]) -> int:
-        """
-        Bulk update traffic_data for multiple auction domains
-        
-        Args:
-            domain_traffic: Dictionary mapping domain names to their traffic_data
-            
-        Returns:
-            Number of records updated
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            if not domain_traffic:
-                return 0
-            
-            updated_count = 0
-            batch_size = 50
-            
-            domains = list(domain_traffic.keys())
-            for i in range(0, len(domains), batch_size):
-                batch_domains = domains[i:i + batch_size]
-                
-                for domain in batch_domains:
-                    try:
-                        traffic = domain_traffic[domain]
-                        success = await self.update_auction_traffic_data(domain, traffic)
-                        if success:
-                            updated_count += 1
-                    except Exception as e:
-                        logger.warning("Failed to update traffic_data", domain=domain, error=str(e))
-                        continue
-            
-            logger.info("Bulk updated auction traffic_data", updated=updated_count, total=len(domains))
-            return updated_count
-            
-        except Exception as e:
-            logger.error("Failed to bulk update auction traffic_data", error=str(e))
-            raise
-    
-    async def get_scored_auctions_without_traffic_data(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """
-        Get scored auctions without traffic_data, ordered by most recent (created_at DESC)
-        
-        Args:
-            limit: Maximum number of records to return
-            
-        Returns:
-            List of auction dictionaries
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            # Only select fields we need to avoid loading large JSONB fields
-            try:
-                result = (
-                    self.client.table('auctions')
-                    .select('domain,score,created_at,id')  # Only select essential fields
-                    .not_.is_('score', 'null')  # score IS NOT NULL
-                    .is_('traffic_data', 'null')  # traffic_data IS NULL
-                    .order('created_at', desc=True)  # Most recent first
-                    .limit(limit)
-                    .execute()
-                )
-                
-                auctions = result.data if result.data else []
-                logger.info("Fetched scored auctions without traffic_data", count=len(auctions), limit=limit)
-                
-                return auctions
-            except Exception as query_error:
-                logger.error("Database query failed in get_scored_auctions_without_traffic_data", 
-                           error=str(query_error),
-                           limit=limit)
-                raise
-                
-        except Exception as e:
-            logger.error("Failed to get scored auctions without traffic_data", 
-                        error=str(e),
-                        limit=limit)
-            raise
-    
-    async def get_scored_auctions_closest_to_expire_without_traffic_data(self, limit: int = 1000) -> List[Dict[str, Any]]:
-        """
-        Get scored auctions closest to expire (ordered by expiration_date ASC) that don't have traffic_data, up to limit
-        
-        Args:
-            limit: Maximum number of records to return (up to 1000 for bulk traffic endpoint)
-            
-        Returns:
-            List of auction dictionaries with domain and expiration_date
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            # Only select fields we need to avoid loading large JSONB fields
-            try:
-                result = (
-                    self.client.table('auctions')
-                    .select('domain,score,expiration_date,id,traffic_data')  # Select fields needed for filtering
-                    .not_.is_('score', 'null')  # score IS NOT NULL (scored domains only)
-                    .is_('traffic_data', 'null')  # traffic_data IS NULL (no traffic data)
-                    .order('expiration_date', desc=False)  # Closest to expire first (ASC)
-                    .limit(limit)
-                    .execute()
-                )
-                
-                auctions = result.data if result.data else []
-                
-                logger.info("Fetched scored auctions closest to expire without traffic_data", 
-                           count=len(auctions), 
-                           limit=limit)
-                
-                return auctions
-            except Exception as query_error:
-                logger.error("Database query failed in get_scored_auctions_closest_to_expire_without_traffic_data", 
-                           error=str(query_error),
-                           limit=limit)
-                raise
-                
-        except Exception as e:
-            logger.error("Failed to get scored auctions closest to expire without traffic_data", 
-                        error=str(e),
-                        limit=limit)
-            raise
-    
     async def get_auctions_with_statistics(
         self, 
         filters: Optional[Dict[str, Any]] = None,
@@ -2275,7 +1411,7 @@ class DatabaseService:
         offset: int = 0
     ) -> Dict[str, Any]:
         """
-        Get auctions with page_statistics from auctions table
+        Get auctions with joined statistics from bulk_domain_analysis
         
         Args:
             filters: Dict with optional filters (preferred, auction_site, etc.)
@@ -2289,59 +1425,10 @@ class DatabaseService:
         """
         try:
             if not self.client:
-                logger.error("Supabase client not available in get_auctions_with_statistics")
-                raise Exception("Database connection not available. Please check your SUPABASE_URL and SUPABASE_KEY configuration.")
+                raise Exception("Supabase client not available")
             
-            # Build query - select all fields
-            # Note: For very large datasets, consider selecting only needed fields to reduce payload size
-            # Currently selecting all fields to maintain compatibility with frontend expectations
-            try:
-                query = self.client.table('auctions').select('*')
-            except Exception as client_error:
-                logger.error("Failed to create Supabase query", error=str(client_error))
-                raise Exception(f"Database query initialization failed: {str(client_error)}")
-            
-            # Always filter to show only future expiration dates (expiration_date >= NOW())
-            # Use current timestamp in ISO format for comparison
-            # NOTE: For buy_now records, expiration_date might be NULL or far in the future
-            # So we only apply this filter if not filtering by offer_type='buy_now'
-            from datetime import datetime, timezone
-            now_iso = datetime.now(timezone.utc).isoformat()
-            
-            # Only apply expiration_date filter if not filtering by buy_now
-            # buy_now records might have NULL or far-future expiration dates
-            if not (filters and filters.get('offering_type') == 'buy_now'):
-                # If expiration_from_date is provided, use the later of now_iso or expiration_from_date
-                # This ensures we never show records from the past, even if user sets a past date
-                expiration_from = filters.get('expiration_from_date') if filters else None
-                if expiration_from:
-                    # Compare dates - use the later one (max of now and provided date)
-                    try:
-                        # Parse the provided date - handle both date-only and full ISO datetime
-                        date_str = expiration_from.replace('Z', '+00:00')
-                        from_date = datetime.fromisoformat(date_str)
-                        # Ensure timezone-aware (if naive, assume UTC)
-                        if from_date.tzinfo is None:
-                            from_date = from_date.replace(tzinfo=timezone.utc)
-                        
-                        now_dt = datetime.fromisoformat(now_iso.replace('Z', '+00:00'))
-                        effective_from = max(from_date, now_dt).isoformat()
-                    except (ValueError, AttributeError, TypeError) as e:
-                        # If parsing fails, default to now_iso
-                        logger.warning("Failed to parse expiration_from_date, using now", 
-                                     expiration_from=expiration_from, 
-                                     error=str(e))
-                        effective_from = now_iso
-                else:
-                    effective_from = now_iso
-                
-                query = query.gte('expiration_date', effective_from)
-                logger.debug("Applied expiration_date >= NOW() filter", 
-                            offering_type_filter=filters.get('offering_type') if filters else None,
-                            effective_from=effective_from,
-                            provided_from=expiration_from)
-            else:
-                logger.info("Skipping expiration_date >= NOW() filter for buy_now records")
+            # Build query
+            query = self.client.table('auctions').select('*')
             
             # Apply filters
             if filters:
@@ -2349,182 +1436,42 @@ class DatabaseService:
                     query = query.eq('preferred', filters['preferred'])
                 if filters.get('auction_site'):
                     query = query.eq('auction_site', filters['auction_site'])
-                if filters.get('offering_type'):
-                    # Filter by offer_type - use case-insensitive matching
-                    # Supabase .eq() is case-sensitive, so we use ilike for exact case-insensitive match
-                    offering_type_value = filters['offering_type'].lower().strip() if filters['offering_type'] else None
-                    if offering_type_value:
-                        # Use eq() with normalized value - data should be stored in lowercase
-                        # If ilike doesn't work, we'll use eq() and ensure data is normalized
-                        query = query.eq('offer_type', offering_type_value)
-                        logger.info("Applied offer_type filter", 
-                                    offering_type=offering_type_value,
-                                    original_value=filters['offering_type'],
-                                    filter_method='eq')
-                # Handle TLD filtering - use RPC function for proper TLD extraction and OR logic
-                # This ensures TLDs are extracted correctly from domains (e.g., "example.org" -> ".org")
-                if filters.get('tlds') and isinstance(filters['tlds'], list) and len(filters['tlds']) > 0:
-                    # Use RPC function for proper TLD filtering
-                    tlds = filters['tlds']
-                    # Normalize TLDs (ensure they start with .)
-                    normalized_tlds = [tld if tld.startswith('.') else f'.{tld}' for tld in tlds]
-                    
-                    # Use RPC function for proper TLD filtering
-                    # Normalize offering_type for case-insensitive matching
-                    offering_type_param = None
-                    if filters.get('offering_type'):
-                        offering_type_param = filters.get('offering_type').lower().strip()
-                        logger.info("RPC: Setting p_offering_type filter", 
-                                    offering_type=offering_type_param,
-                                    original_value=filters.get('offering_type'))
-                    
-                    # Ensure expiration_from_date is at least "now" to exclude past records
-                    from datetime import datetime, timezone
-                    now_iso = datetime.now(timezone.utc).isoformat()
-                    expiration_from = filters.get('expiration_from_date')
-                    if expiration_from and filters.get('offering_type') != 'buy_now':
-                        try:
-                            # Parse the provided date - handle both date-only and full ISO datetime
-                            date_str = expiration_from.replace('Z', '+00:00')
-                            from_date = datetime.fromisoformat(date_str)
-                            # Ensure timezone-aware (if naive, assume UTC)
-                            if from_date.tzinfo is None:
-                                from_date = from_date.replace(tzinfo=timezone.utc)
-                            
-                            now_dt = datetime.fromisoformat(now_iso.replace('Z', '+00:00'))
-                            effective_from = max(from_date, now_dt).isoformat()
-                        except (ValueError, AttributeError, TypeError) as e:
-                            logger.warning("Failed to parse expiration_from_date in RPC call, using now", 
-                                         expiration_from=expiration_from, 
-                                         error=str(e))
-                            effective_from = now_iso
-                    elif filters.get('offering_type') != 'buy_now':
-                        effective_from = now_iso
-                    else:
-                        effective_from = expiration_from  # For buy_now, use as-is
-                    
-                    rpc_params = {
-                        'p_tlds': normalized_tlds,
-                        'p_preferred': filters.get('preferred'),
-                        'p_auction_site': filters.get('auction_site'),
-                        'p_offering_type': offering_type_param,
-                        'p_has_statistics': filters.get('has_statistics'),
-                        'p_scored': filters.get('scored'),
-                        'p_min_rank': filters.get('min_rank'),
-                        'p_max_rank': filters.get('max_rank'),
-                        'p_min_score': filters.get('min_score'),
-                        'p_max_score': filters.get('max_score'),
-                        'p_expiration_from_date': effective_from,
-                        'p_expiration_to_date': filters.get('expiration_to_date'),
-                        'p_sort_by': sort_by,
-                        'p_sort_order': order,
-                        'p_limit': limit,
-                        'p_offset': offset
-                    }
-                    
-                    # Call RPC function
-                    logger.info("Calling RPC filter_auctions_by_tlds", 
-                                rpc_params={k: v for k, v in rpc_params.items() if k != 'p_tlds'},  # Log without TLDs array
-                                tlds_count=len(normalized_tlds),
-                                offering_type=rpc_params.get('p_offering_type'))
-                    try:
-                        rpc_result = self.client.rpc('filter_auctions_by_tlds', rpc_params).execute()
-                        auctions = rpc_result.data if rpc_result.data else []
-                        logger.info("RPC function returned auctions", 
-                                    count=len(auctions),
-                                    offering_type_filter=rpc_params.get('p_offering_type'),
-                                    sample_domains=[a.get('domain') for a in auctions[:3]] if auctions else [])
-                    except Exception as rpc_error:
-                        error_str = str(rpc_error)
-                        error_type = type(rpc_error).__name__
-                        logger.error("RPC function failed", 
-                                    error=error_str,
-                                    error_type=error_type,
-                                    rpc_params={k: v for k, v in rpc_params.items() if k != 'p_tlds'},
-                                    tlds=normalized_tlds,
-                                    exc_info=True)
-                        # Re-raise with more context
-                        raise Exception(f"RPC function filter_auctions_by_tlds failed: {error_str}") from rpc_error
-                    
-                    # Get total count using count function
-                    count_params = {k: v for k, v in rpc_params.items() if k.startswith('p_') and k not in ['p_sort_by', 'p_sort_order', 'p_limit', 'p_offset']}
-                    try:
-                        count_result = self.client.rpc('count_auctions_by_tlds', count_params).execute()
-                        # RPC function returns integer - Supabase wraps it in data array
-                        if count_result.data and len(count_result.data) > 0:
-                            # The result is typically wrapped: [123] or [{"count_auctions_by_tlds": 123}]
-                            result_value = count_result.data[0]
-                            if isinstance(result_value, dict):
-                                total_count = result_value.get('count_auctions_by_tlds', len(auctions))
-                            elif isinstance(result_value, int):
-                                total_count = result_value
-                            else:
-                                total_count = len(auctions)
-                        else:
-                            total_count = len(auctions)
-                    except Exception as count_error:
-                        logger.warning("Failed to get count from RPC, using result length", error=str(count_error))
-                        total_count = len(auctions)
-                    
-                    return {
-                        "auctions": auctions,
-                        "count": len(auctions),
-                        "total_count": total_count,
-                        "has_more": (offset + len(auctions)) < total_count
-                    }
-                elif filters.get('tld'):
-                    # Legacy single TLD filter (deprecated) - convert to array and use RPC
+                if filters.get('tld'):
+                    # Filter by TLD: domain should end with the specified TLD
+                    # TLD comes in format like ".com" or "com", handle both
                     tld = filters['tld']
                     if not tld.startswith('.'):
                         tld = '.' + tld
-                    # Convert to array format and use RPC
-                    filters['tlds'] = [tld]
-                    # Remove old tld filter
-                    del filters['tld']
-                    # Recursively call with tlds array
-                    return await self.get_auctions_with_statistics(filters, sort_by, order, limit, offset)
-                # For buy_now records, expiration dates might be NULL or far in the future
-                # So we skip expiration date range filters for buy_now
-                if filters.get('offering_type') != 'buy_now':
-                    if filters.get('expiration_from_date'):
-                        # Ensure expiration_from_date is at least "now" to exclude past records
-                        from datetime import datetime, timezone
-                        now_iso = datetime.now(timezone.utc).isoformat()
-                        expiration_from = filters.get('expiration_from_date')
-                        try:
-                            # Parse the provided date - handle both date-only and full ISO datetime
-                            date_str = expiration_from.replace('Z', '+00:00')
-                            from_date = datetime.fromisoformat(date_str)
-                            # Ensure timezone-aware (if naive, assume UTC)
-                            if from_date.tzinfo is None:
-                                from_date = from_date.replace(tzinfo=timezone.utc)
-                            
-                            now_dt = datetime.fromisoformat(now_iso.replace('Z', '+00:00'))
-                            effective_from = max(from_date, now_dt).isoformat()
-                        except (ValueError, AttributeError, TypeError) as e:
-                            logger.warning("Failed to parse expiration_from_date, using now", 
-                                         expiration_from=expiration_from, 
-                                         error=str(e))
-                            effective_from = now_iso
-                        # Filter by expiration date from (ensuring it's at least now)
-                        query = query.gte('expiration_date', effective_from)
-                    if filters.get('expiration_to_date'):
-                        # Filter by expiration date to
-                        query = query.lte('expiration_date', filters['expiration_to_date'])
-                else:
-                    logger.info("Skipping expiration date range filters for buy_now records")
+                    # Use PostgreSQL's ILIKE operator (case-insensitive) to match domains ending with the TLD
+                    # PostgREST supports ilike filter
+                    query = query.ilike('domain', f'%{tld}')
+                if filters.get('tlds'):
+                    # Filter by multiple TLDs: domain should end with any of the specified TLDs
+                    # TLDs come as a list like [".com", ".io", ".ai"]
+                    tlds = filters['tlds']
+                    if isinstance(tlds, list) and len(tlds) > 0:
+                        # Normalize TLDs (ensure they start with .)
+                        normalized_tlds = [tld if tld.startswith('.') else f'.{tld}' for tld in tlds if tld]
+                        # Use OR condition for multiple TLDs - PostgREST doesn't support OR directly,
+                        # so we'll use a workaround with multiple ilike filters
+                        # For now, we'll filter by the first TLD and let the frontend handle multiple
+                        # TODO: Implement proper OR filtering for multiple TLDs
+                        if normalized_tlds:
+                            query = query.ilike('domain', f'%{normalized_tlds[0]}')
+                if filters.get('offering_type'):
+                    query = query.eq('offer_type', filters['offering_type'])
+                if filters.get('expiration_from_date'):
+                    # Filter by expiration date from (greater than or equal)
+                    query = query.gte('expiration_date', filters['expiration_from_date'])
+                if filters.get('expiration_to_date'):
+                    # Filter by expiration date to (less than or equal)
+                    query = query.lte('expiration_date', filters['expiration_to_date'])
                 if filters.get('has_statistics') is not None:
                     query = query.eq('has_statistics', filters['has_statistics'])
                 if filters.get('scored') is not None:
                     if filters['scored']:
-                        # Only scored means score > 0
-                        query = query.not_.is_('score', 'null').gt('score', 0)
+                        query = query.not_.is_('score', 'null')
                     else:
-                        # Not scored means score is NULL or <= 0
-                        # Use PostgREST filter syntax for OR condition
-                        # Note: Supabase client doesn't support OR directly, so we filter for NULL
-                        # Records with score <= 0 will need to be filtered separately if needed
-                        # For now, we'll just filter for NULL scores (most common case)
                         query = query.is_('score', 'null')
                 if filters.get('min_rank') is not None:
                     query = query.gte('ranking', filters['min_rank'])
@@ -2536,12 +1483,7 @@ class DatabaseService:
                     query = query.lte('score', filters['max_score'])
             
             # Apply sorting
-            # Support sorting by various fields including extracted page_statistics columns
-            valid_sort_fields = [
-                'expiration_date', 'score', 'ranking', 'created_at', 'domain', 
-                'current_bid', 'auction_site', 'backlinks', 'referring_domains',
-                'backlinks_spam_score', 'first_seen'
-            ]
+            valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain']
             if sort_by not in valid_sort_fields:
                 sort_by = 'expiration_date'
             
@@ -2550,40 +1492,12 @@ class DatabaseService:
             else:
                 query = query.order(sort_by, desc=False)
             
-            # Get paginated results with timeout protection
+            # Get total count - execute query with count header
             # Note: We'll estimate total count by getting a sample and extrapolating
             # For exact count, we'd need a separate count query, but Supabase client doesn't support it directly
             # So we'll get the paginated results and use a reasonable estimate
-            try:
-                result = query.range(offset, offset + limit - 1).execute()
-                auctions = result.data if result.data else []
-                if filters and filters.get('offering_type'):
-                    logger.info("Direct query returned auctions", 
-                                count=len(auctions),
-                                offering_type_filter=filters.get('offering_type'),
-                                sample_domains=[a.get('domain') for a in auctions[:3]] if auctions else [],
-                                sample_offer_types=[a.get('offer_type') for a in auctions[:3]] if auctions else [])
-            except Exception as query_error:
-                error_str = str(query_error)
-                error_type = type(query_error).__name__
-                logger.error("Database query failed in get_auctions_with_statistics", 
-                           error=error_str,
-                           error_type=error_type,
-                           sort_by=sort_by, 
-                           order=order,
-                           limit=limit,
-                           offset=offset,
-                           exc_info=True)
-                
-                # Provide more specific error messages
-                if 'no available server' in error_str.lower() or '503' in error_str:
-                    raise Exception("Database connection pool exhausted. Please try again in a moment or reduce the query limit.")
-                elif 'timeout' in error_str.lower():
-                    raise Exception(f"Query timed out. Try reducing the limit (current: {limit}) or adding filters.")
-                elif 'relation' in error_str.lower() and 'does not exist' in error_str.lower():
-                    raise Exception("Auctions table not found. Please ensure database migrations have been run.")
-                else:
-                    raise Exception(f"Database query failed: {error_str}")
+            result = query.range(offset, offset + limit - 1).execute()
+            auctions = result.data if result.data else []
             
             # Estimate total count - if we got a full page, there might be more
             # This is an approximation, but for large datasets it's acceptable
@@ -2595,48 +1509,13 @@ class DatabaseService:
                 # We got less than a full page, so this is likely the total
                 total_count = offset + len(auctions)
             
-            # Use page_statistics from auctions table directly
-            # Process auctions and limit JSONB field sizes to prevent memory/timeout issues
-            import json
+            # Return auctions directly (bulk_domain_analysis table is no longer used)
+            # Statistics are now stored directly in the auctions table's page_statistics field
             report_items = []
             for auction in auctions:
-                page_stats = auction.get('page_statistics')
-                
-                # Limit source_data size if it's too large (keep first 50KB)
-                source_data = auction.get('source_data')
-                if source_data and isinstance(source_data, dict):
-                    source_data_str = json.dumps(source_data)
-                    if len(source_data_str) > 50000:  # 50KB limit
-                        # Truncate large source_data to prevent timeout
-                        logger.warning("Truncating large source_data", 
-                                     domain=auction.get('domain'),
-                                     original_size=len(source_data_str))
-                        # Keep only essential fields
-                        source_data = {
-                            'name': source_data.get('name'),
-                            'price': source_data.get('price'),
-                            'url': source_data.get('url')
-                        }
-                
-                # Limit page_statistics size if it's too large (keep first 100KB)
-                if page_stats and isinstance(page_stats, dict):
-                    page_stats_str = json.dumps(page_stats)
-                    if len(page_stats_str) > 100000:  # 100KB limit
-                        logger.warning("Truncating large page_statistics", 
-                                     domain=auction.get('domain'),
-                                     original_size=len(page_stats_str))
-                        # Keep only essential statistics fields
-                        page_stats = {
-                            'target': page_stats.get('target'),
-                            'rank': page_stats.get('rank'),
-                            'backlinks': page_stats.get('backlinks'),
-                            'referring_domains': page_stats.get('referring_domains')
-                        }
-                
                 report_item = {
                     **auction,
-                    'source_data': source_data,  # Use potentially truncated version
-                    'statistics': page_stats  # Get from page_statistics field (potentially truncated)
+                    'statistics': auction.get('page_statistics')  # Get statistics from auctions table if available
                 }
                 report_items.append(report_item)
             
@@ -2653,21 +1532,7 @@ class DatabaseService:
             }
             
         except Exception as e:
-            error_str = str(e)
-            logger.error("Failed to get auctions with statistics", 
-                        error=error_str,
-                        filters=filters,
-                        sort_by=sort_by,
-                        order=order,
-                        limit=limit,
-                        offset=offset)
-            
-            # Check for specific error types
-            if 'timeout' in error_str.lower() or 'timed out' in error_str.lower():
-                raise Exception(f"Database query timed out. Try reducing limit (current: {limit}) or adding filters.")
-            elif 'connection' in error_str.lower() or 'reset' in error_str.lower():
-                raise Exception(f"Database connection error. The query may be too large or the server may be overloaded.")
-            
+            logger.error("Failed to get auctions with statistics", error=str(e))
             raise
     
     async def get_unique_tlds(self) -> List[str]:
@@ -2699,66 +1564,6 @@ class DatabaseService:
         except Exception as e:
             logger.error("Failed to get unique TLDs", error=str(e), exc_info=True)
             return []
-    
-    async def download_from_storage(self, bucket: str, path: str) -> bytes:
-        """
-        Download file from Supabase storage
-        
-        Args:
-            bucket: Storage bucket name
-            path: File path in storage (relative to bucket)
-            
-        Returns:
-            File content as bytes
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            logger.info("Downloading file from storage", bucket=bucket, path=path)
-            
-            # Use HTTP API directly to download from storage
-            # The correct endpoint is: GET /storage/v1/object/{bucket}/{path}
-            import httpx
-            from urllib.parse import quote
-            
-            # Normalize SUPABASE_URL - remove trailing slash if present
-            supabase_url = self.settings.SUPABASE_URL.rstrip('/')
-            service_role_key = self.settings.SUPABASE_SERVICE_ROLE_KEY
-            
-            if not supabase_url or not service_role_key:
-                raise Exception("Supabase URL or service role key not configured")
-            
-            # URL encode the path
-            encoded_path = quote(path, safe='')
-            
-            # Construct the storage API URL
-            storage_url = f"{supabase_url}/storage/v1/object/{bucket}/{encoded_path}"
-            
-            # Make HTTP request with service role key for authentication
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.get(
-                    storage_url,
-                    headers={
-                        "Authorization": f"Bearer {service_role_key}",
-                        "apikey": service_role_key
-                    }
-                )
-                response.raise_for_status()
-                file_data = response.content
-            
-            logger.info("Downloaded file from storage successfully", 
-                       bucket=bucket, 
-                       path=path,
-                       size_bytes=len(file_data))
-            return file_data
-            
-        except Exception as e:
-            logger.error("Failed to download file from storage", 
-                        bucket=bucket, 
-                        path=path,
-                        error=str(e))
-            raise
     
     async def upload_csv_to_storage(self, file_content: bytes, filename: str, bucket: str = "auction-csvs") -> str:
         """
@@ -2832,6 +1637,141 @@ class DatabaseService:
                         error_type=type(e).__name__)
             raise
     
+    async def download_from_storage(self, bucket: str, path: str) -> bytes:
+        """
+        Download file from Supabase storage
+        
+        Args:
+            bucket: Storage bucket name
+            path: File path in storage (relative to bucket)
+            
+        Returns:
+            File content as bytes
+        """
+        try:
+            if not self.client:
+                raise Exception("Supabase client not available")
+            
+            import httpx
+            
+            # Construct the Storage API URL
+            # Supabase Storage API: /storage/v1/object/{bucket}/{path}
+            storage_url = f"{self.settings.SUPABASE_URL}/storage/v1/object/{bucket}/{path}"
+            
+            # Get service role key for authentication
+            service_role_key = self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY
+            
+            logger.info("Downloading file from storage", 
+                       bucket=bucket, 
+                       path=path,
+                       url=storage_url)
+            
+            # Use httpx.AsyncClient for async download
+            async with httpx.AsyncClient(timeout=300.0, verify=bool(getattr(self.settings, 'SUPABASE_VERIFY_SSL', True))) as client:
+                response = await client.get(
+                    storage_url,
+                    headers={
+                        "Authorization": f"Bearer {service_role_key}",
+                        "apikey": service_role_key
+                    }
+                )
+                
+                if response.status_code == 404:
+                    raise Exception(f"File not found in storage: bucket={bucket}, path={path}")
+                
+                response.raise_for_status()
+                
+                file_size = len(response.content)
+                file_size_mb = file_size / (1024 * 1024)
+                
+                logger.info("Downloaded file from storage successfully", 
+                           bucket=bucket, 
+                           path=path,
+                           size_bytes=file_size,
+                           size_mb=round(file_size_mb, 2))
+                
+                return response.content
+                
+        except httpx.HTTPStatusError as e:
+            error_msg = f"HTTP {e.response.status_code} error downloading from storage: {e.response.text}"
+            logger.error("Failed to download from storage (HTTP error)", 
+                        bucket=bucket, 
+                        path=path,
+                        status_code=e.response.status_code,
+                        error=error_msg)
+            raise Exception(error_msg)
+        except Exception as e:
+            logger.error("Failed to download from storage", 
+                        bucket=bucket, 
+                        path=path,
+                        error=str(e),
+                        error_type=type(e).__name__)
+            raise
+
+    async def download_to_file(self, bucket: str, path: str, target_path: str, max_retries: int = 3) -> int:
+        """
+        Download file from Supabase storage into a local file using streaming and retries
+        
+        Args:
+            bucket: Storage bucket name
+            path: File path in storage
+            target_path: Local path to save the file
+            max_retries: Maximum number of retry attempts
+            
+        Returns:
+            Total bytes downloaded
+        """
+        import httpx
+        import asyncio
+        import time
+        from pathlib import Path
+        
+        storage_url = f"{self.settings.SUPABASE_URL}/storage/v1/object/{bucket}/{path}"
+        service_role_key = self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY
+        
+        headers = {
+            "Authorization": f"Bearer {service_role_key}",
+            "apikey": service_role_key
+        }
+        
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                if attempt > 0:
+                    wait_time = 2 ** attempt
+                    logger.info("Retrying storage download", attempt=attempt, wait_time=wait_time, bucket=bucket, path=path)
+                    await asyncio.sleep(wait_time)
+                
+                async with httpx.AsyncClient(timeout=600.0, verify=bool(getattr(self.settings, 'SUPABASE_VERIFY_SSL', True))) as client:
+                    async with client.stream("GET", storage_url, headers=headers) as response:
+                        if response.status_code == 404:
+                            raise Exception(f"File not found in storage: bucket={bucket}, path={path}")
+                        
+                        response.raise_for_status()
+                        
+                        total_bytes = 0
+                        with open(target_path, 'wb') as f:
+                            async for chunk in response.aiter_bytes(chunk_size=8192):
+                                f.write(chunk)
+                                total_bytes += len(chunk)
+                        
+                        logger.info("Downloaded file to disk successfully", 
+                                   bucket=bucket, 
+                                   path=path, 
+                                   local_path=target_path,
+                                   size_mb=round(total_bytes / (1024 * 1024), 2))
+                        return total_bytes
+            
+            except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+                last_error = e
+                logger.warning("Transient error during storage download", attempt=attempt, error=str(e))
+                continue
+            except Exception as e:
+                logger.error("Terminal error during storage download", bucket=bucket, path=path, error=str(e))
+                raise
+        
+        raise Exception(f"Failed to download from storage after {max_retries} retries: {str(last_error)}")
+    
     async def create_csv_upload_job(
         self, 
         job_id: str, 
@@ -2846,7 +1786,7 @@ class DatabaseService:
             job_id: Unique job identifier
             filename: Name of the CSV file
             auction_site: Auction site source
-            offering_type: Type of domain offering (auction, backorder, buy_now)
+            offering_type: Type of domain offering (optional: 'auction', 'backorder', 'buy_now')
             
         Returns:
             Job record dictionary
@@ -2869,8 +1809,7 @@ class DatabaseService:
                 'current_stage': None,
                 'progress_percentage': 0.00
             }
-            
-            # Add offering_type if provided (if the column exists in the table)
+            # Include offering_type if provided
             if offering_type:
                 job_data['offering_type'] = offering_type
             
@@ -3102,23 +2041,20 @@ class DatabaseService:
     
     async def get_latest_active_upload_job(self) -> Optional[Dict[str, Any]]:
         """
-        Get the latest active (non-completed, non-failed) CSV upload job
-        Also includes recently failed jobs (within last hour) so users can see errors
+        Get the latest active (non-completed, non-failed) CSV upload job progress
         
         Returns:
-            Latest active or recently failed job progress record or None if no job found
+            Job progress record or None if no active job found
         """
         try:
             if not self.client:
                 raise Exception("Supabase client not available")
             
-            from datetime import datetime, timedelta, timezone
-            
-            # First try to get active jobs (pending, parsing, processing)
             result = (
                 self.client.table('csv_upload_progress')
                 .select('*')
-                .not_.in_('status', ['completed', 'failed'])
+                .not_.eq('status', 'completed')
+                .not_.eq('status', 'failed')
                 .order('created_at', desc=True)
                 .limit(1)
                 .execute()
@@ -3126,86 +2062,12 @@ class DatabaseService:
             
             if result.data and len(result.data) > 0:
                 return result.data[0]
-            
-            # If no active job, check for recently failed jobs (within last hour)
-            one_hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-            failed_result = (
-                self.client.table('csv_upload_progress')
-                .select('*')
-                .eq('status', 'failed')
-                .gte('created_at', one_hour_ago)
-                .order('created_at', desc=True)
-                .limit(1)
-                .execute()
-            )
-            
-            if failed_result.data and len(failed_result.data) > 0:
-                return failed_result.data[0]
-            
-            return None
+            else:
+                return None
                 
         except Exception as e:
             logger.error("Failed to get latest active upload job", error=str(e))
             return None
-    
-    async def get_queue_count(self) -> int:
-        """
-        Get count of pending items in DataForSEO queue
-        
-        Returns:
-            Number of pending queue items
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            result = self.client.table('dataforseo_queue').select('id', count='exact').eq('status', 'pending').execute()
-            return result.count if hasattr(result, 'count') else len(result.data) if result.data else 0
-        except Exception as e:
-            logger.error("Failed to get queue count", error=str(e))
-            return 0
-    
-    async def mark_queue_items_completed(self, domains: List[str]) -> int:
-        """
-        Mark queue items as completed after successful processing
-        
-        Args:
-            domains: List of domain names to mark as completed
-            
-        Returns:
-            Number of items marked as completed
-        """
-        try:
-            if not self.client:
-                raise Exception("Supabase client not available")
-            
-            if not domains:
-                return 0
-            
-            update_data = {
-                'status': 'completed',
-                'processed_at': datetime.utcnow().isoformat(),
-                'updated_at': datetime.utcnow().isoformat()
-            }
-            
-            result = (
-                self.client.table('dataforseo_queue')
-                .update(update_data)
-                .in_('domain', domains)
-                .eq('status', 'processing')
-                .execute()
-            )
-            
-            updated_count = len(result.data) if result.data else 0
-            logger.info("Marked queue items as completed", 
-                       domain_count=len(domains),
-                       updated_count=updated_count)
-            return updated_count
-        except Exception as e:
-            logger.error("Failed to mark queue items as completed", 
-                       domains=domains,
-                       error=str(e))
-            return 0
 
 
 # Global database service instance

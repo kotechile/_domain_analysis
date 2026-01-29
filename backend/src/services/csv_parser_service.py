@@ -17,32 +17,41 @@ logger = structlog.get_logger()
 class CSVParserService:
     """Service for parsing CSV files from different auction sites"""
     
-    def parse_csv(self, file_content: str, auction_site: str, filename: str = '') -> List[AuctionInput]:
+    def parse_csv(self, source: Any, auction_site: str, filename: str = '', is_file: bool = False) -> List[AuctionInput]:
         """
         Parse CSV content based on auction site format
         
         Args:
-            file_content: Raw CSV content as string
+            source: Raw CSV content as string OR file path if is_file=True
             auction_site: Source auction site ('namecheap', 'godaddy', 'namesilo', etc.)
             filename: Original filename (used for format detection)
+            is_file: Whether source is a file path
             
         Returns:
             List of AuctionInput objects
         """
+        if is_file:
+            with open(source, 'r', encoding='utf-8', errors='replace') as f:
+                return self._parse_csv_internal(f, auction_site, filename)
+        else:
+            csv_file = io.StringIO(source)
+            return self._parse_csv_internal(csv_file, auction_site, filename)
+
+    def _parse_csv_internal(self, csv_file: Any, auction_site: str, filename: str = '') -> List[AuctionInput]:
         auction_site_lower = auction_site.lower().strip()
         
         if auction_site_lower == 'namecheap':
-            return self.parse_namecheap_csv(file_content, filename)
+            return self.parse_namecheap_csv(csv_file, filename, is_handle=True)
         elif auction_site_lower == 'godaddy':
-            return self.parse_godaddy_csv(file_content)
+            return self.parse_godaddy_csv(csv_file, is_handle=True)
         elif auction_site_lower == 'namesilo':
-            return self.parse_namesilo_csv(file_content)
+            return self.parse_namesilo_csv(csv_file, is_handle=True)
         else:
             # Try generic parser
             logger.warning("Unknown auction site, using generic parser", auction_site=auction_site)
-            return self.parse_generic_csv(file_content, auction_site)
+            return self.parse_generic_csv(csv_file, auction_site, is_handle=True)
     
-    def parse_namecheap_csv(self, content: str, filename: str = '') -> List[AuctionInput]:
+    def parse_namecheap_csv(self, content: Any, filename: str = '', is_handle: bool = False) -> List[AuctionInput]:
         """
         Parse Namecheap CSV format
         
@@ -53,7 +62,7 @@ class CSVParserService:
         auctions = []
         
         try:
-            csv_file = io.StringIO(content)
+            csv_file = content if is_handle else io.StringIO(content)
             reader = csv.DictReader(csv_file)
             
             # Check if this is the Buy Now format (has 'domain' and 'permalink' columns, no 'name' or 'startDate')
@@ -155,7 +164,7 @@ class CSVParserService:
             logger.error("Failed to parse Namecheap CSV", error=str(e), filename=filename)
             raise
     
-    def parse_godaddy_csv(self, content: str) -> List[AuctionInput]:
+    def parse_godaddy_csv(self, content: Any, is_handle: bool = False) -> List[AuctionInput]:
         """
         Parse GoDaddy CSV format
         
@@ -165,7 +174,7 @@ class CSVParserService:
         auctions = []
         
         try:
-            csv_file = io.StringIO(content)
+            csv_file = content if is_handle else io.StringIO(content)
             reader = csv.DictReader(csv_file)
             
             for row_num, row in enumerate(reader, start=2):
@@ -228,7 +237,7 @@ class CSVParserService:
             logger.error("Failed to parse GoDaddy CSV", error=str(e))
             raise
     
-    def parse_namesilo_csv(self, content: str) -> List[AuctionInput]:
+    def parse_namesilo_csv(self, content: Any, is_handle: bool = False) -> List[AuctionInput]:
         """
         Parse NameSilo CSV format
         
@@ -241,7 +250,7 @@ class CSVParserService:
         auctions = []
         
         try:
-            csv_file = io.StringIO(content)
+            csv_file = content if is_handle else io.StringIO(content)
             reader = csv.DictReader(csv_file)
             
             # Log available columns for debugging
@@ -302,7 +311,7 @@ class CSVParserService:
             logger.error("Failed to parse NameSilo CSV", error=str(e))
             raise
     
-    def parse_generic_csv(self, content: str, auction_site: str) -> List[AuctionInput]:
+    def parse_generic_csv(self, content: Any, auction_site: str, is_handle: bool = False) -> List[AuctionInput]:
         """
         Generic CSV parser that tries to detect common column patterns
         
@@ -311,7 +320,7 @@ class CSVParserService:
         auctions = []
         
         try:
-            csv_file = io.StringIO(content)
+            csv_file = content if is_handle else io.StringIO(content)
             reader = csv.DictReader(csv_file)
             
             # Get column names
@@ -446,36 +455,18 @@ class CSVParserService:
             logger.warning("Could not parse price", price_str=price_str, error=str(e))
             return None
     
-    def parse_godaddy_json(self, content: str) -> List[AuctionInput]:
+    def parse_godaddy_json(self, content: Any, is_handle: bool = False) -> List[AuctionInput]:
         """
         Parse GoDaddy JSON format
-        
-        Expected format:
-        {
-          "meta": { ... },
-          "data": [
-            {
-              "domainName": "DOMAIN.COM",
-              "link": "https://...",
-              "auctionType": "Bid",
-              "auctionEndTime": "2025-12-29T16:00:00Z",
-              "price": "$1",
-              "numberOfBids": 0,
-              "domainAge": 1,
-              "pageviews": 0,
-              "valuation": "$29",
-              "monthlyParkingRevenue": "$0",
-              "isAdult": false,
-              "description": "..."
-            }
-          ]
-        }
         """
         auctions = []
         
         try:
             # Parse JSON content
-            data = json.loads(content)
+            if is_handle:
+                data = json.load(content)
+            else:
+                data = json.loads(content)
             
             # Extract data array
             if not isinstance(data, dict) or 'data' not in data:

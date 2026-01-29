@@ -30,3 +30,7 @@ GRANT EXECUTE ON FUNCTION truncate_auctions_table() TO authenticated;
 
 
 
+
+
+
+

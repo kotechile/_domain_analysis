@@ -36,3 +36,7 @@ COMMENT ON FUNCTION delete_expired_auctions() IS 'Deletes all auctions with expi
 
 
 
+
+
+
+

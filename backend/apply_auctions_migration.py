@@ -73,7 +73,12 @@ def apply_migration():
         print("OPTION 2: Via psql (Command Line)")
         print("-" * 70)
         print("Connect to your PostgreSQL database and run the SQL:")
-        print(f"  psql -h sbdomain.aichieve.net -U postgres -d postgres -p 5434")
+        # Extract hostname from SUPABASE_URL
+        from urllib.parse import urlparse
+        parsed_url = urlparse(settings.SUPABASE_URL)
+        hostname = parsed_url.hostname or 'localhost'
+        
+        print(f"  psql -h {hostname} -U postgres -d postgres -p 5434")
         print("  (Then paste the SQL below)\n")
         
         print("=" * 70)
@@ -119,6 +124,10 @@ if __name__ == '__main__':
         print("\n❌ Failed to load migration file.")
         print("   Please check the file exists and try again.\n")
         sys.exit(1)
+
+
+
+
 
 
 

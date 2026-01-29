@@ -9,10 +9,11 @@ from datetime import datetime
 import structlog
 import io
 
-from models.domain_analysis import ReportResponse, DomainAnalysisReport
+from models.domain_analysis import ReportResponse, DomainAnalysisReport, HistoricalData
 from services.database import get_database, DataSource
 from services.external_apis import DataForSEOService
 from services.pdf_service import PDFService
+from services.analysis_service import AnalysisService
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -95,6 +96,26 @@ async def get_page_summary(domain: str):
         raise HTTPException(status_code=500, detail="Failed to get page summary")
 
 
+@router.get("/reports/{domain}/history", response_model=HistoricalData)
+async def get_domain_history(domain: str):
+    """
+    Get historical metrics for a domain (ranking, traffic)
+    """
+    try:
+        service = AnalysisService()
+        history = await service.get_or_fetch_historical_data(domain)
+        
+        if not history:
+             raise HTTPException(status_code=404, detail="Historical data not available")
+             
+        return history
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get domain history", domain=domain, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get domain history")
+
+
 @router.get("/reports", response_model=List[DomainAnalysisReport])
 async def list_reports(
     limit: int = Query(10, ge=1, le=100),
@@ -107,9 +128,10 @@ async def list_reports(
     try:
         db = get_database()
         
-        # Build query - only select necessary fields to improve performance
-        # Note: We still need '*' to get all JSONB fields, but we can optimize later if needed
-        query = db.client.table('reports').select('*')
+        # Build query - only select necessary fields to improve performance (avoid fetching heavy JSONB fields like historical_data)
+        query = db.client.table('reports').select(
+            'id, domain_name, status, analysis_timestamp, processing_time_seconds, error_message, analysis_phase, analysis_mode, data_for_seo_metrics, detailed_data_available, created_at'
+        )
         
         if status:
             query = query.eq('status', status)

@@ -6,7 +6,7 @@ import httpx
 import asyncio
 from typing import Dict, Any, Optional, List
 import structlog
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from utils.config import get_settings
 from models.domain_analysis import DataForSEOMetrics, DataSource, OrganicMetrics, PaidMetrics
@@ -29,6 +29,14 @@ class DataForSEOService:
         """Get DataForSEO credentials from secrets service"""
         if self._credentials is None:
             self._credentials = await self.secrets_service.get_dataforseo_credentials()
+            
+            # Fix API URL if it points to marketing site instead of API
+            if self._credentials and 'api_url' in self._credentials:
+                api_url = self._credentials['api_url']
+                if 'dataforseo.com' in api_url and 'api.dataforseo.com' not in api_url:
+                    logger.warning("Correcting DataForSEO API URL", original=api_url, new="https://api.dataforseo.com/v3")
+                    self._credentials['api_url'] = "https://api.dataforseo.com/v3"
+                    
         return self._credentials
     
     async def health_check(self) -> bool:
@@ -175,6 +183,98 @@ class DataForSEOService:
             logger.error("Failed to get DataForSEO data", domain=domain, error=str(e))
             return None
     
+    async def get_historical_rank_overview(self, domain: str) -> Optional[Dict[str, Any]]:
+        """Get historical rank overview from DataForSEO"""
+        try:
+            credentials = await self._get_credentials()
+            if not credentials:
+                logger.error("DataForSEO credentials not available")
+                return None
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                url = f"{credentials['api_url']}/dataforseo_labs/google/historical_rank_overview/live"
+                
+                # Calculate dates (last 4 years)
+                end_date = datetime.utcnow() - timedelta(days=1)
+                start_date = end_date - timedelta(days=365*4)
+                
+                post_data = [{
+                    "target": domain,
+                    "language_name": "English",
+                    "location_code": 2840,
+                    "date_from": start_date.strftime("%Y-%m-%d"),
+                    "date_to": end_date.strftime("%Y-%m-%d")
+                }]
+                
+                logger.info("Making DataForSEO historical rank overview request", url=url, domain=domain)
+                response = await client.post(
+                    url,
+                    auth=(credentials['login'], credentials['password']),
+                    json=post_data
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status_code") == 20000 and data.get("tasks"):
+                        result = data["tasks"][0].get("result", [])
+                        if result and result[0].get("items"):
+                            logger.info("DataForSEO historical rank overview retrieved successfully", domain=domain)
+                            return result[0]
+                
+                logger.warning("DataForSEO historical rank overview request failed", 
+                             domain=domain, status=response.status_code)
+                return None
+                
+        except Exception as e:
+            logger.error("Failed to get DataForSEO historical rank overview", domain=domain, error=str(e))
+            return None
+
+    async def get_traffic_analytics_history(self, domain: str) -> Optional[Dict[str, Any]]:
+        """Get traffic analytics history from DataForSEO"""
+        try:
+            credentials = await self._get_credentials()
+            if not credentials:
+                logger.error("DataForSEO credentials not available")
+                return None
+            
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                url = f"{credentials['api_url']}/traffic_analytics/history/live"
+                
+                # Calculate dates (last 2 years approx for traffic analytics often differs in availability but usage is similar)
+                end_date = datetime.utcnow()
+                start_date = end_date - timedelta(days=365*2)
+                
+                post_data = [{
+                    "target": domain,
+                    "language_name": "English",
+                    "location_code": 2840,
+                    "date_from": start_date.strftime("%Y-%m-%d"),
+                    "date_to": end_date.strftime("%Y-%m-%d")
+                }]
+                
+                logger.info("Making DataForSEO traffic analytics history request", url=url, domain=domain)
+                response = await client.post(
+                    url,
+                    auth=(credentials['login'], credentials['password']),
+                    json=post_data
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status_code") == 20000 and data.get("tasks"):
+                        result = data["tasks"][0].get("result", [])
+                        if result and result[0].get("items"):
+                            logger.info("DataForSEO traffic analytics history retrieved successfully", domain=domain)
+                            return result[0]
+                
+                logger.warning("DataForSEO traffic analytics history request failed", 
+                             domain=domain, status=response.status_code)
+                return None
+                
+        except Exception as e:
+            logger.error("Failed to get DataForSEO traffic analytics history", domain=domain, error=str(e))
+            return None
+
     def parse_domain_metrics(self, data: Dict[str, Any]) -> DataForSEOMetrics:
         """Parse DataForSEO data into domain metrics"""
         try:
@@ -617,10 +717,8 @@ class WaybackMachineService:
                 logger.info("Using cached Wayback Machine data", domain=domain)
                 return cached_data
             
-            # Format domain for Wayback Machine API (add http:// if not present)
-            wayback_url = domain
-            if not wayback_url.startswith(('http://', 'https://')):
-                wayback_url = f"http://{domain}"
+            # Format domain for Wayback Machine API (remove protocol for domain match)
+            wayback_url = domain.replace("https://", "").replace("http://", "").replace("www.", "")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(
@@ -628,8 +726,9 @@ class WaybackMachineService:
                     params={
                         "url": wayback_url,
                         "output": "json",
-                        "limit": 1000,  # Reduced limit for faster response - covers ~3 years with daily collapse
-                        "collapse": "timestamp:8"  # Group by day
+                        "limit": 1000,
+                        "collapse": "timestamp:8",  # Group by day
+                        "matchType": "domain"
                     }
                 )
                 

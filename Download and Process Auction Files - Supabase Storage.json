@@ -15,11 +15,32 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        5440,
-        1456
+        5552,
+        1520
       ],
-      "id": "ba33d792-ea34-4733-8d8b-9ec3acaa795d",
+      "id": "0b6f3979-e37b-47be-b697-672a05ad0385",
       "name": "Daily Schedule (6 AM)"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT delete_expired_auctions() as deleted_count;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        5728,
+        1536
+      ],
+      "id": "95d58d03-a378-43df-b7a3-d294c4bfc4f3",
+      "name": "Delete Expired Auctions",
+      "credentials": {
+        "postgres": {
+          "id": "DxQODs2W8TambApf",
+          "name": "Postgres account"
+        }
+      }
     },
     {
       "parameters": {
@@ -35,10 +56,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        5680,
-        1152
+        5904,
+        1232
       ],
-      "id": "3788b2cb-af7d-4a7d-9880-545a60ffcf0f",
+      "id": "699b10e5-c2a2-405e-b812-3de439ba71ba",
       "name": "Download GoDaddy Tomorrow"
     },
     {
@@ -55,10 +76,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        5680,
-        1360
+        5904,
+        1440
       ],
-      "id": "89f2b138-0be4-4a1b-a09b-c9a07244dbdf",
+      "id": "15dd01e4-50e3-42be-a214-8500e58ebffa",
       "name": "Download GoDaddy Today"
     },
     {
@@ -75,10 +96,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        5680,
-        1552
+        5904,
+        1632
       ],
-      "id": "6edef303-3b2f-4c7d-8b5d-ea73f7db9069",
+      "id": "86289437-5aa4-4ab5-8b56-23b9da83fab1",
       "name": "Download Namecheap Auctions"
     },
     {
@@ -95,10 +116,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        5680,
-        1760
+        5904,
+        1840
       ],
-      "id": "183e253e-883a-4051-a44f-4201ec4af4d1",
+      "id": "cd2e3b92-3512-491b-8ad7-5ccfbd7ad03d",
       "name": "Download Namecheap Buy Now"
     },
     {
@@ -106,10 +127,10 @@
       "type": "n8n-nodes-base.compression",
       "typeVersion": 1.1,
       "position": [
-        5904,
-        1152
+        6128,
+        1232
       ],
-      "id": "d188d25f-35d7-45e6-be94-41f8a24f2cae",
+      "id": "e207a345-fa35-49e8-a39c-82104257fee3",
       "name": "Decompress Tomorrow"
     },
     {
@@ -117,10 +138,10 @@
       "type": "n8n-nodes-base.compression",
       "typeVersion": 1.1,
       "position": [
-        5904,
-        1360
+        6128,
+        1440
       ],
-      "id": "d7a2029e-685a-4208-9762-1d073dfd448f",
+      "id": "9f929269-1b68-4a2d-b534-e7974cb50af3",
       "name": "Decompress Today"
     },
     {
@@ -130,10 +151,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6128,
-        1152
+        6352,
+        1232
       ],
-      "id": "313dbc8e-a5d9-4fea-b892-0aa0a5ae2eee",
+      "id": "c5ef38c2-2f5c-4189-9e94-0d63937e7d37",
       "name": "Prepare GoDaddy Tomorrow"
     },
     {
@@ -143,10 +164,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6128,
-        1360
+        6352,
+        1440
       ],
-      "id": "058cee5a-e6cc-4090-9aa1-bd4eccf0a0a8",
+      "id": "bf5537e0-678a-4c29-aebe-cfdefc2cced8",
       "name": "Prepare GoDaddy Today"
     },
     {
@@ -156,10 +177,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6128,
-        1552
+        6352,
+        1632
       ],
-      "id": "1ef7de2a-c056-41f7-a78a-fe9ff618be5c",
+      "id": "85124f76-6d7d-4c78-8767-a155507ba778",
       "name": "Prepare Namecheap Auctions"
     },
     {
@@ -169,10 +190,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6128,
-        1760
+        6352,
+        1840
       ],
-      "id": "0fdd5ad8-d901-474f-b619-1431da99c28b",
+      "id": "c1402f57-91cf-413a-8f11-30fe95975143",
       "name": "Prepare Namecheap Buy Now"
     },
     {
@@ -202,10 +223,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        6368,
-        1152
+        6592,
+        1232
       ],
-      "id": "462145d6-f2bc-4d40-94e8-2e11fc448b40",
+      "id": "fe95d6da-6f08-4eac-af4f-47e2cf4fd059",
       "name": "Upload GoDaddy Tomorrow to Storage",
       "credentials": {
         "supabaseApi": {
@@ -241,10 +262,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        6368,
-        1360
+        6592,
+        1440
       ],
-      "id": "4fe78c5c-10c0-44f5-8419-4ce77e07e60e",
+      "id": "7fbb5f05-fdaf-4ef5-86a3-c1b66526f682",
       "name": "Upload GoDaddy Today to Storage",
       "credentials": {
         "supabaseApi": {
@@ -264,7 +285,7 @@
           "parameters": [
             {
               "name": "Content-Type",
-              "value": "={{ $binary.file_0.mimeType || 'text/csv' }}"
+              "value": "={{ $binary.data.mimeType || 'text/csv' }}"
             },
             {
               "name": "x-upsert",
@@ -274,16 +295,16 @@
         },
         "sendBody": true,
         "contentType": "binaryData",
-        "inputDataFieldName": "file_0",
+        "inputDataFieldName": "data",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        6368,
-        1552
+        6592,
+        1632
       ],
-      "id": "18f8fb0f-b83f-4ec2-9e2c-1f8600620b2f",
+      "id": "195e966b-0946-44e5-a8cc-b410e46bd263",
       "name": "Upload Namecheap Auctions to Storage",
       "credentials": {
         "supabaseApi": {
@@ -303,7 +324,7 @@
           "parameters": [
             {
               "name": "Content-Type",
-              "value": "={{ $binary.file_0.mimeType || 'text/csv' }}"
+              "value": "={{ $binary.data.mimeType || 'text/csv' }}"
             },
             {
               "name": "x-upsert",
@@ -313,16 +334,16 @@
         },
         "sendBody": true,
         "contentType": "binaryData",
-        "inputDataFieldName": "file_0",
+        "inputDataFieldName": "data",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        6368,
-        1760
+        6592,
+        1840
       ],
-      "id": "2b705959-d5ea-4c55-92c1-2fadf6d5eaa9",
+      "id": "6002f81b-0fea-4a21-b5db-f34b9046876c",
       "name": "Upload Namecheap Buy Now to Storage",
       "credentials": {
         "supabaseApi": {
@@ -352,10 +373,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        6608,
-        1152
+        6832,
+        1232
       ],
-      "id": "3ecea91b-9b0d-45b3-b9f0-38787ab035b2",
+      "id": "de15aa08-d164-43bb-9d81-d88f5bf5b2f0",
       "name": "Trigger Backend Processing Tomorrow"
     },
     {
@@ -365,10 +386,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6496,
-        1152
+        6720,
+        1232
       ],
-      "id": "ecabf10c-f543-4496-941f-bdd787570983",
+      "id": "85205d44-656f-4745-ac13-327e741c723b",
       "name": "Restore Tomorrow Metadata"
     },
     {
@@ -392,10 +413,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        6608,
-        1360
+        6832,
+        1440
       ],
-      "id": "12299a6f-e9da-4e8e-865b-6ee1a37a5bd0",
+      "id": "1dd61a24-186f-42fe-b1b1-cc96a3e4d44e",
       "name": "Trigger Backend Processing Today"
     },
     {
@@ -405,10 +426,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6496,
-        1360
+        6720,
+        1440
       ],
-      "id": "ef71e0a1-a89a-4568-b12c-2b31d5b3ef67",
+      "id": "6d2e6805-805f-42cd-a253-d14d20ba943c",
       "name": "Restore Today Metadata"
     },
     {
@@ -432,10 +453,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        6608,
-        1552
+        6832,
+        1632
       ],
-      "id": "c6da989d-88ad-4ee3-877c-0d48506c4302",
+      "id": "9ac4f20d-ad6c-4f8d-87cd-892311fab7b6",
       "name": "Trigger Backend Processing Auctions"
     },
     {
@@ -445,10 +466,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6496,
-        1552
+        6720,
+        1632
       ],
-      "id": "2c31bbd9-8a10-4ab1-af1a-7690aa88c61b",
+      "id": "74d009e0-8643-4f96-8dbb-3f173f9295e9",
       "name": "Restore Auctions Metadata"
     },
     {
@@ -472,10 +493,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        6608,
-        1760
+        6832,
+        1840
       ],
-      "id": "2791f8b5-9281-429c-9b14-a8cc38985e48",
+      "id": "44b70e83-0adc-4700-9b7f-2e6930219a87",
       "name": "Trigger Backend Processing Buy Now"
     },
     {
@@ -485,10 +506,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6496,
-        1760
+        6720,
+        1840
       ],
-      "id": "0652d656-9068-48d1-a240-0a6a59a88563",
+      "id": "dde33789-ce7b-4de2-8bbf-a12d58883171",
       "name": "Restore Buy Now Metadata"
     },
     {
@@ -498,16 +519,139 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        6848,
-        1456
+        7072,
+        1536
       ],
-      "id": "01ebddc3-ac97-4cfb-a6ff-8e55e2abfb75",
+      "id": "c84a474f-ce59-4f23-b627-4e5e55171f51",
       "name": "Aggregate Results"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://overmild-untenuously-penney.ngrok-free.dev/api/v1/auctions/process-from-storage",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "ngrok-skip-browser-warning",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"bucket\": \"{{ $json.bucket }}\",\n  \"path\": \"{{ $json.path }}\",\n  \"auction_site\": \"{{ $json.auction_site }}\",\n  \"offering_type\": \"{{ $json.offering_type }}\",\n  \"filename\": \"{{ $json.filename }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6832,
+        2080
+      ],
+      "id": "4dc83357-edd2-4e3c-9d56-ee46a3afbd0d",
+      "name": "Trigger Backend Processing NameSilo"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Restore metadata after upload for NameSilo\nconst input = $input.first();\nreturn [{\n  json: {\n    bucket: 'listingfiles',\n    path: 'namesilo_export.csv',\n    filename: 'namesilo_export.csv',\n    auction_site: 'namesilo',\n    offering_type: 'auction',\n    source: 'namesilo_export',\n    upload_success: input.json ? true : false\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6720,
+        2080
+      ],
+      "id": "4553efaa-3b19-44a4-8a96-451002f6e231",
+      "name": "Restore NameSilo Metadata"
+    },
+    {
+      "parameters": {
+        "url": "https://www.namesilo.com/auctions/api/search?keyword=&keywordLocation=anywhere&type=all&domainAge=any&reserve=any&digits=any&addedOn=all&format=csv",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        5904,
+        2080
+      ],
+      "id": "46df5104-77e5-4a12-b641-53a6a8e7f0ef",
+      "name": "Download NameSilo"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare metadata for Supabase upload\n// Using fixed filenames to overwrite old files\nconst input = $input.first();\n\nreturn [{\n  json: {\n    source: 'namesilo_export',\n    filename: 'namesilo_export.csv',\n    auction_site: 'namesilo',\n    offering_type: 'auction',\n    bucket: 'listingfiles',\n    path: 'namesilo_export.csv'\n  },\n  binary: input.binary\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6352,
+        2080
+      ],
+      "id": "1aaf4c5b-4d00-41f6-97cb-034518f5b188",
+      "name": "Prepare NameSilo"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://sbdomain.aichieve.net/storage/v1/object/{{ $json.bucket }}/{{ $json.path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "={{ $binary.data.mimeType || 'text/csv' }}"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        6592,
+        2080
+      ],
+      "id": "c42007fc-b236-49b4-9fb0-e8fa3012a478",
+      "name": "Upload NameSilo",
+      "credentials": {
+        "supabaseApi": {
+          "id": "1ePgHuyBQzWnTd4s",
+          "name": "Supabase account"
+        }
+      }
     }
   ],
   "pinData": {},
   "connections": {
     "Daily Schedule (6 AM)": {
+      "main": [
+        [
+          {
+            "node": "Delete Expired Auctions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Expired Auctions": {
       "main": [
         [
           {
@@ -527,6 +671,11 @@
           },
           {
             "node": "Download Namecheap Buy Now",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Download NameSilo",
             "type": "main",
             "index": 0
           }
@@ -774,14 +923,59 @@
           }
         ]
       ]
+    },
+    "Restore NameSilo Metadata": {
+      "main": [
+        [
+          {
+            "node": "Trigger Backend Processing NameSilo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download NameSilo": {
+      "main": [
+        [
+          {
+            "node": "Prepare NameSilo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare NameSilo": {
+      "main": [
+        [
+          {
+            "node": "Upload NameSilo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload NameSilo": {
+      "main": [
+        [
+          {
+            "node": "Restore NameSilo Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "b670001d-33bb-4ec8-902c-ccc4ff90b5ef",
+  "versionId": "6c84228c-9916-4b45-8cae-d65b7ab50fb3",
   "meta": {
+    "templateCredsSetupCompleted": true,
     "instanceId": "8ed9ed81fad64d2f2e539654b7152113b5201cf79b5e9548649591c372302289"
   },
   "id": "hM8ssCvxLrMb1tsa",

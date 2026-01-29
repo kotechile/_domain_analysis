@@ -56,6 +56,7 @@ async def analyze_domain(
             else:
                 # Update existing report to pending
                 existing_report.status = AnalysisStatus.PENDING
+                existing_report.analysis_timestamp = datetime.utcnow()
                 existing_report.error_message = None
                 existing_report.processing_time_seconds = None
                 report_id = await db.save_report(existing_report)
@@ -181,6 +182,7 @@ async def retry_analysis(
         
         # Reset report for retry
         report.status = AnalysisStatus.PENDING
+        report.analysis_timestamp = datetime.utcnow()
         report.error_message = None
         report.processing_time_seconds = None
         

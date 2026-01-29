@@ -40,3 +40,7 @@ COMMENT ON COLUMN auctions.first_seen IS 'First seen date from DataForSEO page_s
 
 
 
+
+
+
+

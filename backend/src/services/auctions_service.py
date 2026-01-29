@@ -20,47 +20,53 @@ class AuctionsService:
         self.db = get_database()
         self.csv_parser = CSVParserService()
     
-    def load_auctions_from_csv(self, file_content: str, auction_site: str, filename: str = '') -> List[AuctionInput]:
+    def load_auctions_from_csv(self, file_content: Any, auction_site: str, filename: str = '', is_file: bool = False) -> List[AuctionInput]:
         """
         Parse CSV file and return list of AuctionInput objects
         
         Args:
-            file_content: Raw CSV content as string
+            file_content: Raw CSV content as string OR file path if is_file=True
             auction_site: Source auction site ('namecheap', 'godaddy', 'namesilo', etc.)
             filename: Original filename (used for format detection)
+            is_file: Whether file_content is a file path
             
         Returns:
             List of AuctionInput objects
         """
-        logger.info("Loading auctions from CSV", auction_site=auction_site, filename=filename, file_size=len(file_content))
+        logger.info("Loading auctions from CSV", auction_site=auction_site, filename=filename, is_file=is_file)
         
         try:
-            auctions = self.csv_parser.parse_csv(file_content, auction_site, filename)
+            auctions = self.csv_parser.parse_csv(file_content, auction_site, filename, is_file=is_file)
             logger.info("Parsed CSV", auction_site=auction_site, filename=filename, count=len(auctions))
             return auctions
         except Exception as e:
             logger.error("Failed to parse CSV", auction_site=auction_site, filename=filename, error=str(e))
             raise
     
-    def load_auctions_from_json(self, file_content: str, auction_site: str, filename: str = '') -> List[AuctionInput]:
+    def load_auctions_from_json(self, file_content: Any, auction_site: str, filename: str = '', is_file: bool = False) -> List[AuctionInput]:
         """
         Parse JSON file and return list of AuctionInput objects
         
         Args:
-            file_content: Raw JSON content as string
+            file_content: Raw JSON content as string OR file path if is_file=True
             auction_site: Source auction site ('godaddy', etc.)
             filename: Original filename (used for format detection)
+            is_file: Whether file_content is a file path
             
         Returns:
             List of AuctionInput objects
         """
-        logger.info("Loading auctions from JSON", auction_site=auction_site, filename=filename, file_size=len(file_content))
+        logger.info("Loading auctions from JSON", auction_site=auction_site, filename=filename, is_file=is_file)
         
         try:
             auction_site_lower = auction_site.lower().strip()
             
             if auction_site_lower == 'godaddy':
-                auctions = self.csv_parser.parse_godaddy_json(file_content)
+                if is_file:
+                    with open(file_content, 'r', encoding='utf-8', errors='replace') as f:
+                        auctions = self.csv_parser.parse_godaddy_json(f, is_handle=True)
+                else:
+                    auctions = self.csv_parser.parse_godaddy_json(file_content)
             else:
                 raise ValueError(f"JSON parsing not supported for auction site: {auction_site}")
             

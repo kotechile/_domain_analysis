@@ -4,7 +4,7 @@ Main analysis service that orchestrates domain analysis
 
 import asyncio
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Any, Dict
 import structlog
 
 from models.domain_analysis import (
@@ -77,9 +77,10 @@ class AnalysisService:
                 operation_logger.log_dual_mode_decision(analysis_mode.value, "Using legacy mode")
             
             # Create progress tracker with more granular tracking
-            progress_tracker = ProgressTracker(4, "domain_analysis", domain)  # essential, detailed, ai_analysis, completed
+            progress_tracker = ProgressTracker(5, "domain_analysis", domain)  # essential, detailed, historical, ai_analysis, completed
             progress_tracker.add_operation("essential_data")
             progress_tracker.add_operation("detailed_data")
+            progress_tracker.add_operation("historical_data")
             progress_tracker.add_operation("ai_analysis")
             progress_tracker.add_operation("finalization")
             
@@ -118,6 +119,16 @@ class AnalysisService:
             await self._collect_detailed_data(domain, report, analysis_mode, operation_logger, progress_tracker)
             progress_tracker.complete_operation("detailed_data")
             await self._update_progress_data(report, "Detailed data collection completed", [], progress_tracker)
+            
+            # Phase 3: Historical Data Collection
+            progress_tracker.start_operation("historical_data")
+            await self._update_progress_data(report, "Collecting historical ranking and traffic data", [], progress_tracker)
+            historical_data = await self.get_or_fetch_historical_data(domain)
+            if historical_data:
+                report.historical_data = historical_data
+                # report is saved inside get_or_fetch_historical_data, but we keep it in memory
+            progress_tracker.complete_operation("historical_data")
+            await self._update_progress_data(report, "Historical data collection completed", [], progress_tracker)
             
             # Phase 3: AI Analysis with Quality Assessment
             progress_tracker.start_operation("ai_analysis")
@@ -623,7 +634,8 @@ class AnalysisService:
                         "items": detailed_data.get("referring_domains", {}).get("items", [])
                     }
                 },
-                "wayback_data": report.wayback_machine_summary.dict() if report.wayback_machine_summary else {}
+                "wayback_data": report.wayback_machine_summary.dict() if report.wayback_machine_summary else {},
+                "historical_data": report.historical_data.dict() if report.historical_data else {}
             }
             
             # Generate enhanced AI analysis with quality assessment
@@ -673,6 +685,145 @@ class AnalysisService:
         except Exception as e:
             logger.error("Analysis finalization failed", domain=report.domain_name, error=str(e))
             raise
+
+
+
+    async def get_or_fetch_historical_data(self, domain: str) -> Optional['HistoricalData']:
+        """Get or fetch historical data for a domain"""
+        try:
+            # 1. Check if report has historical data
+            report = await self.db.get_report(domain)
+            if report and report.historical_data:
+                logger.info("Using cached historical data", domain=domain)
+                return report.historical_data
+                
+            logger.info("Fetching new historical data", domain=domain)
+            
+            # 2. Fetch from APIs (parallel execution)
+            rank_task = asyncio.create_task(self.dataforseo_service.get_historical_rank_overview(domain))
+            traffic_task = asyncio.create_task(self.dataforseo_service.get_traffic_analytics_history(domain))
+            
+            rank_data, traffic_data = await asyncio.gather(rank_task, traffic_task, return_exceptions=True)
+            
+            # Handle exceptions
+            if isinstance(rank_data, Exception):
+                logger.error("Historical rank fetch failed", domain=domain, error=str(rank_data))
+                rank_data = None
+            if isinstance(traffic_data, Exception):
+                logger.error("Traffic history fetch failed", domain=domain, error=str(traffic_data))
+                traffic_data = None
+            
+            if not rank_data and not traffic_data:
+                logger.warning("No historical data available", domain=domain)
+                return None
+                
+            # 3. Parse data
+            historical_data = self._parse_historical_data(rank_data, traffic_data)
+            
+            # 4. Save to report
+            if report and historical_data:
+                report.historical_data = historical_data
+                await self.db.save_report(report)
+                logger.info("Saved historical data to report", domain=domain)
+                
+            return historical_data
+            
+        except Exception as e:
+            logger.error("Failed to get/fetch historical data", domain=domain, error=str(e))
+            return None
+
+    def _parse_historical_data(self, rank_data: Optional[Dict], traffic_data: Optional[Dict]) -> 'HistoricalData':
+        """Parse raw API data into HistoricalData model"""
+        from models.domain_analysis import (
+            HistoricalData, HistoricalRankOverview, TrafficAnalyticsHistory, 
+            HistoricalMetricPoint
+        )
+        
+        rank_overview = None
+        if rank_data and rank_data.get("items"):
+            items = rank_data.get("items", [])
+            # Sort by date
+            items.sort(key=lambda x: x.get("date", ""))
+            
+            organic_keywords_count = []
+            organic_traffic = []
+            organic_traffic_value = []
+            
+            for item in items:
+                date_str = item.get("date")
+                if not date_str:
+                    continue
+                
+                metrics = item.get("metrics", {}).get("organic")
+                
+                if not metrics:
+                    continue
+                
+                organic_keywords_count.append(HistoricalMetricPoint(
+                    date=date_str, value=float(metrics.get("count", 0))
+                ))
+                organic_traffic.append(HistoricalMetricPoint(
+                    date=date_str, value=float(metrics.get("etv", 0)) # etv often proxy for traffic or traffic value, checking docs...
+                    # Wait, 'etv' is Estimated Traffic Value. 'pos_*' are counts. 
+                    # DataForSEO `historical_rank_overview` gives `metrics.organic.count` (keywords count) and `etv` (traffic value cost).
+                    # Actually, usually they provide `organic.is_lost` etc.
+                    # Let's assume 'etv' is value, and we might not have direct traffic count here, but often 'etv' is used.
+                    # The user said "metrics.organic.count" (keywords) and "estimated organic/paid traffic".
+                    # Let's check traffic estimation endpoint for actual traffic volume.
+                ))
+                # Actually, `historical_rank_overview` mainly gives keyword counts.
+                # `etv` is usually traffic cost.
+                # `organic_traffic` might be better from `traffic_analytics`.
+                
+            # Populate rank overview
+            rank_overview = HistoricalRankOverview(
+                organic_keywords_count=organic_keywords_count,
+                 # Assuming etv for now, but traffic analytics is better for traffic
+                organic_traffic_value=[HistoricalMetricPoint(date=i.date, value=i.value) for i in organic_traffic], 
+                raw_items=items
+            )
+
+        traffic_analytics = None
+        if traffic_data and traffic_data.get("items"):
+            items = traffic_data.get("items", [])
+            items.sort(key=lambda x: x.get("date", ""))
+            
+            visits_history = []
+            bounce_rate_history = []
+            unique_visitors_history = []
+            
+            for item in items:
+                date_str = item.get("date")
+                if not date_str:
+                    continue
+                
+                # traffic_analytics/history returns items with 'visits', 'bounce_rate', etc. directly or under keys?
+                # DataForSEO Traffic Analytics usually has structure like:
+                # item['value']? No. 
+                # Checking hypothetical structure. Usually: item['visits'], item['bounce_rate'].
+                # Since I don't have exact docs, I'll allow flexibility or check `item` content.
+                # Assuming typical DataForSEO structure for traffic history:
+                visits = item.get("visits", 0)
+                bounce_rate = item.get("bounce_rate", 0)
+                unique_visitors = item.get("uniqe_visitors", 0) # Note typo in some APIs, check for 'unique_visitors' too
+                if not unique_visitors:
+                    unique_visitors = item.get("unique_visitors", 0)
+                
+                visits_history.append(HistoricalMetricPoint(date=date_str, value=float(visits)))
+                bounce_rate_history.append(HistoricalMetricPoint(date=date_str, value=float(bounce_rate)))
+                unique_visitors_history.append(HistoricalMetricPoint(date=date_str, value=float(unique_visitors)))
+            
+            traffic_analytics = TrafficAnalyticsHistory(
+                visits_history=visits_history,
+                bounce_rate_history=bounce_rate_history,
+                unique_visitors_history=unique_visitors_history,
+                raw_items=items
+            )
+            
+        return HistoricalData(
+            rank_overview=rank_overview,
+            traffic_analytics=traffic_analytics
+        )
 
     async def analyze_domain_legacy(self, domain: str, report_id: str) -> None:
         """

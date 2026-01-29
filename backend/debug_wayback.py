@@ -1,47 +1,54 @@
-#!/usr/bin/env python3
-"""
-Debug Wayback Machine API calls
-"""
 
 import asyncio
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+import httpx
+import json
 
-from services.database import init_database, get_database, DataSource
-from services.external_apis import WaybackMachineService
-
-async def debug_wayback():
-    """Debug Wayback Machine API calls"""
-    await init_database()
-    
-    print("Testing Wayback Machine API calls...")
-    
-    # Test credentials
-    from services.secrets_service import get_secrets_service
-    secrets = get_secrets_service()
-    wayback_config = await secrets.get_wayback_machine_config()
-    
-    print(f"✅ Wayback Machine config: {wayback_config}")
-    
-    # Test API call
-    wayback_service = WaybackMachineService()
-    
-    print("\nTesting get_domain_history...")
+async def check_wayback(url_pattern, match_type=None):
+    base_url = "http://web.archive.org/cdx/search/cdx"
+    params = {
+        "url": url_pattern,
+        "output": "json",
+        "limit": 5,
+        "collapse": "timestamp:8"
+    }
+    if match_type:
+        params["matchType"] = match_type
+        
+    print(f"Checking URL: {url_pattern} | MatchType: {match_type}...")
     try:
-        data = await wayback_service.get_domain_history('dataforseo.com')
-        if data:
-            print("✅ Wayback Machine API call successful")
-            print(f"Keys in response: {list(data.keys())}")
-            print(f"Total captures: {data.get('total_captures')}")
-            print(f"First capture year: {data.get('first_capture_year')}")
-            print(f"Last capture date: {data.get('last_capture_date')}")
-        else:
-            print("❌ Wayback Machine API call returned None")
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(base_url, params=params)
+            print(f"Status: {response.status_code}")
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    print(f"Rows returned: {len(data)}")
+                    if len(data) > 0:
+                        print(f"Header: {data[0]}")
+                    if len(data) > 1:
+                        print(f"Sample: {data[1]}")
+                except:
+                    print(f"Failed to parse JSON. Content: {response.text[:100]}...")
+            else:
+                print(f"Error content: {response.text[:100]}...")
     except Exception as e:
-        print(f"❌ Wayback Machine API call failed: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Exception: {e}")
+    print("-" * 50)
+
+async def main():
+    domain = "giniloh.com"
+    
+    # Test 1: Current logic (http://domain)
+    await check_wayback(f"http://{domain}")
+    
+    # Test 2: Current logic (https://domain)
+    await check_wayback(f"https://{domain}")
+    
+    # Test 3: Domain match
+    await check_wayback(domain, match_type="domain")
+    
+    # Test 4: Wildcard *.domain
+    await check_wayback(f"*.{domain}")
 
 if __name__ == "__main__":
-    asyncio.run(debug_wayback())
+    asyncio.run(main())

@@ -254,3 +254,7 @@ CREATE INDEX IF NOT EXISTS idx_auctions_source_data_registered ON auctions USING
 
 
 
+
+
+
+
