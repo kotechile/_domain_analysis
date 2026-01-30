@@ -19,6 +19,9 @@ RUN apt-get update \
     libffi-dev \
     libxml2-dev \
     libxslt-dev \
+    libssl-dev \
+    zlib1g-dev \
+    libjpeg-dev \
     libcairo2 \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
