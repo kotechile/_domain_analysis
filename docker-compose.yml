@@ -47,6 +47,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=/api/v1
     container_name: domain-analysis-frontend
     expose:
       - "80"

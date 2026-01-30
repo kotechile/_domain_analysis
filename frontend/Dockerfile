@@ -1,5 +1,11 @@
+# Build arguments
+ARG REACT_APP_API_URL=/api/v1
+
 # Multi-stage build for React app
 FROM node:18-alpine as build
+
+# Pass build arg to environment
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
 
 # Set working directory
 WORKDIR /app
