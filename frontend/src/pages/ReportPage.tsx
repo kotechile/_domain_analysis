@@ -197,7 +197,7 @@ const ReportPage: React.FC = () => {
   };
 
   const handleExportPDF = () => {
-    const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000/api/v1';
+    const baseUrl = process.env.REACT_APP_API_URL || '/api/v1';
     const pdfUrl = `${baseUrl}/reports/${domain}/pdf`;
     const link = document.createElement('a');
     link.href = pdfUrl;
