@@ -232,13 +232,13 @@ class SecretsService:
             return False
     
     
-    # Global secrets service instance
-    _secrets_service: Optional[SecretsService] = None
-    
-    
-    def get_secrets_service() -> SecretsService:
-        """Get secrets service instance (singleton pattern)"""
-        global _secrets_service
-        if _secrets_service is None:
-            _secrets_service = SecretsService()
-        return _secrets_service
+# Global secrets service instance
+_secrets_service: Optional[SecretsService] = None
+
+
+def get_secrets_service() -> SecretsService:
+    """Get secrets service instance (singleton pattern)"""
+    global _secrets_service
+    if _secrets_service is None:
+        _secrets_service = SecretsService()
+    return _secrets_service
