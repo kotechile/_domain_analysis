@@ -16,9 +16,10 @@ COPY . .
 
 # Disable CI=true to prevent warnings from failing the build
 ENV CI=false
+ENV GENERATE_SOURCEMAP=false
 
 # Build the application
-RUN npm run build
+RUN CI=false npm run build
 
 # Production stage with nginx
 FROM nginx:alpine
