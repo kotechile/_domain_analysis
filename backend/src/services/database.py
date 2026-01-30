@@ -44,19 +44,34 @@ class DatabaseService:
                 # Create client options with custom httpx client
                 client_options = SyncClientOptions(httpx_client=custom_client)
                 # Use service role key for admin operations
+                key = self.settings.SUPABASE_SERVICE_ROLE_KEY
+                if not key:
+                    logger.warning("SUPABASE_SERVICE_ROLE_KEY not found, falling back to SUPABASE_KEY. RLS policies may fail!")
+                    key = self.settings.SUPABASE_KEY
+                else:
+                    logger.info("Initializing Supabase client with SERVICE_ROLE_KEY")
+
                 self.client = create_client(
                     self.settings.SUPABASE_URL,
-                    self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY,
+                    key,
                     options=client_options
                 )
             else:
                 # Create client with increased timeout
                 custom_client = httpx.Client(timeout=timeout)
                 client_options = SyncClientOptions(httpx_client=custom_client)
+                
                 # Use service role key for admin operations
+                key = self.settings.SUPABASE_SERVICE_ROLE_KEY
+                if not key:
+                    logger.warning("SUPABASE_SERVICE_ROLE_KEY not found, falling back to SUPABASE_KEY. RLS policies may fail!")
+                    key = self.settings.SUPABASE_KEY
+                else:
+                    logger.info("Initializing Supabase client with SERVICE_ROLE_KEY")
+
                 self.client = create_client(
                     self.settings.SUPABASE_URL,
-                    self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY,
+                    key,
                     options=client_options
                 )
             logger.info("Supabase client initialized successfully")
