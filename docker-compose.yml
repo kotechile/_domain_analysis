@@ -31,7 +31,7 @@ services:
       - DATAFORSEO_PASSWORD=${DATAFORSEO_PASSWORD}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
-      - ALLOWED_ORIGINS=["http://localhost:3000", "http://frontend:3000", "https://${COOLIFY_FQDN}"]
+      - ALLOWED_ORIGINS=["http://localhost:3000", "http://frontend:3000", "https://${COOLIFY_FQDN}", "https://n8n.giniloh.com"]
     depends_on:
       redis:
         condition: service_healthy
