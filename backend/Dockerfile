@@ -10,18 +10,24 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
 # Install system dependencies
-# Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+RUN apt-get update --fix-missing && apt-get install -y --no-install-recommends \
     build-essential \
-    curl \
+    pkg-config \
+    python3-dev \
+    python3-pip \
+    python3-setuptools \
+    python3-wheel \
+    python3-cffi \
+    libffi-dev \
+    libxml2-dev \
+    libxslt-dev \
     libcairo2 \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
     libpangoft2-1.0-0 \
     libgdk-pixbuf2.0-0 \
-    libffi-dev \
     shared-mime-info \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 
