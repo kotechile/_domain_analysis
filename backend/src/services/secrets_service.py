@@ -40,7 +40,7 @@ class SecretsService:
                 return self._cache[service_name]
             
             # Query Supabase for the secret
-            result = self.db.client.table('secrets').select('credentials').eq('service_name', service_name).eq('is_active', True).execute()
+            result = self.db.client.table('secrets').select('credentials').eq('service_name', service_name).execute()
             
             if not result.data:
                 logger.warning("Secret not found in database", service=service_name)
