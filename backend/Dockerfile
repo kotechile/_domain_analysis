@@ -1,5 +1,6 @@
 # Use Python 3.10 slim image
-FROM python:3.10-slim
+# Use Python 3.10 slim bookworm for stability
+FROM python:3.10-slim-bookworm
 
 # Set working directory
 WORKDIR /app
@@ -8,16 +9,13 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies
-RUN apt-get update --fix-missing && apt-get install -y --no-install-recommends \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
-    python3-dev \
-    python3-pip \
-    python3-setuptools \
-    python3-wheel \
-    python3-cffi \
     libffi-dev \
     libxml2-dev \
     libxslt-dev \
@@ -29,6 +27,7 @@ RUN apt-get update --fix-missing && apt-get install -y --no-install-recommends \
     shared-mime-info \
     curl \
     && rm -rf /var/lib/apt/lists/*
+
 
 
 # Copy requirements first for better caching
