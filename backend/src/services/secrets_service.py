@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional
 import structlog
 from datetime import datetime, timedelta
 import json
+import base64
 
 from services.database import get_database
 from utils.config import get_settings
@@ -60,23 +61,39 @@ class SecretsService:
             return None
     
     async def get_dataforseo_credentials(self) -> Optional[Dict[str, str]]:
-        """Get DataForSEO credentials"""
-        credentials = await self.get_secret('dataforseo')
+        """Get DataForSEO credentials from api_keys table"""
+        # Retrieve from database which queries api_keys table directly
+        credentials = await self.db.get_dataforseo_key()
         if not credentials:
             return None
-        
-        # Ensure all required fields are present
-        required_fields = ['login', 'password', 'api_url']
-        if not all(credentials.get(field) for field in required_fields):
-            logger.error("DataForSEO credentials missing required fields", 
-                        missing=[field for field in required_fields if not credentials.get(field)])
+            
+        key_value = credentials.get('key_value')
+        if not key_value:
             return None
-        
-        return {
-            'login': credentials.get('login'),
-            'password': credentials.get('password'),
-            'api_url': credentials.get('api_url')
-        }
+            
+        try:
+            # Decode base64 key_value to get login:password
+            decoded = base64.b64decode(key_value).decode('utf-8')
+            if ':' not in decoded:
+                logger.error("Invalid key format for DataForSEO (expected login:password)")
+                return None
+                
+            login, password = decoded.split(':', 1)
+            
+            return {
+                'login': login,
+                'password': password,
+                'api_url': credentials.get('base_url', 'https://api.dataforseo.com/v3')
+            }
+        except Exception as e:
+            logger.error("Failed to decode DataForSEO credentials", error=str(e))
+            return None
+
+    async def get_active_llm_config(self) -> Optional[Dict[str, Any]]:
+        """
+        Get the currently active LLM provider configuration.
+        """
+        return await self.db.get_default_llm_provider()
     
     async def get_gemini_credentials(self) -> Optional[str]:
         """Get Gemini API key"""

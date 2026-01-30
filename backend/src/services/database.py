@@ -2068,6 +2068,88 @@ class DatabaseService:
         except Exception as e:
             logger.error("Failed to get latest active upload job", error=str(e))
             return None
+    
+    async def get_default_llm_provider(self) -> Optional[Dict[str, Any]]:
+        """
+        Get the default LLM provider configuration from the database.
+        Returns a dictionary with provider details and the associated API key.
+        """
+        try:
+            if not self.client:
+                raise Exception("Supabase client not available")
+
+            # 1. Get the default provider
+            provider_result = self.client.table('llm_providers')\
+                .select('*')\
+                .eq('is_default', True)\
+                .limit(1)\
+                .execute()
+
+            if not provider_result.data:
+                logger.warning("No default LLM provider found in llm_providers table")
+                return None
+            
+            provider_row = provider_result.data[0]
+            api_keys_id = provider_row.get('api_keys_id')
+            
+            if not api_keys_id:
+                logger.error("Default LLM provider has no api_keys_id linked", provider=provider_row.get('provider'))
+                return None
+
+            # 2. Get the API key
+            key_result = self.client.table('api_keys')\
+                .select('*')\
+                .eq('id', api_keys_id)\
+                .limit(1)\
+                .execute()
+                
+            if not key_result.data:
+                logger.error("API key record not found for default provider", api_keys_id=api_keys_id)
+                return None
+            
+            key_row = key_result.data[0]
+            
+            return {
+                "provider": provider_row.get('provider'),
+                "model_name": provider_row.get('model_name'),
+                "api_key": key_row.get('key_value'),
+                "base_url": key_row.get('base_url')
+            }
+
+        except Exception as e:
+            logger.error("Failed to fetch default LLM provider", error=str(e))
+            return None
+
+    async def get_dataforseo_key(self) -> Optional[Dict[str, str]]:
+        """
+        Get the active DataForSEO credentials from the api_keys table.
+        """
+        try:
+            if not self.client:
+                raise Exception("Supabase client not available")
+            
+            # Query for active DataForSEO key
+            result = self.client.table('api_keys')\
+                .select('*')\
+                .eq('provider', 'dataforseo')\
+                .eq('is_active', True)\
+                .limit(1)\
+                .execute()
+                
+            if not result.data:
+                logger.warning("No active DataForSEO key found in api_keys table")
+                return None
+            
+            row = result.data[0]
+            return {
+                "key_value": row.get('key_value'),
+                "base_url": row.get('base_url'),
+                "user_name": row.get('user_name')
+            }
+            
+        except Exception as e:
+            logger.error("Failed to fetch DataForSEO key", error=str(e))
+            return None
 
 
 # Global database service instance

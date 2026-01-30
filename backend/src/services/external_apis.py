@@ -827,35 +827,55 @@ class LLMService:
         self._openai_key = None
         self._provider = None
     
-    async def _get_provider_and_key(self) -> tuple[Optional[str], Optional[str]]:
-        """Get available LLM provider and API key"""
+    async def _get_provider_and_key(self) -> tuple[Optional[str], Optional[str], Optional[str]]:
+        """Get available LLM provider, API key, and model name"""
+        config = await self.secrets_service.get_active_llm_config()
+        
+        if config:
+            raw_provider = config.get('provider', '').lower()
+            api_key = config.get('api_key')
+            model_name = config.get('model_name')
+            
+            # Normalize provider names
+            if raw_provider == 'google' or raw_provider == 'gemini':
+                self._provider = 'gemini'
+                self._gemini_key = api_key
+            elif 'openai' in raw_provider:
+                self._provider = 'openai'
+                self._openai_key = api_key
+            else:
+                self._provider = raw_provider
+                
+            return self._provider, api_key, model_name
+            
+        # Fallback to legacy behavior if DB config returns nothing (unlikely with new setup but safe)
         if self._provider is None:
             # Try Gemini first
             gemini_key = await self.secrets_service.get_gemini_credentials()
             if gemini_key:
                 self._provider = "gemini"
                 self._gemini_key = gemini_key
-                return self._provider, self._gemini_key
+                return self._provider, self._gemini_key, "gemini-2.0-flash-exp"
             
             # Try OpenAI as fallback
             openai_key = await self.secrets_service.get_openai_credentials()
             if openai_key:
                 self._provider = "openai"
                 self._openai_key = openai_key
-                return self._provider, self._openai_key
+                return self._provider, self._openai_key, "gpt-4o-mini"
             
             logger.error("No LLM provider credentials available")
-            return None, None
+            return None, None, None
         
         if self._provider == "gemini":
-            return self._provider, self._gemini_key
+            return self._provider, self._gemini_key, "gemini-2.0-flash-exp"
         else:
-            return self._provider, self._openai_key
+            return self._provider, self._openai_key, "gpt-4o-mini"
     
     async def health_check(self) -> bool:
         """Check if LLM service is accessible"""
         try:
-            provider, api_key = await self._get_provider_and_key()
+            provider, api_key, _ = await self._get_provider_and_key()
             return provider is not None and api_key is not None
         except Exception as e:
             logger.warning("LLM service health check failed", error=str(e))
@@ -864,7 +884,7 @@ class LLMService:
     async def generate_analysis(self, domain: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Generate domain analysis using LLM"""
         try:
-            provider, api_key = await self._get_provider_and_key()
+            provider, api_key, model_name = await self._get_provider_and_key()
             if not provider or not api_key:
                 logger.error("No LLM provider credentials available")
                 return None
@@ -873,9 +893,9 @@ class LLMService:
             prompt = self._build_analysis_prompt(domain, data)
             
             if provider == "gemini":
-                return await self._generate_with_gemini(prompt, domain)
+                return await self._generate_with_gemini(prompt, domain, model_name)
             elif provider == "openai":
-                return await self._generate_with_openai(prompt, domain, api_key)
+                return await self._generate_with_openai(prompt, domain, api_key, model_name)
             else:
                 logger.error(f"Unknown LLM provider: {provider}")
                 return None
@@ -887,7 +907,7 @@ class LLMService:
     async def generate_enhanced_analysis(self, domain: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Generate enhanced domain analysis with backlink quality assessment"""
         logger.info("=== ENHANCED ANALYSIS CALLED ===", domain=domain)
-        provider, api_key = await self._get_provider_and_key()
+        provider, api_key, model_name = await self._get_provider_and_key()
         if not provider or not api_key:
             logger.error("No LLM provider credentials available")
             raise ValueError("No LLM provider credentials available. Please configure LLM credentials in Supabase.")
@@ -897,9 +917,9 @@ class LLMService:
         logger.info("Enhanced prompt generated", domain=domain, prompt_length=len(prompt), prompt_preview=prompt[:500])
         
         if provider == "gemini":
-            result = await self._generate_with_gemini(prompt, domain)
+            result = await self._generate_with_gemini(prompt, domain, model_name)
         elif provider == "openai":
-            result = await self._generate_with_openai(prompt, domain, api_key)
+            result = await self._generate_with_openai(prompt, domain, api_key, model_name)
         else:
             logger.error(f"Unknown LLM provider: {provider}")
             raise ValueError(f"Unknown LLM provider: {provider}")
@@ -909,13 +929,12 @@ class LLMService:
         
         return result
     
-    async def _generate_with_gemini(self, prompt: str, domain: str) -> Optional[Dict[str, Any]]:
+    async def _generate_with_gemini(self, prompt: str, domain: str, model_name: str = 'gemini-2.0-flash-exp') -> Optional[Dict[str, Any]]:
         """Generate analysis using Gemini"""
         import google.generativeai as genai
         
-        # Get model from configuration
-        gemini_config = await self.secrets_service.get_secret('gemini')
-        model_name = gemini_config.get('model', 'gemini-2.0-flash-exp') if gemini_config else 'gemini-2.0-flash-exp'
+        # Use provided model name, fallback if None
+        model_name = model_name or 'gemini-2.0-flash-exp'
         
         genai.configure(api_key=self._gemini_key)
         model = genai.GenerativeModel(model_name)
@@ -928,13 +947,12 @@ class LLMService:
         analysis_text = response.text
         return self._parse_llm_response(analysis_text, domain)
     
-    async def _generate_with_openai(self, prompt: str, domain: str, api_key: str) -> Optional[Dict[str, Any]]:
+    async def _generate_with_openai(self, prompt: str, domain: str, api_key: str, model_name: str = 'gpt-4o-mini') -> Optional[Dict[str, Any]]:
         """Generate analysis using OpenAI"""
         import openai
         
-        # Get model from configuration
-        openai_config = await self.secrets_service.get_secret('openai')
-        model_name = openai_config.get('model', 'gpt-4o-mini') if openai_config else 'gpt-4o-mini'
+        # Use provided model name, fallback if None
+        model_name = model_name or 'gpt-4o-mini'
         
         client = openai.AsyncOpenAI(api_key=api_key)
         
@@ -1432,7 +1450,7 @@ class LLMService:
     async def generate_development_plan(self, report) -> Dict[str, Any]:
         """Generate a development plan based on domain analysis data"""
         try:
-            provider, api_key = await self._get_provider_and_key()
+            provider, api_key, model_name = await self._get_provider_and_key()
             if not provider or not api_key:
                 logger.error("No LLM provider credentials available")
                 return self._get_default_development_plan()
@@ -1441,9 +1459,9 @@ class LLMService:
             prompt = self._build_development_plan_prompt(report)
             
             if provider == "gemini":
-                return await self._generate_with_gemini(prompt, api_key)
+                return await self._generate_with_gemini(prompt, api_key, model_name)
             else:
-                return await self._generate_with_openai(prompt, api_key)
+                return await self._generate_with_openai(prompt, api_key, api_key, model_name)
                 
         except Exception as e:
             logger.error("Failed to generate development plan", error=str(e))
