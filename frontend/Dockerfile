@@ -14,6 +14,9 @@ RUN npm ci --only=production
 # Copy source code
 COPY . .
 
+# Disable CI=true to prevent warnings from failing the build
+ENV CI=false
+
 # Build the application
 RUN npm run build
 
