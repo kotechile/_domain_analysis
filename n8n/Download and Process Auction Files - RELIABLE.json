@@ -1,0 +1,278 @@
+{
+    "name": "Download and Process Auction Files - RELIABLE",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "cronExpression",
+                            "expression": "0 6 * * *"
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": [
+                10000,
+                1760
+            ],
+            "id": "schedule-id",
+            "name": "Daily Schedule (6 AM)"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT delete_expired_auctions() as deleted_count;"
+            },
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.6,
+            "position": [
+                10200,
+                1760
+            ],
+            "id": "delete-id",
+            "name": "Delete Expired Auctions",
+            "credentials": {
+                "postgres": {
+                    "id": "DxQODs2W8TambApf",
+                    "name": "Postgres account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "return [\n  {\n    json: {\n      url: 'https://inventory.auctions.godaddy.com/all_listings_ending_tomorrow.json.zip',\n      filename: 'godaddy_tomorrow.json',\n      is_compressed: true\n    }\n  },\n  {\n    json: {\n      url: 'https://inventory.auctions.godaddy.com/all_listings_ending_today.json.zip',\n      filename: 'godaddy_today.json',\n      is_compressed: true\n    }\n  },\n  {\n    json: {\n      url: 'https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales.csv',\n      filename: 'Namecheap_Market_Sales.csv',\n      is_compressed: false\n    }\n  },\n  {\n    json: {\n      url: 'https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales_Buy_Now.csv',\n      filename: 'Namecheap_Market_Sales_Buy_Now.csv',\n      is_compressed: false\n    }\n  },\n  {\n    json: {\n      url: 'https://www.namesilo.com/auctions/api/search?keyword=&keywordLocation=anywhere&type=all&domainAge=any&reserve=any&digits=any&addedOn=all&format=csv',\n      filename: 'namesilo_export.csv',\n      is_compressed: false\n    }\n  }\n];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                10400,
+                1760
+            ],
+            "id": "config-id",
+            "name": "Define Files"
+        },
+        {
+            "parameters": {
+                "batchSize": 1,
+                "options": {}
+            },
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 1,
+            "position": [
+                10600,
+                1760
+            ],
+            "id": "split-id",
+            "name": "Process One By One"
+        },
+        {
+            "parameters": {
+                "url": "={{ $json.url }}",
+                "options": {
+                    "response": {
+                        "response": {
+                            "responseFormat": "file"
+                        }
+                    }
+                }
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                10800,
+                1760
+            ],
+            "id": "download-id",
+            "name": "Download File"
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.is_compressed }}",
+                            "value2": true
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                11000,
+                1760
+            ],
+            "id": "check-compress-id",
+            "name": "Check Compression"
+        },
+        {
+            "parameters": {},
+            "type": "n8n-nodes-base.compression",
+            "typeVersion": 1.1,
+            "position": [
+                11200,
+                1660
+            ],
+            "id": "decompress-id",
+            "name": "Decompress"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Ensure binary data is in 'data' field and filename/mime is synced\n// Process ALL items in valid input\nreturn $input.all().map(item => {\n\n    // Restore filename if missing (from upstream context)\n    let filename = item.json.filename;\n    if (!filename) {\n       try {\n          filename = $('Process One By One').first().json.filename;\n          item.json.filename = filename;\n       } catch (e) { \n           // Only update if we can recover it\n       }\n    }\n\n    if (item.binary) {\n        const keys = Object.keys(item.binary);\n        if (keys.length > 0) {\n            // If 'data' exists, good. If not, map first key to 'data'\n            if (!item.binary.data) {\n                item.binary.data = item.binary[keys[0]];\n            }\n            \n            // Sync binary metadata with JSON filename\n            if (filename) {\n                item.binary.data.fileName = filename;\n                // Simple extension extraction\n                const ext = filename.split('.').pop();\n                if (ext) {\n                    item.binary.data.fileExtension = ext;\n                }\n            }\n            \n            // Ensure valid mimeType\n            if (!item.binary.data.mimeType || item.binary.data.mimeType === 'application/json') {\n                 // If logic says it's a CSV but mime says JSON (common with some APIs), force it\n                 if (filename && filename.endsWith('.csv')) {\n                     item.binary.data.mimeType = 'text/csv';\n                 } else if (filename && filename.endsWith('.json')) {\n                     item.binary.data.mimeType = 'application/json';\n                 } else {\n                     item.binary.data.mimeType = 'application/octet-stream';\n                 }\n            }\n        }\n    }\n    return item;\n});"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                11400,
+                1760
+            ],
+            "id": "standardize-id",
+            "name": "Standardize Binary"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ 'https://sbdomain.giniloh.com/storage/v1/object/auction-csvs/' + $('Process One By One').first().json.filename }}",
+                "sendBody": true,
+                "contentType": "binaryData",
+                "inputDataFieldName": "data",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc2NDYzNjk2MCwiZXhwIjo0OTIwMzEwNTYwLCJyb2xlIjoic2VydmljZV9yb2xlIn0.hMqiDDJIp9xxZtHJtyfvxs6utizP9F-mHqonRw0EFVc"
+                        },
+                        {
+                            "name": "x-upsert",
+                            "value": "true"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "={{ $binary.data.mimeType }}"
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                11600,
+                1760
+            ],
+            "id": "upload-id",
+            "name": "Upload to Supabase"
+        }
+    ],
+    "connections": {
+        "Daily Schedule (6 AM)": {
+            "main": [
+                [
+                    {
+                        "node": "Delete Expired Auctions",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Delete Expired Auctions": {
+            "main": [
+                [
+                    {
+                        "node": "Define Files",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Define Files": {
+            "main": [
+                [
+                    {
+                        "node": "Process One By One",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Process One By One": {
+            "main": [
+                [
+                    {
+                        "node": "Download File",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Download File": {
+            "main": [
+                [
+                    {
+                        "node": "Check Compression",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Check Compression": {
+            "main": [
+                [
+                    {
+                        "node": "Decompress",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Standardize Binary",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Decompress": {
+            "main": [
+                [
+                    {
+                        "node": "Standardize Binary",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Standardize Binary": {
+            "main": [
+                [
+                    {
+                        "node": "Upload to Supabase",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Upload to Supabase": {
+            "main": [
+                [
+                    {
+                        "node": "Process One By One",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

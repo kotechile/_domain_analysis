@@ -43,6 +43,10 @@ You must add the following environment variables in the Coolify UI for the servi
 - **Backend (Optional)**: If you need to access the API directly (e.g., from n8n outside the Docker network), map port `8000` to a subdomain (e.g., `https://api.analysis.yourdomain.com`).
     - *Note*: If n8n is on the **same** VPS and Docker network, you can access it internally (see below).
 
+#### n8n Optimization (Critical for Large Files)
+For reliable handling of large files (150MB+), add this variable to your n8n service in Coolify:
+- `N8N_DEFAULT_BINARY_DATA_MODE`: `filesystem`
+
 ### 4. Deploy
 - Click **Deploy**. Check the deployment logs for any errors.
 

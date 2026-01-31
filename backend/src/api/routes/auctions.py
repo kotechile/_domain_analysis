@@ -4,6 +4,7 @@ Auctions API routes for multi-source domain auction data
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Body, BackgroundTasks
 from typing import Optional, Dict, Any
+from pydantic import BaseModel
 from datetime import datetime, timezone
 import structlog
 import uuid
