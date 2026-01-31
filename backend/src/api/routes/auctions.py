@@ -1194,6 +1194,64 @@ async def upload_auctions_csv(
         logger.error("Failed to initiate upload", error=str(e))
         raise HTTPException(status_code=500, detail=f"Upload initiation failed: {str(e)}")
 
+class StorageProcessingRequest(BaseModel):
+    storage_path: str
+    filename: str
+    auction_site: str
+    offering_type: Optional[str] = 'auction'
+    bucket: Optional[str] = "auction-csvs"
+
+@router.post("/auctions/process-existing-upload")
+async def process_existing_upload(
+    request: StorageProcessingRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Trigger processing for a file already uploaded to Supabase Storage.
+    
+    Use this to bypass backend upload limits/timeouts. 
+    Upload directly to Supabase Storage from client (e.g. N8N), then call this.
+    """
+    try:
+        job_id = str(uuid.uuid4())
+        
+        # Create job entry
+        db = get_database()
+        await db.create_csv_upload_job(
+            job_id=job_id,
+            filename=request.filename,
+            auction_site=request.auction_site,
+            offering_type=request.offering_type
+        )
+        
+        # Start background processing directly
+        background_tasks.add_task(
+            process_file_from_storage_async,
+            job_id=job_id,
+            bucket=request.bucket,
+            path=request.storage_path,
+            filename=request.filename,
+            auction_site=request.auction_site,
+            offering_type=request.offering_type
+        )
+        
+        logger.info("Triggered processing for existing storage file", 
+                   filename=request.filename, 
+                   job_id=job_id,
+                   storage_path=request.storage_path)
+            
+        return {
+            "success": True,
+            "message": "Processing started in background.",
+            "job_id": job_id,
+            "filename": request.filename
+        }
+        
+    except Exception as e:
+        logger.error("Failed to trigger storage processing", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to trigger processing: {str(e)}")
+
+
 async def background_handle_upload_and_process(
     job_id: str,
     local_path: str,
