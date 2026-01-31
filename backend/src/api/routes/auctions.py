@@ -115,8 +115,9 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
     
     # Post-merge cleanup
     try:
-        current_time = datetime.now(timezone.utc).isoformat()
-        db.client.table('auctions').delete().lt('expiration_date', current_time).execute()
+        # db.client.table('auctions').delete().lt('expiration_date', current_time).execute()
+        # Use optimized chunked deletion to prevent timeouts
+        await db.delete_expired_auctions()
     except Exception as e:
         logger.warning("Failed to delete expired domains", error=str(e))
 

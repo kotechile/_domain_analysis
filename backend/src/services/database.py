@@ -1322,21 +1322,19 @@ class DatabaseService:
             if not self.client:
                 raise Exception("Supabase client not available")
             
-            from datetime import datetime, timezone
+            # Call the optimized RPC function which deletes in chunks (limit 10k)
+            result = self.client.rpc('delete_expired_auctions', {}).execute()
             
-            # Delete records where expiration_date < NOW()
-            # Use filter with current timestamp in ISO format
-            now_iso = datetime.now(timezone.utc).isoformat()
+            # Verify result format (RPC returns integer directly or in data)
+            deleted_count = result.data if result.data is not None else 0
             
-            # Delete using lt (less than) filter on expiration_date
-            # Supabase PostgREST supports lt filter on timestamp fields
-            result = self.client.table('auctions').delete().lt('expiration_date', now_iso).execute()
-            
-            # Supabase delete returns the deleted records in result.data
-            deleted_count = len(result.data) if result.data else 0
             logger.info("Deleted expired auctions", count=deleted_count)
-            
             return deleted_count
+            
+        except Exception as e:
+            logger.error("Failed to delete expired auctions", error=str(e))
+            # Don't raise error to prevent breaking the calling process
+            return 0
             
         except Exception as e:
             logger.error("Failed to delete expired auctions", error=str(e))
