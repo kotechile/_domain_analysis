@@ -46,6 +46,7 @@ You must add the following environment variables in the Coolify UI for the servi
 #### n8n Optimization (Critical for Large Files)
 For reliable handling of large files (150MB+), add this variable to your n8n service in Coolify:
 - `N8N_DEFAULT_BINARY_DATA_MODE`: `filesystem`
+- `SUPABASE_SERVICE_ROLE_KEY`: `your-service-role-key` (Required for Supabase Uploads)
 
 ### 4. Deploy
 - Click **Deploy**. Check the deployment logs for any errors.
