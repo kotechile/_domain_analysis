@@ -218,15 +218,12 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                 }}
                 inputProps={{
                   min: new Date().toISOString().split('T')[0],
-                  sx: {
-                    color: '#FFFFFF',
-                    colorScheme: 'dark',
-                  },
                 }}
                 sx={{
                   flex: 1,
                   minWidth: '150px',
                   '& .MuiOutlinedInput-root': {
+                    backgroundColor: 'transparent',
                     '& fieldset': {
                       borderColor: 'rgba(255, 255, 255, 0.3)',
                     },
@@ -236,7 +233,23 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                     '&.Mui-focused fieldset': {
                       borderColor: '#1976d2',
                     },
+                    '& input': {
+                      color: '#FFFFFF',
+                      backgroundColor: 'transparent !important',
+                    }
                   },
+                  '& .MuiInputLabel-root': {
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    backgroundColor: '#0C152B',
+                    padding: '0 4px',
+                  },
+                  '& .MuiInputLabel-root.Mui-focused': {
+                    color: '#1976d2',
+                    backgroundColor: '#0C152B',
+                  },
+                  '& ::-webkit-calendar-picker-indicator': {
+                    filter: 'invert(1)',
+                  }
                 }}
               />
               <TextField
@@ -250,15 +263,12 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                 }}
                 inputProps={{
                   min: expirationFromDate || new Date().toISOString().split('T')[0],
-                  sx: {
-                    color: '#FFFFFF',
-                    colorScheme: 'dark',
-                  },
                 }}
                 sx={{
                   flex: 1,
                   minWidth: '150px',
                   '& .MuiOutlinedInput-root': {
+                    backgroundColor: 'transparent',
                     '& fieldset': {
                       borderColor: 'rgba(255, 255, 255, 0.3)',
                     },
@@ -268,7 +278,23 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                     '&.Mui-focused fieldset': {
                       borderColor: '#1976d2',
                     },
+                    '& input': {
+                      color: '#FFFFFF',
+                      backgroundColor: 'transparent !important',
+                    }
                   },
+                  '& .MuiInputLabel-root': {
+                    color: 'rgba(255, 255, 255, 0.7)',
+                    backgroundColor: '#0C152B',
+                    padding: '0 4px',
+                  },
+                  '& .MuiInputLabel-root.Mui-focused': {
+                    color: '#1976d2',
+                    backgroundColor: '#0C152B',
+                  },
+                  '& ::-webkit-calendar-picker-indicator': {
+                    filter: 'invert(1)',
+                  }
                 }}
               />
               <Button
@@ -343,6 +369,7 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                   sx={{
                     flex: 1,
                     '& .MuiOutlinedInput-root': {
+                      backgroundColor: 'transparent',
                       '& fieldset': {
                         borderColor: 'rgba(255, 255, 255, 0.3)',
                       },
@@ -352,7 +379,20 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                       '&.Mui-focused fieldset': {
                         borderColor: '#1976d2',
                       },
+                      '& input': {
+                        color: '#FFFFFF',
+                        backgroundColor: 'transparent !important',
+                      }
                     },
+                    '& .MuiInputLabel-root': {
+                      color: 'rgba(255, 255, 255, 0.7)',
+                      backgroundColor: '#0C152B',
+                      padding: '0 4px',
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': {
+                      color: '#1976d2',
+                      backgroundColor: '#0C152B',
+                    }
                   }}
                 />
                 <TextField
@@ -371,6 +411,7 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                   sx={{
                     flex: 1,
                     '& .MuiOutlinedInput-root': {
+                      backgroundColor: 'transparent',
                       '& fieldset': {
                         borderColor: 'rgba(255, 255, 255, 0.3)',
                       },
@@ -380,7 +421,20 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                       '&.Mui-focused fieldset': {
                         borderColor: '#1976d2',
                       },
+                      '& input': {
+                        color: '#FFFFFF',
+                        backgroundColor: 'transparent !important',
+                      }
                     },
+                    '& .MuiInputLabel-root': {
+                      color: 'rgba(255, 255, 255, 0.7)',
+                      backgroundColor: '#0C152B',
+                      padding: '0 4px',
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': {
+                      color: '#1976d2',
+                      backgroundColor: '#0C152B',
+                    }
                   }}
                 />
               </Box>

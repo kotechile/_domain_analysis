@@ -734,7 +734,7 @@ const DomainsTablePage: React.FC = () => {
               <TableContainer>
                 <Table>
                   <TableHead>
-                    <TableRow sx={{ bgcolor: 'rgba(255, 255, 255, 0.05)' }}>
+                    <TableRow sx={{ bgcolor: '#0C152B', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                       <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
                         <TableSortLabel
                           active={filters.sortBy === 'domain'}
@@ -755,6 +755,9 @@ const DomainsTablePage: React.FC = () => {
                       </TableCell>
                       <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
                         Platform
+                      </TableCell>
+                      <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
+                        Offer Type
                       </TableCell>
                       <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
                         <TableSortLabel
@@ -962,6 +965,22 @@ const DomainsTablePage: React.FC = () => {
                                 '& .MuiChip-label': {
                                   px: 1.5,
                                 },
+                              }}
+                            />
+                          </TableCell>
+
+                          {/* Offer Type */}
+                          <TableCell>
+                            <Chip
+                              label={auction.offer_type === 'buy_now' ? 'Buy Now' : 'Auction'}
+                              size="small"
+                              variant="outlined"
+                              sx={{
+                                color: auction.offer_type === 'buy_now' ? '#4CAF50' : '#FFC107',
+                                borderColor: auction.offer_type === 'buy_now' ? 'rgba(76, 175, 80, 0.5)' : 'rgba(255, 193, 7, 0.5)',
+                                fontWeight: 600,
+                                fontSize: '0.75rem',
+                                height: '24px',
                               }}
                             />
                           </TableCell>
