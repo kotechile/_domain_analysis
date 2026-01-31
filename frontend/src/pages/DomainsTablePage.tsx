@@ -108,7 +108,7 @@ const getDefaultDateRange = () => {
   const now = new Date();
   const sevenDaysLater = new Date(now);
   sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
-  
+
   // Use full ISO datetime string to ensure we exclude records from earlier today
   // Format: YYYY-MM-DDTHH:mm:ss.sssZ
   return {
@@ -122,7 +122,7 @@ const DomainsTablePage: React.FC = () => {
   const theme = useTheme();
   const api = useApi();
   const queryClient = useQueryClient();
-  
+
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
@@ -191,11 +191,24 @@ const DomainsTablePage: React.FC = () => {
   } = useQuery({
     queryKey: ['auctions-report', filters, page, rowsPerPage],
     queryFn: () => {
-      // Apply default date range if no dates are selected
-      const defaultDates = getDefaultDateRange();
-      const expirationFromDate = filters.expirationFromDate || defaultDates.from;
-      const expirationToDate = filters.expirationToDate || defaultDates.to;
-      
+      // Check if "Buy Now" mode is active
+      const isBuyNow = filters.offeringType === 'buy_now';
+
+      // Apply default date range if no dates are selected AND not in Buy Now mode
+      // If in Buy Now mode, we want to show all items regardless of date, so we leave dates undefined
+      let expirationFromDate = filters.expirationFromDate;
+      let expirationToDate = filters.expirationToDate;
+
+      if (!isBuyNow) {
+        const defaultDates = getDefaultDateRange();
+        expirationFromDate = expirationFromDate || defaultDates.from;
+        expirationToDate = expirationToDate || defaultDates.to;
+      } else {
+        // Explicitly clear dates for Buy Now mode to show all matching items
+        expirationFromDate = undefined;
+        expirationToDate = undefined;
+      }
+
       // Debug logging
       console.log('Fetching auctions with filters:', {
         tlds: filters.tlds,
@@ -208,7 +221,7 @@ const DomainsTablePage: React.FC = () => {
           scored: filters.scored,
         }
       });
-      
+
       return api.getAuctionsReport(
         filters.preferred,
         filters.auctionSite,
@@ -258,7 +271,7 @@ const DomainsTablePage: React.FC = () => {
       const defaultDates = getDefaultDateRange();
       const expirationFromDate = filters.expirationFromDate || defaultDates.from;
       const expirationToDate = filters.expirationToDate || defaultDates.to;
-      
+
       return await api.triggerBulkAllMetricsAnalysis({
         preferred: filters.preferred,
         auctionSite: filters.auctionSite,
@@ -331,12 +344,12 @@ const DomainsTablePage: React.FC = () => {
   // For GoDaddy, use the stored link if available, otherwise construct URL
   const getProviderAuctionUrl = (domain: string, auctionSite?: string, link?: string): string => {
     const site = (auctionSite || '').toLowerCase();
-    
+
     // For GoDaddy, use the stored link if available
     if ((site === 'godaddy' || site === 'go daddy') && link) {
       return link;
     }
-    
+
     if (site === 'namecheap') {
       return `https://www.namecheap.com/market/${domain}/`;
     } else if (site === 'godaddy' || site === 'go daddy') {
@@ -346,7 +359,7 @@ const DomainsTablePage: React.FC = () => {
     } else if (site === 'catchclub' || site === 'catch.club') {
       return `https://catch.club/bid/${domain}`;
     }
-    
+
     // Default fallback
     return `https://www.namecheap.com/market/${domain}/`;
   };
@@ -363,19 +376,19 @@ const DomainsTablePage: React.FC = () => {
   // Handle clicking on First Seen - open Wayback Machine and check first seen date
   const handleFirstSeenClick = async (domain: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     // Open Wayback Machine URL immediately
     const waybackUrl = `https://web.archive.org/web/*/${domain}`;
     window.open(waybackUrl, '_blank');
-    
+
     // If already loading, don't fetch again
     if (waybackLoading.has(domain)) {
       return;
     }
-    
+
     // Fetch first seen date from API with timeout
     setWaybackLoading(prev => new Set(prev).add(domain));
-    
+
     // Set a timeout to clear loading state if request takes too long
     const timeoutId = setTimeout(() => {
       setWaybackLoading(prev => {
@@ -384,11 +397,11 @@ const DomainsTablePage: React.FC = () => {
         return newSet;
       });
     }, 20000); // 20 second fallback timeout
-    
+
     try {
       const result = await api.fetchWaybackFirstSeen(domain);
       clearTimeout(timeoutId);
-      
+
       if (result.success && result.first_seen) {
         // Refetch auctions to update the display with the new first_seen from database
         await refetchAuctions();
@@ -400,14 +413,14 @@ const DomainsTablePage: React.FC = () => {
       }
     } catch (error: any) {
       clearTimeout(timeoutId);
-      
+
       // Check if it's a timeout error
       if (error.code === 'ECONNABORTED' || error.message?.includes('timeout') || error.response?.status === 408) {
         console.warn('Wayback Machine request timed out for domain:', domain);
       } else {
         console.error('Failed to fetch Wayback Machine first seen:', error);
       }
-      
+
       // Note: We don't show an error to the user because the Wayback Machine page already opened
       // The loading state will be cleared, and they can try again if needed
     } finally {
@@ -432,7 +445,7 @@ const DomainsTablePage: React.FC = () => {
   const handleFilterApply = async (filterValues: FilterValues) => {
     // Mark filters as manually set to prevent auto-clearing
     setFiltersManuallySet(true);
-    
+
     // Update local filters state
     const newFilters = {
       ...filters,
@@ -444,7 +457,7 @@ const DomainsTablePage: React.FC = () => {
       maxScore: filterValues.maxScore,
       // offeringType is now controlled by radio buttons in the header, not from FilterPopup
     };
-    
+
     // Debug logging
     console.log('Applying filters:', {
       tlds: newFilters.tlds,
@@ -452,7 +465,7 @@ const DomainsTablePage: React.FC = () => {
       expirationFromDate: newFilters.expirationFromDate,
       expirationToDate: newFilters.expirationToDate,
     });
-    
+
     setFilters(newFilters);
 
     // Save to backend
@@ -481,9 +494,9 @@ const DomainsTablePage: React.FC = () => {
 
   const handleSort = (field: string) => {
     const newSortBy = field;
-    const newSortOrder = 
+    const newSortOrder =
       filters.sortBy === field && filters.sortOrder === 'asc' ? 'desc' : 'asc';
-    
+
     setFilters({
       ...filters,
       sortBy: newSortBy,
@@ -828,34 +841,34 @@ const DomainsTablePage: React.FC = () => {
                       // Extract SEO metrics from page_statistics and extracted columns
                       // Priority: extracted columns > page_statistics JSONB > statistics (legacy)
                       const pageStats = auction.page_statistics || auction.statistics || {};
-                      
+
                       // Extract rank - check page_statistics first, then ranking column
-                      const rank = (pageStats.rank !== undefined && pageStats.rank !== null) 
-                        ? pageStats.rank 
+                      const rank = (pageStats.rank !== undefined && pageStats.rank !== null)
+                        ? pageStats.rank
                         : ((auction.ranking !== undefined && auction.ranking !== null) ? auction.ranking : null);
-                      
+
                       // Extract backlinks - check extracted column first, then page_statistics
                       const backlinks = (auction.backlinks !== undefined && auction.backlinks !== null)
                         ? auction.backlinks
                         : ((pageStats.backlinks !== undefined && pageStats.backlinks !== null) ? pageStats.backlinks : null);
-                      
+
                       // Extract spam score - check extracted column first, then page_statistics
                       // Also check for "spam_score" (DataForSEO format) as fallback
                       const spamScore = (auction.backlinks_spam_score !== undefined && auction.backlinks_spam_score !== null)
                         ? auction.backlinks_spam_score
-                        : ((pageStats.backlinks_spam_score !== undefined && pageStats.backlinks_spam_score !== null) 
-                          ? pageStats.backlinks_spam_score 
+                        : ((pageStats.backlinks_spam_score !== undefined && pageStats.backlinks_spam_score !== null)
+                          ? pageStats.backlinks_spam_score
                           : ((pageStats as any).spam_score !== undefined && (pageStats as any).spam_score !== null) ? (pageStats as any).spam_score : null);
-                      
+
                       // Extract referring domains - check extracted column first, then page_statistics
                       const referringDomains = (auction.referring_domains !== undefined && auction.referring_domains !== null)
                         ? auction.referring_domains
                         : ((pageStats.referring_domains !== undefined && pageStats.referring_domains !== null) ? pageStats.referring_domains : null);
-                      
+
                       // Calculate DR from available data
                       // DR (Domain Rating) - convert rank from 0-1000 scale to 0-100 scale
                       const dr = rank !== null && rank !== undefined ? Math.round(rank / 10) : null; // Convert 0-1000 to 0-100
-                      
+
                       // Format backlinks for display (e.g., 12400 -> "12.4k")
                       const formatBacklinks = (count: number | null): string => {
                         if (count === null || count === undefined) return '';
@@ -864,7 +877,7 @@ const DomainsTablePage: React.FC = () => {
                         }
                         return count.toString();
                       };
-                      
+
                       // Format referring domains for display (e.g., 12400 -> "12.4k")
                       const formatReferringDomains = (count: number | null): string => {
                         if (count === null || count === undefined) return '';
@@ -873,15 +886,15 @@ const DomainsTablePage: React.FC = () => {
                         }
                         return count.toString();
                       };
-                      
+
                       // Format auction site name for display
                       const formatAuctionSite = (site: string | null | undefined): { label: string; color: string } => {
                         if (!site) {
                           return { label: '—', color: '#666666' }; // Gray for missing data
                         }
-                        
+
                         const siteLower = site.toLowerCase().trim();
-                        
+
                         // Map common auction site names to display format
                         const siteMap: { [key: string]: { label: string; color: string } } = {
                           'godaddy': { label: 'GoDaddy', color: '#00A3E0' }, // GoDaddy blue
@@ -891,21 +904,21 @@ const DomainsTablePage: React.FC = () => {
                           'namesilo': { label: 'NameSilo', color: '#4CAF50' }, // Green
                           'name_silo': { label: 'NameSilo', color: '#4CAF50' },
                         };
-                        
+
                         // Check if we have a mapped site
                         if (siteMap[siteLower]) {
                           return siteMap[siteLower];
                         }
-                        
+
                         // If not in map, format it nicely (capitalize first letter of each word)
                         const formatted = siteLower
                           .split(/[_\s-]+/)
                           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
                           .join(' ');
-                        
+
                         return { label: formatted, color: '#66CCFF' }; // Default cyan color
                       };
-                      
+
                       const platformInfo = formatAuctionSite(auction.auction_site);
 
                       return (
@@ -934,7 +947,7 @@ const DomainsTablePage: React.FC = () => {
                               {auction.domain}
                             </Box>
                           </TableCell>
-                          
+
                           {/* Platform */}
                           <TableCell>
                             <Chip
@@ -952,39 +965,39 @@ const DomainsTablePage: React.FC = () => {
                               }}
                             />
                           </TableCell>
-                          
+
                           {/* Score */}
                           <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
-                            {auction.score !== null && auction.score !== undefined 
+                            {auction.score !== null && auction.score !== undefined
                               ? auction.score.toFixed(2)
                               : '—'}
                           </TableCell>
-                          
+
                           {/* Price */}
                           <TableCell sx={{ color: '#4CAF50', fontWeight: 600 }}>
                             {auction.current_bid ? `$${auction.current_bid.toLocaleString()}` : '—'}
                           </TableCell>
-                          
+
                           {/* SEO Metrics (DR, LINKS, Rank, Spam Score, Referring Domains) */}
                           <TableCell>
                             {(() => {
                               // Check if we have any data at all
                               const hasAnyData = dr !== null || backlinks !== null || rank !== null || spamScore !== null || referringDomains !== null;
-                              
+
                               if (!hasAnyData) {
                                 return <Box sx={{ minHeight: '40px' }} />; // Blank space when no data
                               }
-                              
+
                               // Component for a single metric (label above value)
                               const MetricItem = ({ label, value }: { label: string; value: string | number | null }) => {
                                 // Allow 0 as valid value, only exclude null/undefined
                                 if (value === null || value === undefined || value === '') return null;
                                 return (
                                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: '60px' }}>
-                                    <Typography 
-                                      sx={{ 
-                                        color: 'rgba(255, 255, 255, 0.6)', 
-                                        fontSize: '0.75rem', 
+                                    <Typography
+                                      sx={{
+                                        color: 'rgba(255, 255, 255, 0.6)',
+                                        fontSize: '0.75rem',
                                         fontWeight: 400,
                                         lineHeight: 1.2,
                                         mb: 0.25,
@@ -992,11 +1005,11 @@ const DomainsTablePage: React.FC = () => {
                                     >
                                       {label}
                                     </Typography>
-                                    <Typography 
-                                      sx={{ 
-                                        color: '#FFFFFF', 
-                                        fontWeight: 700, 
-                                        fontSize: '1.1rem', 
+                                    <Typography
+                                      sx={{
+                                        color: '#FFFFFF',
+                                        fontWeight: 700,
+                                        fontSize: '1.1rem',
                                         lineHeight: 1.2,
                                       }}
                                     >
@@ -1005,10 +1018,10 @@ const DomainsTablePage: React.FC = () => {
                                   </Box>
                                 );
                               };
-                              
+
                               // Build array of metrics to display (only include those with data)
                               const metricsToShow = [];
-                              
+
                               if (dr !== null && dr !== undefined) {
                                 metricsToShow.push(<MetricItem key="dr" label="DR" value={dr} />);
                               }
@@ -1024,7 +1037,7 @@ const DomainsTablePage: React.FC = () => {
                               if (referringDomains !== null && referringDomains !== undefined) {
                                 metricsToShow.push(<MetricItem key="refdom" label="REF. DOM." value={formatReferringDomains(referringDomains)} />);
                               }
-                              
+
                               return (
                                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                                   {metricsToShow}
@@ -1032,22 +1045,22 @@ const DomainsTablePage: React.FC = () => {
                               );
                             })()}
                           </TableCell>
-                          
+
                           {/* Expiry */}
                           <TableCell sx={{ color: '#FFFFFF' }}>
                             {auction.expiration_date
                               ? (() => {
-                                  const date = new Date(auction.expiration_date);
-                                  const year = date.getFullYear();
-                                  const month = String(date.getMonth() + 1).padStart(2, '0');
-                                  const day = String(date.getDate()).padStart(2, '0');
-                                  const hours = String(date.getHours()).padStart(2, '0');
-                                  const minutes = String(date.getMinutes()).padStart(2, '0');
-                                  return `${month}-${day}-${year} ${hours}:${minutes}`;
-                                })()
+                                const date = new Date(auction.expiration_date);
+                                const year = date.getFullYear();
+                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                const day = String(date.getDate()).padStart(2, '0');
+                                const hours = String(date.getHours()).padStart(2, '0');
+                                const minutes = String(date.getMinutes()).padStart(2, '0');
+                                return `${month}-${day}-${year} ${hours}:${minutes}`;
+                              })()
                               : 'N/A'}
                           </TableCell>
-                          
+
                           {/* First Seen - Clickable for Wayback Machine */}
                           <TableCell>
                             <Button
@@ -1079,17 +1092,17 @@ const DomainsTablePage: React.FC = () => {
                             >
                               {auction.first_seen
                                 ? new Date(auction.first_seen).toLocaleDateString('en-US', {
-                                    year: 'numeric',
-                                    month: '2-digit',
-                                    day: '2-digit',
-                                  }).replace(/\//g, '-')
+                                  year: 'numeric',
+                                  month: '2-digit',
+                                  day: '2-digit',
+                                }).replace(/\//g, '-')
                                 : '—'}
                             </Button>
                           </TableCell>
-                          
+
                           {/* Action - Analyze Button */}
                           <TableCell>
-                            <DomainAnalyzeButton 
+                            <DomainAnalyzeButton
                               domain={auction.domain}
                               hasAnalysis={domainsWithAnalysis.has(auction.domain)}
                               onCheckAnalysis={(domain, hasAnalysis) => {

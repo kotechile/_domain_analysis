@@ -38,7 +38,7 @@ const COMMON_TLDS = ['.com', '.io', '.ai', '.org', '.net', '.co', '.app', '.dev'
 
 const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initialFilters }) => {
   const api = useApi();
-  
+
   const [selectedTlds, setSelectedTlds] = useState<string[]>(initialFilters?.tlds || []);
   const [expirationFromDate, setExpirationFromDate] = useState<string>(initialFilters?.expirationFromDate || '');
   const [expirationToDate, setExpirationToDate] = useState<string>(initialFilters?.expirationToDate || '');
@@ -58,8 +58,8 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
   }, [initialFilters]);
 
   const handleTldToggle = (tld: string) => {
-    setSelectedTlds(prev => 
-      prev.includes(tld) 
+    setSelectedTlds(prev =>
+      prev.includes(tld)
         ? prev.filter(t => t !== tld)
         : [...prev, tld]
     );
@@ -217,7 +217,11 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                   sx: { color: '#FFFFFF' },
                 }}
                 inputProps={{
-                  sx: { color: '#FFFFFF' },
+                  min: new Date().toISOString().split('T')[0],
+                  sx: {
+                    color: '#FFFFFF',
+                    colorScheme: 'dark',
+                  },
                 }}
                 sx={{
                   flex: 1,
@@ -245,7 +249,11 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                   sx: { color: '#FFFFFF' },
                 }}
                 inputProps={{
-                  sx: { color: '#FFFFFF' },
+                  min: expirationFromDate || new Date().toISOString().split('T')[0],
+                  sx: {
+                    color: '#FFFFFF',
+                    colorScheme: 'dark',
+                  },
                 }}
                 sx={{
                   flex: 1,
