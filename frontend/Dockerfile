@@ -15,7 +15,8 @@ COPY package*.json ./
 
 # Install dependencies
 # Install dependencies (including devDependencies for build)
-RUN npm ci
+# Install dependencies
+RUN npm install
 
 # Copy source code
 # Copy source code

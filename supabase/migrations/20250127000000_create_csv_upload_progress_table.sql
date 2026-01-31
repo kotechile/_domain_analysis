@@ -35,6 +35,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to auto-update updated_at
+-- DROP first to avoid "already exists" error
+DROP TRIGGER IF EXISTS update_csv_upload_progress_timestamp ON csv_upload_progress;
+
 CREATE TRIGGER update_csv_upload_progress_timestamp
     BEFORE UPDATE ON csv_upload_progress
     FOR EACH ROW

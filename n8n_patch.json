@@ -1,0 +1,80 @@
+{
+    "nodes": [
+        {
+            "parameters": {
+                "url": "={{ $json.body.supabase_url || 'https://sbdomain.giniloh.com' }}/storage/v1/object/public/{{ $json.body.bucket }}/{{ $json.body.path }}",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Authorization",
+                            "value": "=Bearer {{ $json.body.supabase_service_role_key }}"
+                        }
+                    ]
+                },
+                "options": {
+                    "response": {
+                        "response": {
+                            "responseFormat": "file"
+                        }
+                    }
+                }
+            },
+            "name": "Download from Storage",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.1,
+            "position": [
+                460,
+                300
+            ],
+            "id": "download-node-1"
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://domain.aichieve.net/api/v1/auctions/upload-csv",
+                "sendBody": true,
+                "contentType": "multipart-form-data",
+                "bodyParameters": {
+                    "parameters": [
+                        {
+                            "name": "file",
+                            "parameterType": "formBinaryData",
+                            "inputDataFieldName": "data"
+                        },
+                        {
+                            "name": "auction_site",
+                            "value": "={{ $json.body.auction_site || 'godaddy' }}"
+                        },
+                        {
+                            "name": "offering_type",
+                            "value": "={{ $json.body.offering_type || 'auction' }}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "name": "Upload to Backend",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.1,
+            "position": [
+                680,
+                300
+            ],
+            "id": "upload-node-1"
+        }
+    ],
+    "connections": {
+        "Download from Storage": {
+            "main": [
+                [
+                    {
+                        "node": "Upload to Backend",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}
