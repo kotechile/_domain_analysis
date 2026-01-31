@@ -144,7 +144,7 @@
                     "parameters": [
                         {
                             "name": "Authorization",
-                            "value": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc2NDYzNjk2MCwiZXhwIjo0OTIwMzEwNTYwLCJyb2xlIjoic2VydmljZV9yb2xlIn0.hMqiDDJIp9xxZtHJtyfvxs6utizP9F-mHqonRw0EFVc"
+                            "value": "Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
                         },
                         {
                             "name": "x-upsert",
