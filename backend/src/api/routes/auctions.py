@@ -1178,10 +1178,12 @@ async def upload_auctions_csv(
         # Start background processing
         background_tasks.add_task(
             process_file_from_storage_async,
-            storage_path,
-            auction_site,
-            offering_type,
-            job_id
+            job_id=job_id,
+            bucket="auction-csvs",
+            path=storage_path,
+            filename=safe_filename,
+            auction_site=auction_site,
+            offering_type=offering_type
         )
         
         return {
