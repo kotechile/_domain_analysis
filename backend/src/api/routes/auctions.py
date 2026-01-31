@@ -1134,8 +1134,9 @@ async def upload_auctions_csv(
     """
     try:
         # Validate file
-        if not file.filename.lower().endswith('.csv'):
-            raise HTTPException(status_code=400, detail="File must be a CSV")
+        filename = file.filename.lower()
+        if not (filename.endswith('.csv') or filename.endswith('.json')):
+            raise HTTPException(status_code=400, detail="File must be a CSV or JSON")
         
         # Generator for unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1161,7 +1162,7 @@ async def upload_auctions_csv(
             
             return {
                 "success": True,
-                "message": "CSV upload successful. N8N workflow triggered for processing.",
+                "message": "File upload successful. N8N workflow triggered for processing.",
                 "filename": safe_filename,
                 "job_id": job_id,
                 "storage_path": storage_path,
@@ -1185,16 +1186,18 @@ async def upload_auctions_csv(
         
         return {
             "success": True,
-            "message": "CSV upload successful. Processing started in background.",
+            "message": "File upload successful. Processing started in background.",
             "filename": safe_filename,
             "job_id": job_id,
             "storage_path": storage_path,
             "n8n_triggered": False
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Failed to upload CSV", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to upload CSV: {str(e)}")
+        logger.error("Failed to upload file", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
 
 
 @router.post("/auctions/upload-json")
