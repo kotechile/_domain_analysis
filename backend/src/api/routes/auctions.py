@@ -1116,6 +1116,87 @@ async def process_json_upload_async(
 
 
 
+
+@router.post("/auctions/upload-csv")
+async def upload_auctions_csv(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    auction_site: str = Query(..., description="Auction site name (e.g., namecheap, godaddy)"),
+    offering_type: str = Query('auction', description="Offering type (auction, backorder, buy_now)"),
+):
+    """
+    Upload auctions CSV file.
+    
+    This endpoint:
+    1. Uploads the CSV file to Supabase Storage
+    2. Triggers N8N workflow to process it (if enabled)
+    3. Falls back to local processing if N8N is disabled/fails
+    """
+    try:
+        # Validate file
+        if not file.filename.lower().endswith('.csv'):
+            raise HTTPException(status_code=400, detail="File must be a CSV")
+        
+        # Generator for unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_filename = f"{auction_site}_{timestamp}_{file.filename}"
+        
+        # Read file content
+        content = await file.read()
+        
+        # Upload to storage
+        db = get_database()
+        storage_path = await db.upload_csv_to_storage(content, safe_filename)
+        
+        # Trigger N8N workflow
+        n8n_service = N8NService()
+        n8n_result = await n8n_service.trigger_auction_scoring_workflow(storage_path, auction_site)
+        
+        job_id = str(uuid.uuid4())
+        
+        if n8n_result:
+            logger.info("Triggered N8N workflow for auction CSV", 
+                       filename=safe_filename, 
+                       request_id=n8n_result.get('request_id'))
+            
+            return {
+                "success": True,
+                "message": "CSV upload successful. N8N workflow triggered for processing.",
+                "filename": safe_filename,
+                "job_id": job_id,
+                "storage_path": storage_path,
+                "n8n_triggered": True,
+                "request_id": n8n_result.get('request_id')
+            }
+        
+        # Fallback to local processing
+        logger.info("N8N trigger failed or disabled, falling back to local processing", 
+                   filename=safe_filename,
+                   job_id=job_id)
+        
+        # Start background processing
+        background_tasks.add_task(
+            process_file_from_storage_async,
+            storage_path,
+            auction_site,
+            offering_type,
+            job_id
+        )
+        
+        return {
+            "success": True,
+            "message": "CSV upload successful. Processing started in background.",
+            "filename": safe_filename,
+            "job_id": job_id,
+            "storage_path": storage_path,
+            "n8n_triggered": False
+        }
+        
+    except Exception as e:
+        logger.error("Failed to upload CSV", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to upload CSV: {str(e)}")
+
+
 @router.post("/auctions/upload-json")
 async def upload_auctions_json(
     file: UploadFile = File(...),
@@ -1279,6 +1360,14 @@ async def process_file_from_storage_async(
     try:
         db = get_database()
         
+        # Create progress tracking job (moved from endpoint to prevent timeouts)
+        await db.create_csv_upload_job(
+            job_id=job_id,
+            filename=filename,
+            auction_site=auction_site,
+            offering_type=offering_type
+        )
+        
         # Download file to temp disk location
         logger.info("Downloading file from storage to temp disk", job_id=job_id, bucket=bucket, path=path, local_path=temp_path)
         await db.download_to_file(bucket, path, temp_path)
@@ -1371,15 +1460,12 @@ async def process_from_storage(
         # Generate job ID
         job_id = str(uuid.uuid4())
         
-        db = get_database()
+        # Generate job ID
+        job_id = str(uuid.uuid4())
         
-        # Create progress tracking job
-        await db.create_csv_upload_job(
-            job_id=job_id,
-            filename=file_path,
-            auction_site=auction_site,
-            offering_type=offering_type
-        )
+        # Create job in background to return immediately
+        # db = get_database() call removed from here to avoid connection wait
+
         
         # Start background task to download and process file
         background_tasks.add_task(

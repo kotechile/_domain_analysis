@@ -46,6 +46,20 @@ You must add the following environment variables in the Coolify UI for the servi
 ### 4. Deploy
 - Click **Deploy**. Check the deployment logs for any errors.
 
+### 5. Critical: Configure Proxy for Large Uploads
+The Nginx proxy usually defaults to 1MB uploads. To allow auction files (20MB+) you **MUST** configure the proxy:
+1. Go to your **Backend Service** in Coolify.
+2. Find the **Proxy / Nginx / Configuration** section.
+3. In actual Coolify versions, this is often under **General -> Configuration -> Custom Nginx Configuration**.
+4. Paste the following:
+   ```nginx
+   client_max_body_size 500M;
+   proxy_read_timeout 300;
+   proxy_connect_timeout 300;
+   proxy_send_timeout 300;
+   ```
+5. **Save** and **Redeploy** the service.
+
 ## Connecting n8n (Same VPS)
 
 If n8n is running in a Docker container on the same VPS:

@@ -274,6 +274,7 @@ async def database_diagnostic():
     return diagnostic
 
 
+
 @router.post("/health/clear-cache")
 async def clear_credentials_cache():
     """
@@ -300,3 +301,79 @@ async def clear_credentials_cache():
     except Exception as e:
         logger.error("Failed to clear credentials cache", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to clear cache: {str(e)}")
+
+
+@router.get("/health/test-db-connection")
+async def test_db_connection():
+    """
+    Test database connection by checking critical tables
+    Specifically checks csv_upload_progress and auctions access
+    """
+    results = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "connection": "unknown",
+        "csv_upload_progress_exists": False,
+        "auctions_exists": False,
+        "auctions_staging_exists": False,
+        "write_test": False,
+        "error": None
+    }
+    
+    try:
+        db = get_database()
+        if not db.client:
+            await init_database()
+            db = get_database()
+        
+        if not db.client:
+            results["error"] = "Could not initialize database client"
+            return results
+            
+        results["connection"] = "connected"
+        
+        # Test 1: Check csv_upload_progress
+        try:
+            # Try to select 1 record, if table doesn't exist it triggers error
+            db.client.table('csv_upload_progress').select('job_id').limit(1).execute()
+            results["csv_upload_progress_exists"] = True
+        except Exception as e:
+            results["error"] = f"csv_upload_progress table error: {str(e)}"
+            return results
+            
+        # Test 2: Check auctions
+        try:
+            db.client.table('auctions').select('id').limit(1).execute()
+            results["auctions_exists"] = True
+        except Exception as e:
+             results["error"] = f"auctions table error: {str(e)}"
+             
+        # Test 3: Check auctions_staging
+        try:
+            db.client.table('auctions_staging').select('domain').limit(1).execute()
+            results["auctions_staging_exists"] = True
+        except Exception as e:
+             results["error"] = f"auctions_staging table error: {str(e)}"
+
+        # Test 4: Write test to csv_upload_progress
+        try:
+            import uuid
+            test_id = str(uuid.uuid4())
+            db.client.table('csv_upload_progress').insert({
+                'job_id': f"test_{test_id}",
+                'filename': 'test_connectivity.csv',
+                'auction_site': 'test',
+                'status': 'test'
+            }).execute()
+            
+            # Cleanup
+            db.client.table('csv_upload_progress').delete().eq('job_id', f"test_{test_id}").execute()
+            results["write_test"] = True
+        except Exception as e:
+            results["error"] = f"Write failed: {str(e)}"
+            
+        return results
+        
+    except Exception as e:
+        results["error"] = f"Global error: {str(e)}"
+        return results
+
