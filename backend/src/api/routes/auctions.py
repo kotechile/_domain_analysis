@@ -1128,11 +1128,15 @@ async def upload_auctions_csv(
     """
     Upload auctions CSV file.
     
+    
     This endpoint:
-    1. Uploads the CSV file to Supabase Storage
-    2. Triggers N8N workflow to process it (if enabled)
-    3. Falls back to local processing if N8N is disabled/fails
+    1. Saves the file to a temporary location immediately
+    2. Returns a success response to prevent N8N timeouts
+    3. Handles Supabase Storage upload and processing in the background
     """
+    import tempfile
+    import os
+    
     try:
         # Validate file
         filename = file.filename.lower()
@@ -1142,65 +1146,127 @@ async def upload_auctions_csv(
         # Generator for unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_filename = f"{auction_site}_{timestamp}_{file.filename}"
-        
-        # Read file content
-        content = await file.read()
-        
-        # Upload to storage
-        db = get_database()
-        storage_path = await db.upload_csv_to_storage(content, safe_filename)
-        
-        # Trigger N8N workflow
-        n8n_service = N8NService()
-        n8n_result = await n8n_service.trigger_auction_scoring_workflow(storage_path, auction_site)
-        
         job_id = str(uuid.uuid4())
         
-        if n8n_result:
-            logger.info("Triggered N8N workflow for auction CSV", 
-                       filename=safe_filename, 
-                       request_id=n8n_result.get('request_id'))
+        # Save to temp file immediately
+        fd, temp_path = tempfile.mkstemp(suffix=f"_{safe_filename}")
+        
+        # Read and write content
+        content = await file.read()
+        with os.fdopen(fd, 'wb') as tmp:
+            tmp.write(content)
             
-            return {
-                "success": True,
-                "message": "File upload successful. N8N workflow triggered for processing.",
-                "filename": safe_filename,
-                "job_id": job_id,
-                "storage_path": storage_path,
-                "n8n_triggered": True,
-                "request_id": n8n_result.get('request_id')
-            }
-        
-        # Fallback to local processing
-        logger.info("N8N trigger failed or disabled, falling back to local processing", 
-                   filename=safe_filename,
-                   job_id=job_id)
-        
-        # Start background processing
-        background_tasks.add_task(
-            process_file_from_storage_async,
+        # Create job entry (so we have a record even before processing starts)
+        db = get_database()
+        await db.create_csv_upload_job(
             job_id=job_id,
-            bucket="auction-csvs",
-            path=storage_path,
             filename=safe_filename,
             auction_site=auction_site,
             offering_type=offering_type
         )
         
+        # Start background task that handles BOTH upload to storage AND processing
+        background_tasks.add_task(
+            background_handle_upload_and_process,
+            job_id=job_id,
+            local_path=temp_path,
+            filename=safe_filename,
+            auction_site=auction_site,
+            offering_type=offering_type
+        )
+        
+        logger.info("File accepted for async processing", 
+                   filename=safe_filename, 
+                   job_id=job_id,
+                   temp_path=temp_path)
+            
         return {
             "success": True,
-            "message": "File upload successful. Processing started in background.",
+            "message": "File accepted. Upload to storage and processing started in background.",
             "filename": safe_filename,
             "job_id": job_id,
-            "storage_path": storage_path,
-            "n8n_triggered": False
+            "n8n_triggered": False 
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to upload file", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to upload file: {str(e)}")
+        logger.error("Failed to initiate upload", error=str(e))
+        raise HTTPException(status_code=500, detail=f"Upload initiation failed: {str(e)}")
+
+async def background_handle_upload_and_process(
+    job_id: str,
+    local_path: str,
+    filename: str,
+    auction_site: str,
+    offering_type: str
+):
+    """
+    Handles the full background lifecycle:
+    1. Upload local temp file to Supabase Storage
+    2. Trigger processing using the local file (avoiding re-download)
+    3. Cleanup
+    """
+    import os
+    
+    try:
+        db = get_database()
+        
+        # 1. Upload to Storage
+        logger.info("Starting background storage upload", job_id=job_id, filename=filename)
+        
+        # Read file content for upload
+        # Note: This might use memory for large files, but is consistent with previous behavior
+        with open(local_path, "rb") as f:
+            file_content = f.read()
+            
+        storage_path = await db.upload_csv_to_storage(file_content, filename)
+        logger.info("Background storage upload complete", job_id=job_id, storage_path=storage_path)
+        
+        # 2. Process (using local path)
+        is_json = filename.lower().endswith('.json')
+        is_csv = filename.lower().endswith('.csv')
+        
+        if is_json:
+            await process_json_upload_async(
+                job_id=job_id,
+                json_content=local_path,
+                filename=filename,
+                auction_site=auction_site,
+                offering_type=offering_type,
+                is_file=True
+            )
+        elif is_csv:
+            await process_csv_upload_async(
+                job_id=job_id,
+                csv_content=local_path,
+                filename=filename,
+                auction_site=auction_site,
+                offering_type=offering_type,
+                is_file=True
+            )
+            
+    except Exception as e:
+        logger.error("Background upload/processing failed", job_id=job_id, error=str(e), exc_info=True)
+        try:
+            db = get_database()
+            await db.update_csv_upload_progress(
+                job_id=job_id,
+                status='failed',
+                error_message=str(e)
+            )
+        except:
+            pass
+            
+    finally:
+        # 3. Cleanup temp file
+        try:
+            if os.path.exists(local_path):
+                os.remove(local_path)
+                logger.info("Cleaned up temp upload file", local_path=local_path)
+        except Exception as e:
+            logger.warning("Failed to cleanup temp file", path=local_path, error=str(e))
+
 
 
 @router.post("/auctions/upload-json")
