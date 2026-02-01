@@ -733,108 +733,101 @@ const DomainsTablePage: React.FC = () => {
             <>
               <TableContainer>
                 <Table>
-                  <TableHead>
-                    <TableRow sx={{ bgcolor: '#0C152B', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                      <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
+                  <TableHead
+                    sx={{
+                      '& .MuiTableCell-head': {
+                        backgroundColor: '#0C152B',
+                        color: '#FFFFFF',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                      },
+                    }}
+                  >
+                    <TableRow>
+                      <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         <TableSortLabel
                           active={filters.sortBy === 'domain'}
                           direction={filters.sortBy === 'domain' ? (filters.sortOrder as 'asc' | 'desc') : 'asc'}
                           onClick={() => handleSort('domain')}
                           sx={{
-                            color: '#FFFFFF',
-                            '& .MuiTableSortLabel-icon': {
-                              color: '#FFFFFF !important',
-                            },
-                            '&:hover': {
-                              color: '#66CCFF',
-                            },
+                            color: '#FFFFFF !important',
+                            '&:hover': { color: '#FFFFFF !important' },
+                            '&.Mui-active': { color: '#FFFFFF !important' },
+                            '& .MuiTableSortLabel-icon': { color: '#FFFFFF !important' }
                           }}
                         >
                           Domain Name
                         </TableSortLabel>
                       </TableCell>
-                      <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
+                      <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         Platform
                       </TableCell>
-                      <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
+                      <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         Offer Type
                       </TableCell>
-                      <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
+                      <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         <TableSortLabel
                           active={filters.sortBy === 'score'}
                           direction={filters.sortBy === 'score' ? (filters.sortOrder as 'asc' | 'desc') : 'desc'}
                           onClick={() => handleSort('score')}
                           sx={{
-                            color: '#FFFFFF',
-                            '& .MuiTableSortLabel-icon': {
-                              color: '#FFFFFF !important',
-                            },
-                            '&:hover': {
-                              color: '#66CCFF',
-                            },
+                            color: '#FFFFFF !important',
+                            '&:hover': { color: '#FFFFFF !important' },
+                            '&.Mui-active': { color: '#FFFFFF !important' },
+                            '& .MuiTableSortLabel-icon': { color: '#FFFFFF !important' }
                           }}
                         >
                           Score
                         </TableSortLabel>
                       </TableCell>
-                      <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
+                      <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         <TableSortLabel
                           active={filters.sortBy === 'current_bid'}
                           direction={filters.sortBy === 'current_bid' ? (filters.sortOrder as 'asc' | 'desc') : 'asc'}
                           onClick={() => handleSort('current_bid')}
                           sx={{
-                            color: '#FFFFFF',
-                            '& .MuiTableSortLabel-icon': {
-                              color: '#FFFFFF !important',
-                            },
-                            '&:hover': {
-                              color: '#66CCFF',
-                            },
+                            color: '#FFFFFF !important',
+                            '&:hover': { color: '#FFFFFF !important' },
+                            '&.Mui-active': { color: '#FFFFFF !important' },
+                            '& .MuiTableSortLabel-icon': { color: '#FFFFFF !important' }
                           }}
                         >
                           Price
                         </TableSortLabel>
                       </TableCell>
-                      <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
+                      <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         SEO Metrics (DR)
                       </TableCell>
-                      <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
+                      <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         <TableSortLabel
                           active={filters.sortBy === 'expiration_date'}
                           direction={filters.sortBy === 'expiration_date' ? (filters.sortOrder as 'asc' | 'desc') : 'asc'}
                           onClick={() => handleSort('expiration_date')}
                           sx={{
-                            color: '#FFFFFF',
-                            '& .MuiTableSortLabel-icon': {
-                              color: '#FFFFFF !important',
-                            },
-                            '&:hover': {
-                              color: '#66CCFF',
-                            },
+                            color: '#FFFFFF !important',
+                            '&:hover': { color: '#FFFFFF !important' },
+                            '&.Mui-active': { color: '#FFFFFF !important' },
+                            '& .MuiTableSortLabel-icon': { color: '#FFFFFF !important' }
                           }}
                         >
                           Expiry
                         </TableSortLabel>
                       </TableCell>
-                      <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
+                      <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         <TableSortLabel
                           active={filters.sortBy === 'first_seen'}
                           direction={filters.sortBy === 'first_seen' ? (filters.sortOrder as 'asc' | 'desc') : 'asc'}
                           onClick={() => handleSort('first_seen')}
                           sx={{
-                            color: '#FFFFFF',
-                            '& .MuiTableSortLabel-icon': {
-                              color: '#FFFFFF !important',
-                            },
-                            '&:hover': {
-                              color: '#66CCFF',
-                            },
+                            color: '#FFFFFF !important',
+                            '&:hover': { color: '#FFFFFF !important' },
+                            '&.Mui-active': { color: '#FFFFFF !important' },
+                            '& .MuiTableSortLabel-icon': { color: '#FFFFFF !important' }
                           }}
                         >
                           First Seen
                         </TableSortLabel>
                       </TableCell>
-                      <TableCell sx={{ color: '#FFFFFF', fontWeight: 600 }}>
+                      <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         Action
                       </TableCell>
                     </TableRow>
