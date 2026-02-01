@@ -37,6 +37,9 @@ You must add the following environment variables in the Coolify UI for the servi
 
 **Frontend Variables:**
 - `REACT_APP_API_URL`: `/api/v1` (This allows the frontend to talk to the backend via the internal proxy).
+- `REACT_APP_SUPABASE_URL`: Your Supabase URL (e.g., `https://sbdomain.yourdomain.com`).
+- `REACT_APP_SUPABASE_ANON_KEY`: Your Supabase Anon Key.
+
 
 ### 3. Exposing Ports & Domains
 - **Frontend**: Map port `3000` to your main domain (e.g., `https://analysis.yourdomain.com`).
