@@ -53,6 +53,8 @@ services:
       dockerfile: Dockerfile
       args:
         - REACT_APP_API_URL=/api/v1
+        - REACT_APP_SUPABASE_URL=${REACT_APP_SUPABASE_URL}
+        - REACT_APP_SUPABASE_ANON_KEY=${REACT_APP_SUPABASE_ANON_KEY}
     container_name: domain-analysis-frontend
     expose:
       - "80"
