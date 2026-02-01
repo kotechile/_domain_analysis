@@ -52,7 +52,7 @@ class AnalysisService:
                 self._db = DatabaseService()
         return self._db
     
-    async def analyze_domain(self, domain: str, report_id: str = None, mode: str = "dual") -> DomainAnalysisReport:
+    async def analyze_domain(self, domain: str, report_id: str = None, mode: str = "dual", user_id: Optional[UUID] = None) -> DomainAnalysisReport:
         """
         Perform complete domain analysis with dual-mode support
         """
@@ -66,7 +66,7 @@ class AnalysisService:
                 await init_database()
                 self._db = get_database()
             
-            logger.info("Starting domain analysis", domain=domain, mode=mode)
+            logger.info("Starting domain analysis", domain=domain, mode=mode, user_id=str(user_id) if user_id else "system")
             
             # Determine analysis mode - use dual mode for domain buyer insights
             if mode == "enhanced" or mode == "dual":
@@ -244,7 +244,7 @@ class AnalysisService:
                     raise Exception("Failed to trigger N8N summary workflow")
             
             # Get domain analytics data (includes backlinks summary if not using N8N)
-            domain_rank_data = await self.dataforseo_service.get_domain_analytics(domain)
+            domain_rank_data = await self.dataforseo_service.get_domain_analytics(domain, user_id)
             
             # If we got summary from N8N, merge it into domain_rank_data
             if use_n8n_summary and backlinks_summary_data:
@@ -309,13 +309,14 @@ class AnalysisService:
             raise
     
     async def _collect_detailed_data(self, domain: str, report: DomainAnalysisReport, 
-                                   analysis_mode: AnalysisMode, operation_logger: AsyncOperationLogger, progress_tracker=None):
-        """Collect detailed data (backlinks, keywords, referring domains) - OPTIONAL for enhanced analysis"""
+                                   analysis_mode: str, operation_logger: AsyncOperationLogger, progress_tracker=None, user_id: Optional[UUID] = None):
+        """
+        Collect detailed data (backlinks, keywords, referring domains)
+        """
+        detailed_data_available = { "backlinks": False, "keywords": False, "referring_domains": False }
+        detailed_status_messages = []          
+        
         try:
-            operation_logger.log_data_collection("detailed_data")
-            
-            detailed_data_available = {}
-            
             if analysis_mode in [AnalysisMode.ASYNC, AnalysisMode.DUAL]:
                 # Use async pattern for cost efficiency
                 try:
@@ -411,7 +412,7 @@ class AnalysisService:
                     detailed_status_messages.append("Collecting keywords data...")
                     await self._update_progress_data(report, "Collecting keywords data...", detailed_status_messages, progress_tracker)
                     
-                    keywords_data = await self.dataforseo_async_service.get_detailed_keywords_async(domain, 10000)
+                    keywords_data = await self.dataforseo_async_service.get_detailed_keywords_async(domain, 10000, user_id)
                     if keywords_data and keywords_data.get("items"):
                         detailed_data_available["keywords"] = True
                         operation_logger.log_data_collection("keywords", record_count=len(keywords_data.get("items", [])), message="Keywords analysis completed")
@@ -429,7 +430,7 @@ class AnalysisService:
                     else:
                         logger.warning("Async keywords collection returned None, falling back to legacy", domain=domain)
                         # Fall back to legacy mode for keywords
-                        keywords_data = await self.dataforseo_service.get_detailed_keywords(domain, 1000)
+                        keywords_data = await self.dataforseo_service.get_detailed_keywords(domain, 1000, user_id)
                         if keywords_data:
                             detailed_data_available["keywords"] = True
                             operation_logger.log_data_collection("keywords", record_count=len(keywords_data.get("items", [])), message="Keywords analysis completed (legacy)")
@@ -455,7 +456,7 @@ class AnalysisService:
                     detailed_status_messages.append("Collecting referring domains data...")
                     await self._update_progress_data(report, "Collecting referring domains data...", detailed_status_messages, progress_tracker)
                     
-                    referring_domains_data = await self.dataforseo_async_service.get_referring_domains_async(domain, 10000)
+                    referring_domains_data = await self.dataforseo_async_service.get_referring_domains_async(domain, 10000, user_id)
                     if referring_domains_data and referring_domains_data.get("items"):
                         detailed_data_available["referring_domains"] = True
                         operation_logger.log_data_collection("referring_domains", record_count=len(referring_domains_data.get("items", [])), message="Referring domains analysis completed")
@@ -473,7 +474,7 @@ class AnalysisService:
                     else:
                         logger.warning("Async referring domains collection returned None, falling back to legacy", domain=domain)
                         # Fall back to legacy mode for referring domains
-                        referring_domains_data = await self.dataforseo_service.get_referring_domains(domain, 800)
+                        referring_domains_data = await self.dataforseo_service.get_referring_domains(domain, 800, user_id)
                         if referring_domains_data:
                             detailed_data_available["referring_domains"] = True
                             operation_logger.log_data_collection("referring_domains", record_count=len(referring_domains_data.get("items", [])), message="Referring domains analysis completed (legacy)")
@@ -547,7 +548,7 @@ class AnalysisService:
                     )
                     await self.db.save_detailed_data(detailed_data)
                 
-                keywords_data = await self.dataforseo_service.get_detailed_keywords(domain, 1000)
+                keywords_data = await self.dataforseo_service.get_detailed_keywords(domain, 1000, user_id)
                 if keywords_data and keywords_data.get("items"):
                     detailed_data_available["keywords"] = True
                     operation_logger.log_data_collection("keywords", record_count=len(keywords_data.get("items", [])))
@@ -559,7 +560,7 @@ class AnalysisService:
                     )
                     await self.db.save_detailed_data(detailed_data)
                 
-                referring_domains_data = await self.dataforseo_service.get_referring_domains(domain, 800)
+                referring_domains_data = await self.dataforseo_service.get_referring_domains(domain, 800, user_id)
                 if referring_domains_data and referring_domains_data.get("items"):
                     detailed_data_available["referring_domains"] = True
                     operation_logger.log_data_collection("referring_domains", record_count=len(referring_domains_data.get("items", [])))
@@ -640,7 +641,7 @@ class AnalysisService:
             
             # Generate enhanced AI analysis with quality assessment
             operation_logger.log_data_collection("ai_analysis", message="Starting AI analysis and quality assessment...")
-            llm_data = await self.llm_service.generate_enhanced_analysis(domain, combined_data)
+            llm_data = await self.llm_service.generate_enhanced_analysis(domain, combined_data, user_id)
             if llm_data:
                 # Start analysis parsing sub-operation
                 if progress_tracker:

@@ -37,8 +37,7 @@ You must add the following environment variables in the Coolify UI for the servi
 
 **Frontend Variables:**
 - `REACT_APP_API_URL`: `/api/v1` (This allows the frontend to talk to the backend via the internal proxy).
-- `REACT_APP_SUPABASE_URL`: Your Supabase URL (e.g., `https://sbdomain.yourdomain.com`).
-- `REACT_APP_SUPABASE_ANON_KEY`: Your Supabase Anon Key.
+- *Note*: `REACT_APP_SUPABASE_URL` and `REACT_APP_SUPABASE_ANON_KEY` are automatically mapped from `SUPABASE_URL` and `SUPABASE_KEY` in `docker-compose.yml`. You do NOT need to add them manually unless you want to override them.
 
 
 ### 3. Exposing Ports & Domains

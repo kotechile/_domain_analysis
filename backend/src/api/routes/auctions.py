@@ -447,20 +447,37 @@ async def process_csv_upload_async(
             if not db.client:
                 raise Exception("Supabase client not available")
             
-            # For NameSilo: Mark all existing NameSilo records for deletion before processing
-            if auction_site.lower() == 'namesilo':
-                logger.info("Marking all NameSilo records for deletion", job_id=job_id)
-                try:
-                    mark_result = db.client.table('auctions').update({
-                        'deletion_flag': True
-                    }).eq('auction_site', 'namesilo').execute()
-                    marked_count = len(mark_result.data) if mark_result.data else 0
-                    logger.info("Marked NameSilo records for deletion", 
-                              job_id=job_id,
-                              marked_count=marked_count)
-                except Exception as e:
-                    logger.warning("Failed to mark NameSilo records for deletion, continuing anyway", 
-                                job_id=job_id, error=str(e))
+            # General "Mark & Sweep" cleanup logic
+            # Step 0: Mark existing records for deletion (will be un-marked if present in new file)
+            # Define scope for cleanup
+            logger.info("Marking records for deletion (cleanup phase 1)", 
+                      job_id=job_id, 
+                      auction_site=auction_site,
+                      offering_type=offering_type)
+            
+            try:
+                # Build the base query
+                mark_query = db.client.table('auctions').update({'deletion_flag': True}).eq('auction_site', auction_site)
+                
+                # Apply scope rules
+                # NameSilo: Mixed types in one file, so we mark ALL NameSilo records
+                # Others: Scope by offering_type if provided (e.g. 'buy_now', 'auction')
+                if auction_site.lower() != 'namesilo' and offering_type:
+                    mark_query = mark_query.eq('offer_type', offering_type)
+                
+                # Execute mark
+                mark_result = mark_query.execute()
+                marked_count = len(mark_result.data) if mark_result.data else 0
+                
+                logger.info("Marked records for deletion", 
+                          job_id=job_id,
+                          count=marked_count,
+                          scope_site=auction_site,
+                          scope_type=offering_type if auction_site.lower() != 'namesilo' else 'ALL')
+                          
+            except Exception as e:
+                logger.warning("Failed to mark records for deletion, continuing anyway", 
+                            job_id=job_id, error=str(e))
             
             # Step 1: Insert into staging table using bulk inserts (much faster)
             logger.info("Loading into staging table using bulk inserts", 
@@ -856,20 +873,34 @@ async def process_csv_upload_async(
             inserted_count = merged_count
             updated_count = 0
             
-            # NameSilo cleanup
-            if auction_site.lower() == 'namesilo':
-                logger.info("Cleaning up NameSilo records marked for deletion", job_id=job_id)
-                try:
-                    delete_result = db.client.table('auctions').delete().eq('auction_site', 'namesilo').eq('deletion_flag', True).execute()
-                    deleted_count = len(delete_result.data) if delete_result.data else 0
-                except Exception as e:
-                    logger.error("Failed to cleanup NameSilo", job_id=job_id, error=str(e))
+            # Cleanup (Sweep phase)
+            # Delete records that still have deletion_flag=True within our scope
+            logger.info("Cleaning up stale records (cleanup phase 2)", job_id=job_id)
+            try:
+                # Build the base query
+                delete_query = db.client.table('auctions').delete().eq('auction_site', auction_site).eq('deletion_flag', True)
+                
+                # Apply same scope rules as Mark phase
+                if auction_site.lower() != 'namesilo' and offering_type:
+                     delete_query = delete_query.eq('offer_type', offering_type)
+                
+                delete_result = delete_query.execute()
+                deleted_count = len(delete_result.data) if delete_result.data else 0
+                
+                logger.info("Cleanup complete: deleted stale records", 
+                          job_id=job_id, 
+                          deleted=deleted_count,
+                          site=auction_site)
+                          
+            except Exception as e:
+                logger.error("Failed to cleanup stale records", job_id=job_id, error=str(e))
 
             result = {
                 'inserted': inserted_count,
                 'updated': updated_count,
                 'skipped': staging_failed,
-                'total': staging_inserted
+                'total': staging_inserted,
+                'deleted': deleted_count
             }
             
         except Exception as e:
@@ -1076,6 +1107,32 @@ async def process_json_upload_async(
 
         # Loading and Merging (simplified logic)
         if db.client:
+             # General "Mark & Sweep" cleanup logic - Mark Phase
+             effective_offering_type = offering_type or 'auction'
+             logger.info("Marking records for deletion (cleanup phase 1)", 
+                       job_id=job_id, 
+                       auction_site=auction_site,
+                       offering_type=effective_offering_type)
+             
+             try:
+                 # Build the base query
+                 mark_query = db.client.table('auctions').update({'deletion_flag': True}).eq('auction_site', auction_site)
+                 
+                 # Apply scope rules
+                 if auction_site.lower() != 'namesilo':
+                     mark_query = mark_query.eq('offer_type', effective_offering_type)
+                 
+                 mark_result = mark_query.execute()
+                 marked_count = len(mark_result.data) if mark_result.data else 0
+                 
+                 logger.info("Marked records for deletion", 
+                           job_id=job_id,
+                           count=marked_count,
+                           scope_site=auction_site,
+                           scope_type=effective_offering_type if auction_site.lower() != 'namesilo' else 'ALL')
+             except Exception as e:
+                 logger.warning("Failed to mark records for deletion", job_id=job_id, error=str(e))
+
              # Clear
              # Use chunked delete helper
              await _clear_staging_chunked(db, auction_site, job_id)
@@ -1091,11 +1148,36 @@ async def process_json_upload_async(
              merged_count = await _perform_python_chunked_merge(db, auction_site, job_id)
              inserted_count = merged_count
 
+             # Cleanup (Sweep phase)
+             deleted_count = 0
+             logger.info("Cleaning up stale records (cleanup phase 2)", job_id=job_id)
+             try:
+                 # Build the base query
+                 delete_query = db.client.table('auctions').delete().eq('auction_site', auction_site).eq('deletion_flag', True)
+                 
+                 # Apply same scope rules as Mark phase
+                 # Use effective_offering_type
+                 effective_offering_type = offering_type or 'auction'
+                 if auction_site.lower() != 'namesilo':
+                      delete_query = delete_query.eq('offer_type', effective_offering_type)
+                 
+                 delete_result = delete_query.execute()
+                 deleted_count = len(delete_result.data) if delete_result.data else 0
+                 
+                 logger.info("Cleanup complete: deleted stale records", 
+                           job_id=job_id, 
+                           deleted=deleted_count,
+                           site=auction_site)
+                           
+             except Exception as e:
+                 logger.error("Failed to cleanup stale records", job_id=job_id, error=str(e))
+
              result = {
                 'inserted': inserted_count,
                 'updated': 0,
                 'skipped': 0,
-                'total': total_records
+                'total': total_records,
+                'deleted': deleted_count
              }
 
         # Final update

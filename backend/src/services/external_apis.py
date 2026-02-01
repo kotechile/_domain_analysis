@@ -12,6 +12,7 @@ from utils.config import get_settings
 from models.domain_analysis import DataForSEOMetrics, DataSource, OrganicMetrics, PaidMetrics
 from services.database import get_database
 from services.secrets_service import get_secrets_service
+from services.usage_tracking import UsageTrackingService
 
 logger = structlog.get_logger()
 
@@ -22,6 +23,7 @@ class DataForSEOService:
     def __init__(self):
         self.settings = get_settings()
         self.secrets_service = get_secrets_service()
+        self.usage_tracking = UsageTrackingService()
         self.timeout = 30.0
         self._credentials = None
     
@@ -69,7 +71,7 @@ class DataForSEOService:
             logger.warning("DataForSEO health check failed", error=str(e))
             return False
     
-    async def get_domain_analytics(self, domain: str) -> Optional[Dict[str, Any]]:
+    async def get_domain_analytics(self, domain: str, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get domain analytics data from DataForSEO"""
         try:
             # Get credentials
@@ -176,6 +178,17 @@ class DataForSEOService:
                 # Cache the data
                 await db.save_raw_data(domain, DataSource.DATAFORSEO, combined_data)
                 
+                # Track usage
+                await self.usage_tracking.track_usage(
+                    user_id=user_id,
+                    resource_type='dataforseo',
+                    operation='domain_analytics',
+                    provider='dataforseo',
+                    model='v3',
+                    cost_estimated=0.0, # Add cost logic later if needed
+                    details={'domain': domain}
+                )
+
                 logger.info("DataForSEO data retrieved successfully", domain=domain)
                 return combined_data
                 
@@ -465,7 +478,7 @@ class DataForSEOService:
             logger.error("Failed to calculate Domain Rating", error=str(e))
             return 0.0
     
-    async def get_backlinks_summary(self, domain: str) -> Optional[Dict[str, Any]]:
+    async def get_backlinks_summary(self, domain: str, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get backlinks summary data from DataForSEO v3 API"""
         try:
             # Get credentials
@@ -520,7 +533,7 @@ class DataForSEOService:
             logger.error("Failed to get DataForSEO backlinks summary", domain=domain, error=str(e))
             return None
 
-    async def get_detailed_backlinks(self, domain: str, limit: int = 100) -> Optional[Dict[str, Any]]:
+    async def get_detailed_backlinks(self, domain: str, limit: int = 100, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get detailed backlinks data from DataForSEO v3 API (on-demand)"""
         try:
             credentials = await self._get_credentials()
@@ -558,6 +571,15 @@ class DataForSEOService:
                         backlinks_data = result[0]
                         logger.info("DataForSEO detailed backlinks retrieved successfully", 
                                   domain=domain, count=backlinks_data.get("total_count", 0))
+                        
+                        await self.usage_tracking.track_usage(
+                            user_id=user_id,
+                            resource_type='dataforseo',
+                            operation='detailed_backlinks',
+                            provider='dataforseo',
+                            model='v3',
+                            details={'domain': domain, 'limit': limit}
+                        )
                         return backlinks_data
                 
                 logger.warning("No detailed backlinks data found", domain=domain)
@@ -567,7 +589,7 @@ class DataForSEOService:
             logger.error("Failed to get DataForSEO detailed backlinks", domain=domain, error=str(e))
             return None
 
-    async def get_detailed_keywords(self, domain: str, limit: int = 1000) -> Optional[Dict[str, Any]]:
+    async def get_detailed_keywords(self, domain: str, limit: int = 1000, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get detailed keywords data from DataForSEO v3 API (on-demand)"""
         try:
             credentials = await self._get_credentials()
@@ -605,7 +627,16 @@ class DataForSEOService:
                     if result:
                         keywords_data = result[0]
                         logger.info("DataForSEO detailed keywords retrieved successfully", 
-                                  domain=domain, count=keywords_data.get("total_count", 0))
+                                  domain=domain, count=len(keywords_data.get("items", [])))
+                                  
+                        await self.usage_tracking.track_usage(
+                            user_id=user_id,
+                            resource_type='dataforseo',
+                            operation='detailed_keywords',
+                            provider='dataforseo',
+                            model='v3',
+                            details={'domain': domain, 'limit': limit}
+                        )
                         return keywords_data
                 
                 logger.warning("No detailed keywords data found", domain=domain)
@@ -615,7 +646,7 @@ class DataForSEOService:
             logger.error("Failed to get DataForSEO detailed keywords", domain=domain, error=str(e))
             return None
 
-    async def get_referring_domains(self, domain: str, limit: int = 800) -> Optional[Dict[str, Any]]:
+    async def get_referring_domains(self, domain: str, limit: int = 800, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get referring domains data from DataForSEO v3 API (on-demand)"""
         try:
             credentials = await self._get_credentials()
@@ -671,13 +702,23 @@ class DataForSEOService:
                         referring_domains_list = list(referring_domains.values())
                         referring_domains_list.sort(key=lambda x: x.get("domain_rank", 0), reverse=True)
                         
-                        logger.info("DataForSEO referring domains retrieved successfully", 
-                                  domain=domain, count=len(referring_domains_list))
-                        
-                        return {
+                        referring_domains_data = {
                             "total_count": len(referring_domains_list),
                             "items": referring_domains_list[:limit]
                         }
+                        
+                        logger.info("DataForSEO referring domains retrieved successfully", 
+                                  domain=domain, count=len(referring_domains_data.get("items", [])))
+                                  
+                        await self.usage_tracking.track_usage(
+                            user_id=user_id,
+                            resource_type='dataforseo',
+                            operation='referring_domains',
+                            provider='dataforseo',
+                            model='v3',
+                            details={'domain': domain, 'limit': limit}
+                        )
+                        return referring_domains_data
                 
                 logger.warning("No referring domains data found", domain=domain)
                 return None
@@ -821,7 +862,9 @@ class LLMService:
     
     def __init__(self):
         self.settings = get_settings()
+        self.settings = get_settings()
         self.secrets_service = get_secrets_service()
+        self.usage_tracking = UsageTrackingService()
         self.timeout = 60.0
         self._gemini_key = None
         self._openai_key = None
@@ -881,7 +924,7 @@ class LLMService:
             logger.warning("LLM service health check failed", error=str(e))
             return False
     
-    async def generate_analysis(self, domain: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def generate_analysis(self, domain: str, data: Dict[str, Any], user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Generate domain analysis using LLM"""
         try:
             provider, api_key, model_name = await self._get_provider_and_key()
@@ -893,18 +936,30 @@ class LLMService:
             prompt = self._build_analysis_prompt(domain, data)
             
             if provider == "gemini":
-                return await self._generate_with_gemini(prompt, domain, model_name)
+                result = await self._generate_with_gemini(prompt, domain, model_name)
             elif provider == "openai":
-                return await self._generate_with_openai(prompt, domain, api_key, model_name)
+                result = await self._generate_with_openai(prompt, domain, api_key, model_name)
             else:
                 logger.error(f"Unknown LLM provider: {provider}")
                 return None
+                
+            if result:
+                 await self.usage_tracking.track_usage(
+                    user_id=user_id,
+                    resource_type='llm',
+                    operation='generate_analysis',
+                    provider=provider,
+                    model=model_name,
+                    details={'domain': domain}
+                )
+            
+            return result
             
         except Exception as e:
             logger.error("Failed to generate LLM analysis", domain=domain, error=str(e))
             return None
     
-    async def generate_enhanced_analysis(self, domain: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def generate_enhanced_analysis(self, domain: str, data: Dict[str, Any], user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Generate enhanced domain analysis with backlink quality assessment"""
         logger.info("=== ENHANCED ANALYSIS CALLED ===", domain=domain)
         provider, api_key, model_name = await self._get_provider_and_key()
@@ -926,6 +981,15 @@ class LLMService:
         
         if not result:
             raise ValueError("LLM service returned no data")
+            
+        await self.usage_tracking.track_usage(
+            user_id=user_id,
+            resource_type='llm',
+            operation='generate_enhanced_analysis',
+            provider=provider,
+            model=model_name,
+            details={'domain': domain}
+        )
         
         return result
     

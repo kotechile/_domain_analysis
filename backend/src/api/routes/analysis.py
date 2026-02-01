@@ -3,6 +3,7 @@ Domain analysis API routes
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from middleware.auth_middleware import get_current_user
 from typing import Optional
 import structlog
 import asyncio
@@ -28,7 +29,8 @@ router = APIRouter()
 @router.post("/analyze", response_model=AnalysisResponse)
 async def analyze_domain(
     request: DomainAnalysisRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user = Depends(get_current_user)
 ):
     """
     Start domain analysis process
@@ -74,10 +76,12 @@ async def analyze_domain(
         background_tasks.add_task(
             analysis_service.analyze_domain,
             request.domain,
-            report_id
+            report_id,
+            "dual", # Default mode
+            current_user.id
         )
         
-        logger.info("Domain analysis started", domain=request.domain, report_id=report_id)
+        logger.info("Domain analysis started", domain=request.domain, report_id=report_id, user_id=current_user.id)
         
         return AnalysisResponse(
             success=True,

@@ -32,50 +32,59 @@ class DatabaseService:
         """Initialize Supabase client"""
         try:
             from supabase import create_client
-            from supabase.lib.client_options import SyncClientOptions
+            # Try to import SyncClientOptions, available in newer supabase versions
+            try:
+                from supabase.lib.client_options import SyncClientOptions
+                HAS_CLIENT_OPTIONS = True
+            except ImportError:
+                HAS_CLIENT_OPTIONS = False
+            
             import httpx
             
             # Configure HTTP client with SSL verification setting and increased timeout
             timeout = httpx.Timeout(300.0, connect=30.0)  # 5 minutes for requests, 30s for connection
-            if not getattr(self.settings, 'SUPABASE_VERIFY_SSL', True):
-                # Disable SSL verification for self-hosted instances with self-signed certificates
-                custom_client = httpx.Client(verify=False, timeout=timeout)
-                logger.warning("SSL verification disabled for Supabase client (self-hosted instance)")
-                # Create client options with custom httpx client
-                client_options = SyncClientOptions(httpx_client=custom_client)
-                # Use service role key for admin operations
-                key = self.settings.SUPABASE_SERVICE_ROLE_KEY
-                if not key:
-                    logger.warning("SUPABASE_SERVICE_ROLE_KEY not found, falling back to SUPABASE_KEY. RLS policies may fail!")
-                    key = self.settings.SUPABASE_KEY
+            
+            # Default options
+            options = None
+            
+            if HAS_CLIENT_OPTIONS:
+                if not getattr(self.settings, 'SUPABASE_VERIFY_SSL', True):
+                    # Disable SSL verification for self-hosted instances with self-signed certificates
+                    custom_client = httpx.Client(verify=False, timeout=timeout)
+                    logger.warning("SSL verification disabled for Supabase client (self-hosted instance)")
+                    # Create client options with custom httpx client
+                    options = SyncClientOptions(httpx_client=custom_client)
                 else:
-                    logger.info("Initializing Supabase client with SERVICE_ROLE_KEY")
+                    # Create client with increased timeout
+                    custom_client = httpx.Client(timeout=timeout)
+                    options = SyncClientOptions(httpx_client=custom_client)
+            
+            # Use service role key for admin operations
+            key = self.settings.SUPABASE_SERVICE_ROLE_KEY
+            if not key:
+                logger.warning("SUPABASE_SERVICE_ROLE_KEY not found, falling back to SUPABASE_KEY. RLS policies may fail!")
+                key = self.settings.SUPABASE_KEY
+            else:
+                logger.info("Initializing Supabase client with SERVICE_ROLE_KEY")
 
+            if options:
                 self.client = create_client(
                     self.settings.SUPABASE_URL,
                     key,
-                    options=client_options
+                    options=options
                 )
             else:
-                # Create client with increased timeout
-                custom_client = httpx.Client(timeout=timeout)
-                client_options = SyncClientOptions(httpx_client=custom_client)
-                
-                # Use service role key for admin operations
-                key = self.settings.SUPABASE_SERVICE_ROLE_KEY
-                if not key:
-                    logger.warning("SUPABASE_SERVICE_ROLE_KEY not found, falling back to SUPABASE_KEY. RLS policies may fail!")
-                    key = self.settings.SUPABASE_KEY
-                else:
-                    logger.info("Initializing Supabase client with SERVICE_ROLE_KEY")
-
                 self.client = create_client(
                     self.settings.SUPABASE_URL,
-                    key,
-                    options=client_options
+                    key
                 )
+            # Block handled above
+            logger.info("Supabase client initialized successfully")
             logger.info("Supabase client initialized successfully")
         except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"DEBUG: Failed to initialize Supabase client: {e}")
             logger.error("Failed to initialize Supabase client", error=str(e))
             # Fallback to None for now
             self.client = None
@@ -1478,7 +1487,11 @@ class DatabaseService:
                     query = query.gte('expiration_date', filters['expiration_from_date'])
                 if filters.get('expiration_to_date'):
                     # Filter by expiration date to (less than or equal)
-                    query = query.lte('expiration_date', filters['expiration_to_date'])
+                    # If date is provided without time (YYYY-MM-DD), append time to include the full day
+                    exp_to = filters['expiration_to_date']
+                    if isinstance(exp_to, str) and len(exp_to) == 10:  # Simple check for YYYY-MM-DD
+                        exp_to = f"{exp_to}T23:59:59"
+                    query = query.lte('expiration_date', exp_to)
                 if filters.get('has_statistics') is not None:
                     query = query.eq('has_statistics', filters['has_statistics'])
                 if filters.get('scored') is not None:
