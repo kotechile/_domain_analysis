@@ -11,6 +11,8 @@ import ReportsListPage from './pages/ReportsListPage';
 import ReportPage from './pages/ReportPage';
 import AuctionsPage from './pages/AuctionsPage';
 import DomainsTablePage from './pages/DomainsTablePage';
+import Auth from './pages/Auth';
+import AuthCallback from './pages/AuthCallback';
 
 // Create a client
 const queryClient = new QueryClient({
@@ -36,6 +38,8 @@ function App() {
                 <Route path="/reports/:domain" element={<ReportPage />} />
                 <Route path="/auctions" element={<AuctionsPage />} />
                 <Route path="/marketplace" element={<DomainsTablePage />} />
+                <Route path="/login" element={<Auth />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
               </Routes>
             </Router>
           </ThemeContextProvider>

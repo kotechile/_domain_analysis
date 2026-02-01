@@ -1,5 +1,6 @@
 import React, { createContext, useContext, ReactNode } from 'react';
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import { supabase } from '../supabaseClient';
 
 // API Response Types
 export interface AnalysisResponse {
@@ -566,7 +567,17 @@ class ApiService {
 
     // Request interceptor
     this.client.interceptors.request.use(
-      (config) => {
+      async (config) => {
+        // Get the session from Supabase
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            config.headers.Authorization = `Bearer ${session.access_token}`;
+          }
+        } catch (error) {
+          console.error('Error getting session for API request:', error);
+        }
+
         console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
         return config;
       },
