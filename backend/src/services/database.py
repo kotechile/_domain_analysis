@@ -78,8 +78,7 @@ class DatabaseService:
                     self.settings.SUPABASE_URL,
                     key
                 )
-            # Block handled above
-            logger.info("Supabase client initialized successfully")
+            
             logger.info("Supabase client initialized successfully")
         except Exception as e:
             import traceback
