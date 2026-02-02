@@ -29,10 +29,11 @@ COPY . .
 # Disable CI=true to prevent warnings from failing the build
 ENV CI=false
 ENV GENERATE_SOURCEMAP=false
-ENV NODE_OPTIONS="--max-old-space-size=2048"
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 
 # Build the application
 RUN CI=false npm run build
+RUN ls -la /app/build || echo "Build directory not found"
 
 # Production stage with nginx
 FROM nginx:alpine
