@@ -5,6 +5,7 @@ Main analysis service that orchestrates domain analysis
 import asyncio
 from datetime import datetime
 from typing import Optional, List, Any, Dict
+from uuid import UUID
 import structlog
 
 from models.domain_analysis import (

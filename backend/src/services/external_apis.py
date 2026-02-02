@@ -5,6 +5,7 @@ External API services for domain analysis
 import httpx
 import asyncio
 from typing import Dict, Any, Optional, List
+from uuid import UUID
 import structlog
 from datetime import datetime, timedelta
 
