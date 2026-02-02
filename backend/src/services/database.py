@@ -1560,6 +1560,117 @@ class DatabaseService:
             logger.error("Failed to get auctions with statistics", error=str(e))
             raise
     
+    async def get_auctions_missing_any_metric_with_filters(
+        self,
+        filters: Optional[Dict[str, Any]] = None,
+        sort_by: str = 'expiration_date',
+        sort_order: str = 'asc',
+        limit: int = 1000
+    ) -> List[Dict[str, Any]]:
+        """
+        Get auctions matching filters that are missing ANY of the four DataForSEO metrics
+        
+        Args:
+            filters: Dict with optional filters
+            sort_by: Field to sort by
+            sort_order: Sort order ('asc' or 'desc')
+            limit: Maximum number of records to return
+            
+        Returns:
+            List of auction dictionaries
+        """
+        try:
+            if not self.client:
+                raise Exception("Supabase client not available")
+            
+            # Build query
+            query = self.client.table('auctions').select('*')
+            
+            # Apply filters (Reuse logic from get_auctions_with_statistics)
+            if filters:
+                if filters.get('preferred') is not None:
+                    query = query.eq('preferred', filters['preferred'])
+                if filters.get('auction_site'):
+                    query = query.eq('auction_site', filters['auction_site'])
+                if filters.get('tld'):
+                    tld = filters['tld']
+                    if not tld.startswith('.'):
+                        tld = '.' + tld
+                    query = query.ilike('domain', f'%{tld}')
+                if filters.get('tlds'):
+                    tlds = filters['tlds']
+                    if isinstance(tlds, list) and len(tlds) > 0:
+                        normalized_tlds = [tld if tld.startswith('.') else f'.{tld}' for tld in tlds if tld]
+                        # Use first TLD for now as simple filter
+                        if normalized_tlds:
+                            query = query.ilike('domain', f'%{normalized_tlds[0]}')
+                if filters.get('offering_type'):
+                    query = query.eq('offer_type', filters['offering_type'])
+                if filters.get('expiration_from_date'):
+                    query = query.gte('expiration_date', filters['expiration_from_date'])
+                if filters.get('expiration_to_date'):
+                    exp_to = filters['expiration_to_date']
+                    if isinstance(exp_to, str) and len(exp_to) == 10:
+                        exp_to = f"{exp_to}T23:59:59"
+                    query = query.lte('expiration_date', exp_to)
+                if filters.get('has_statistics') is not None:
+                    query = query.eq('has_statistics', filters['has_statistics'])
+                if filters.get('scored') is not None:
+                    if filters['scored']:
+                        query = query.not_.is_('score', 'null')
+                    else:
+                        query = query.is_('score', 'null')
+                if filters.get('min_rank') is not None:
+                    query = query.gte('ranking', filters['min_rank'])
+                if filters.get('max_rank') is not None:
+                    query = query.lte('ranking', filters['max_rank'])
+                if filters.get('min_score') is not None:
+                    query = query.gte('score', filters['min_score'])
+                if filters.get('max_score') is not None:
+                    query = query.lte('score', filters['max_score'])
+            
+            # Apply sorting
+            valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain']
+            if sort_by not in valid_sort_fields:
+                sort_by = 'expiration_date'
+            
+            if sort_order == 'desc':
+                query = query.order(sort_by, desc=True)
+            else:
+                query = query.order(sort_by, desc=False)
+            
+            # Fetch candidates - fetch more than limit to allow regarding in-memory filtering
+            fetch_limit = limit * 2
+            result = query.limit(fetch_limit).execute()
+            candidates = result.data if result.data else []
+            
+            # Filter in-memory for missing metrics
+            # We look for MISSING traffic, rank, backlinks, OR spam_score in page_statistics
+            missing_metrics_auctions = []
+            
+            for auction in candidates:
+                stats = auction.get('page_statistics') or {}
+                
+                # Check metrics
+                # Note: keys depend on how they are stored. Assuming standard keys.
+                has_traffic = 'traffic' in stats and stats['traffic'] is not None
+                has_rank = 'rank' in stats and stats['rank'] is not None
+                has_backlinks = 'backlinks' in stats and stats['backlinks'] is not None
+                has_spam_score = 'spam_score' in stats and stats['spam_score'] is not None
+                
+                # If ANY is missing, include this auction
+                if not (has_traffic and has_rank and has_backlinks and has_spam_score):
+                    missing_metrics_auctions.append(auction)
+                    if len(missing_metrics_auctions) >= limit:
+                        break
+            
+            logger.info("Fetched auctions missing metrics", found=len(missing_metrics_auctions), examined=len(candidates))
+            return missing_metrics_auctions
+
+        except Exception as e:
+            logger.error("Failed to get auctions missing metrics", error=str(e))
+            raise
+    
     async def get_unique_tlds(self) -> List[str]:
         """
         Get all unique TLDs from the auctions table
