@@ -26,12 +26,14 @@ import {
   Radio,
   RadioGroup,
   FormControlLabel,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   FilterList as FilterListIcon,
   CloudUpload as CloudUploadIcon,
   MoreVert as MoreVertIcon,
-  InsertDriveFile as InsertDriveFileIcon,
+
   TrendingUp as TrendingUpIcon,
   FiberNew as FiberNewIcon,
   History as HistoryIcon,
@@ -42,7 +44,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApi } from '../services/api';
 import Header from '../components/Header';
 import DataForSEOPopup from '../components/DataForSEOPopup';
-import LoadFilePopup from '../components/LoadFilePopup';
+
 import FilterPopup, { FilterValues } from '../components/FilterPopup';
 
 // Component for Analyze button that checks if domain has analysis
@@ -127,11 +129,21 @@ const DomainsTablePage: React.FC = () => {
   const [rowsPerPage, setRowsPerPage] = useState(50);
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
-  const [loadFilePopupOpen, setLoadFilePopupOpen] = useState(false);
+
   const [filterPopupOpen, setFilterPopupOpen] = useState(false);
   const [confirmBulkAnalysisOpen, setConfirmBulkAnalysisOpen] = useState(false);
   const [waybackLoading, setWaybackLoading] = useState<Set<string>>(new Set());
   const [domainsWithAnalysis, setDomainsWithAnalysis] = useState<Set<string>>(new Set());
+
+  // Snackbar state for feedback
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'warning' | 'info'>('success');
+
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
+  };
+
   const [filters, setFilters] = useState<{
     preferred?: boolean;
     auctionSite?: string;
@@ -291,7 +303,7 @@ const DomainsTablePage: React.FC = () => {
         limit: 1000,
       });
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       // Invalidate auctions query to refresh data after analysis completes
       queryClient.invalidateQueries({ queryKey: ['auctions-report'] });
       // Also refresh after delays to catch n8n webhook updates
@@ -302,6 +314,46 @@ const DomainsTablePage: React.FC = () => {
         queryClient.invalidateQueries({ queryKey: ['auctions-report'] });
       }, 60000); // Refresh again after 60 seconds
       setConfirmBulkAnalysisOpen(false);
+
+      // Check for partial successes or failures in the response data
+      // The backend returns a dictionary of results for each metric type
+      if (data && typeof data === 'object') {
+        const failures: string[] = [];
+        const successes: string[] = [];
+
+        // Check specific metrics if they exist in the response
+        if (data.rank && data.rank.success === false) failures.push('Rank');
+        else if (data.rank) successes.push('Rank');
+
+        if (data.traffic && data.traffic.success === false) failures.push('Traffic');
+        else if (data.traffic) successes.push('Traffic');
+
+        if (data.backlinks && data.backlinks.success === false) failures.push('Backlinks');
+        else if (data.backlinks) successes.push('Backlinks');
+
+        if (data.spam_score && data.spam_score.success === false) failures.push('Spam Score');
+        else if (data.spam_score) successes.push('Spam Score');
+
+        if (failures.length > 0) {
+          setSnackbarMessage(`Analysis triggered with issues. Failed: ${failures.join(', ')}. Success: ${successes.join(', ')}.`);
+          setSnackbarSeverity('warning');
+        } else {
+          setSnackbarMessage('DataForSEO analysis triggered successfully for 1000 domains.');
+          setSnackbarSeverity('success');
+        }
+      } else {
+        // Fallback if response structure is basic confirmation
+        setSnackbarMessage('DataForSEO analysis triggered successfully for 1000 domains.');
+        setSnackbarSeverity('success');
+      }
+
+      setSnackbarOpen(true);
+    },
+    onError: (error) => {
+      console.error('Bulk analysis failed:', error);
+      setSnackbarMessage(`Failed to trigger analysis: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
     },
   });
 
@@ -487,10 +539,7 @@ const DomainsTablePage: React.FC = () => {
     }
   };
 
-  const handleLoadFiles = () => {
-    // Open the new Load File popup
-    setLoadFilePopupOpen(true);
-  };
+
 
   const handleSort = (field: string) => {
     const newSortBy = field;
@@ -590,17 +639,7 @@ const DomainsTablePage: React.FC = () => {
                   },
                 }}
               />
-              <IconButton
-                onClick={handleLoadFiles}
-                sx={{
-                  color: '#FFFFFF',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                  },
-                }}
-              >
-                <InsertDriveFileIcon />
-              </IconButton>
+
               <IconButton
                 onClick={handleSetFilters}
                 sx={{
@@ -1171,12 +1210,8 @@ const DomainsTablePage: React.FC = () => {
         )}
 
         {/* Load File Popup */}
-        <LoadFilePopup
-          open={loadFilePopupOpen}
-          onClose={() => setLoadFilePopupOpen(false)}
-        />
 
-        {/* Filter Popup */}
+
         <FilterPopup
           open={filterPopupOpen}
           onClose={() => setFilterPopupOpen(false)}
@@ -1190,6 +1225,18 @@ const DomainsTablePage: React.FC = () => {
             maxScore: filters.maxScore,
           }}
         />
+
+        {/* Feedback Snackbar */}
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={6000}
+          onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert onClose={handleCloseSnackbar} severity={snackbarSeverity} sx={{ width: '100%' }}>
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
       </Container>
     </Box>
   );
