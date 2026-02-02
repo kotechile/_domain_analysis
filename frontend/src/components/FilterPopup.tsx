@@ -70,17 +70,26 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
   };
 
   const handleTodayClick = () => {
-    const today = new Date().toISOString().split('T')[0];
-    setExpirationFromDate(today);
-    setExpirationToDate(today);
+    const today = new Date();
+    // Adjust for time zone offset to get correct local YYYY-MM-DD
+    const localToday = new Date(today.getTime() - (today.getTimezoneOffset() * 60000))
+      .toISOString()
+      .split('T')[0];
+    setExpirationFromDate(localToday);
+    setExpirationToDate(localToday);
   };
 
   const handleTomorrowClick = () => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
-    setExpirationFromDate(tomorrowStr);
-    setExpirationToDate(tomorrowStr);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    // Adjust for time zone offset to get correct local YYYY-MM-DD
+    const localTomorrow = new Date(tomorrow.getTime() - (tomorrow.getTimezoneOffset() * 60000))
+      .toISOString()
+      .split('T')[0];
+    setExpirationFromDate(localTomorrow);
+    setExpirationToDate(localTomorrow);
   };
 
   const handleApply = () => {
