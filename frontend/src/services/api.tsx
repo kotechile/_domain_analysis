@@ -1307,6 +1307,8 @@ class ApiService {
       max_score?: number;
       expiration_from_date?: string;
       expiration_to_date?: string;
+      auction_sites?: string[];
+      show_expired?: boolean;
       sort_by: string;
       sort_order: string;
       page_size: number;
@@ -1331,6 +1333,8 @@ class ApiService {
     max_score?: number;
     expiration_from_date?: string;
     expiration_to_date?: string;
+    auction_sites?: string[];
+    show_expired?: boolean;
     sort_by?: string;
     sort_order?: string;
     page_size?: number;

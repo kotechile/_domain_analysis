@@ -158,6 +158,8 @@ const DomainsTablePage: React.FC = () => {
     maxScore?: number;
     expirationFromDate?: string;
     expirationToDate?: string;
+    auctionSites?: string[];
+    showExpired?: boolean;
     sortBy?: string;
     sortOrder?: string;
   }>({});
@@ -187,6 +189,8 @@ const DomainsTablePage: React.FC = () => {
         maxScore: filterData.filter.max_score ?? undefined,
         expirationFromDate: filterData.filter.expiration_from_date ?? undefined,
         expirationToDate: filterData.filter.expiration_to_date ?? undefined,
+        auctionSites: filterData.filter.auction_sites ?? undefined,
+        showExpired: filterData.filter.show_expired ?? undefined,
         sortBy: filterData.filter.sort_by || 'expiration_date',
         sortOrder: filterData.filter.sort_order || 'asc',
       });
@@ -507,6 +511,8 @@ const DomainsTablePage: React.FC = () => {
       scored: filterValues.scored,
       minScore: filterValues.minScore,
       maxScore: filterValues.maxScore,
+      auctionSites: filterValues.auctionSites,
+      showExpired: filterValues.showExpired,
       // offeringType is now controlled by radio buttons in the header, not from FilterPopup
     };
 
@@ -623,6 +629,54 @@ const DomainsTablePage: React.FC = () => {
                 <FormControlLabel value="auction" control={<Radio />} label="Auction" />
                 <FormControlLabel value="buy_now" control={<Radio />} label="Buy Now" />
               </RadioGroup>
+
+              {/* Auction Site Selection Chips */}
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                <Chip
+                  label="All Sites"
+                  onClick={() => {
+                    setFilters({ ...filters, auctionSites: undefined });
+                    setPage(0);
+                  }}
+                  sx={{
+                    bgcolor: !filters.auctionSites ? 'rgba(25, 118, 210, 0.2)' : 'transparent',
+                    color: !filters.auctionSites ? '#1976d2' : 'rgba(255, 255, 255, 0.7)',
+                    border: '1px solid',
+                    borderColor: !filters.auctionSites ? '#1976d2' : 'rgba(255, 255, 255, 0.3)',
+                    '&:hover': {
+                      bgcolor: 'rgba(25, 118, 210, 0.1)',
+                      borderColor: '#1976d2',
+                    },
+                  }}
+                />
+                {['godaddy', 'namecheap', 'namesilo'].map((site) => (
+                  <Chip
+                    key={site}
+                    label={site.charAt(0).toUpperCase() + site.slice(1)}
+                    onClick={() => {
+                      const currentSites = filters.auctionSites || [];
+                      const newSites = currentSites.includes(site)
+                        ? currentSites.filter(s => s !== site)
+                        : [...currentSites, site];
+                      setFilters({
+                        ...filters,
+                        auctionSites: newSites.length > 0 ? newSites : undefined,
+                      });
+                      setPage(0);
+                    }}
+                    sx={{
+                      bgcolor: filters.auctionSites?.includes(site) ? 'rgba(25, 118, 210, 0.2)' : 'transparent',
+                      color: filters.auctionSites?.includes(site) ? '#1976d2' : 'rgba(255, 255, 255, 0.7)',
+                      border: '1px solid',
+                      borderColor: filters.auctionSites?.includes(site) ? '#1976d2' : 'rgba(255, 255, 255, 0.3)',
+                      '&:hover': {
+                        bgcolor: 'rgba(25, 118, 210, 0.1)',
+                        borderColor: '#1976d2',
+                      },
+                    }}
+                  />
+                ))}
+              </Box>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <Chip
@@ -834,7 +888,36 @@ const DomainsTablePage: React.FC = () => {
                         </TableSortLabel>
                       </TableCell>
                       <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                        SEO Metrics (DR)
+                        <Box sx={{ display: 'flex', flexDirection: 'row', gap: 2 }}>
+                          <TableSortLabel
+                            active={filters.sortBy === 'domain_rating'}
+                            direction={filters.sortBy === 'domain_rating' ? (filters.sortOrder as 'asc' | 'desc') : 'desc'}
+                            onClick={() => handleSort('domain_rating')}
+                            sx={{
+                              color: '#FFFFFF !important',
+                              '&:hover': { color: '#FFFFFF !important' },
+                              '&.Mui-active': { color: '#FFFFFF !important' },
+                              '& .MuiTableSortLabel-icon': { color: '#FFFFFF !important' },
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            DR
+                          </TableSortLabel>
+                          <TableSortLabel
+                            active={filters.sortBy === 'organic_traffic'}
+                            direction={filters.sortBy === 'organic_traffic' ? (filters.sortOrder as 'asc' | 'desc') : 'desc'}
+                            onClick={() => handleSort('organic_traffic')}
+                            sx={{
+                              color: '#FFFFFF !important',
+                              '&:hover': { color: '#FFFFFF !important' },
+                              '&.Mui-active': { color: '#FFFFFF !important' },
+                              '& .MuiTableSortLabel-icon': { color: '#FFFFFF !important' },
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            Traffic
+                          </TableSortLabel>
+                        </Box>
                       </TableCell>
                       <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
                         <TableSortLabel
@@ -875,7 +958,7 @@ const DomainsTablePage: React.FC = () => {
                     {auctionsData?.auctions?.map((auction) => {
                       // Extract SEO metrics from page_statistics and extracted columns
                       // Priority: extracted columns > page_statistics JSONB > statistics (legacy)
-                      const pageStats = auction.page_statistics || auction.statistics || {};
+                      const pageStats: any = auction.page_statistics || auction.statistics || {};
 
                       // Extract rank - check page_statistics first, then ranking column
                       const rank = (pageStats.rank !== undefined && pageStats.rank !== null)
@@ -886,6 +969,18 @@ const DomainsTablePage: React.FC = () => {
                       const backlinks = (auction.backlinks !== undefined && auction.backlinks !== null)
                         ? auction.backlinks
                         : ((pageStats.backlinks !== undefined && pageStats.backlinks !== null) ? pageStats.backlinks : null);
+
+                      // Extract traffic - check various potential keys
+                      // Support: organic_traffic, traffic, etv, or nested metrics.organic.etv
+                      const traffic = (pageStats.traffic !== undefined && pageStats.traffic !== null)
+                        ? pageStats.traffic
+                        : ((pageStats.organic_traffic !== undefined && pageStats.organic_traffic !== null)
+                          ? pageStats.organic_traffic
+                          : ((pageStats.etv !== undefined && pageStats.etv !== null)
+                            ? pageStats.etv
+                            : ((pageStats.metrics?.organic?.etv !== undefined)
+                              ? pageStats.metrics.organic.etv
+                              : null)));
 
                       // Extract spam score - check extracted column first, then page_statistics
                       // Also check for "spam_score" (DataForSEO format) as fallback
@@ -905,22 +1000,23 @@ const DomainsTablePage: React.FC = () => {
                       const dr = rank !== null && rank !== undefined ? Math.round(rank / 10) : null; // Convert 0-1000 to 0-100
 
                       // Format backlinks for display (e.g., 12400 -> "12.4k")
-                      const formatBacklinks = (count: number | null): string => {
+                      const formatMetric = (count: number | null): string => {
                         if (count === null || count === undefined) return '';
+                        if (count >= 1000000) {
+                          return `${(count / 1000000).toFixed(1)}M`;
+                        }
                         if (count >= 1000) {
                           return `${(count / 1000).toFixed(1)}k`;
                         }
                         return count.toString();
                       };
 
-                      // Format referring domains for display (e.g., 12400 -> "12.4k")
-                      const formatReferringDomains = (count: number | null): string => {
-                        if (count === null || count === undefined) return '';
-                        if (count >= 1000) {
-                          return `${(count / 1000).toFixed(1)}k`;
-                        }
-                        return count.toString();
-                      };
+                      // Format backlinks alias
+                      const formatBacklinks = formatMetric;
+                      // Format referring domains alias
+                      const formatReferringDomains = formatMetric;
+                      // Format traffic alias
+                      const formatTraffic = formatMetric;
 
                       // Format auction site name for display
                       const formatAuctionSite = (site: string | null | undefined): { label: string; color: string } => {
@@ -1029,11 +1125,11 @@ const DomainsTablePage: React.FC = () => {
                             {auction.current_bid ? `$${auction.current_bid.toLocaleString()}` : '—'}
                           </TableCell>
 
-                          {/* SEO Metrics (DR, LINKS, Rank, Spam Score, Referring Domains) */}
+                          {/* SEO Metrics (DR, LINKS, Rank, Spam Score, Traffic, Referring Domains) */}
                           <TableCell>
                             {(() => {
                               // Check if we have any data at all
-                              const hasAnyData = dr !== null || backlinks !== null || rank !== null || spamScore !== null || referringDomains !== null;
+                              const hasAnyData = dr !== null || backlinks !== null || rank !== null || spamScore !== null || referringDomains !== null || traffic !== null;
 
                               if (!hasAnyData) {
                                 return <Box sx={{ minHeight: '40px' }} />; // Blank space when no data
@@ -1078,6 +1174,9 @@ const DomainsTablePage: React.FC = () => {
                               }
                               if (backlinks !== null && backlinks !== undefined) {
                                 metricsToShow.push(<MetricItem key="links" label="LINKS" value={formatBacklinks(backlinks)} />);
+                              }
+                              if (traffic !== null && traffic !== undefined) {
+                                metricsToShow.push(<MetricItem key="traffic" label="TRAFFIC" value={formatTraffic(typeof traffic === 'number' ? traffic : parseFloat(traffic))} />);
                               }
                               if (rank !== null && rank !== undefined) {
                                 metricsToShow.push(<MetricItem key="rank" label="RANK" value={rank} />);
@@ -1223,6 +1322,8 @@ const DomainsTablePage: React.FC = () => {
             scored: filters.scored,
             minScore: filters.minScore,
             maxScore: filters.maxScore,
+            auctionSites: filters.auctionSites,
+            showExpired: filters.showExpired,
           }}
         />
 

@@ -289,6 +289,67 @@ class DataForSEOService:
             logger.error("Failed to get DataForSEO traffic analytics history", domain=domain, error=str(e))
             return None
 
+    async def fetch_bulk_traffic_estimation_live(self, domains: List[str]) -> Optional[List[Dict[str, Any]]]:
+        """
+        Fetch bulk traffic estimation using the Live endpoint (DataForSEO Labs).
+        Blocks until results are returned (usually < 1s).
+        """
+        try:
+            credentials = await self._get_credentials()
+            if not credentials:
+                logger.error("DataForSEO credentials not available")
+                return None
+            
+            async with httpx.AsyncClient(timeout=60.0) as client: # Increased timeout for bulk live
+                url = f"{credentials['api_url']}/dataforseo_labs/google/bulk_traffic_estimation/live"
+                
+                # Prepare single task with list of targets
+                payload = [{
+                    "targets": domains,
+                    "location_code": 2840,
+                    "language_name": "English"
+                }]
+                    
+                logger.info("Fetching DataForSEO bulk traffic estimation (Live)", url=url, domain_count=len(domains))
+                
+                response = await client.post(
+                    url,
+                    auth=(credentials['login'], credentials['password']),
+                    json=payload
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status_code") == 20000 and data.get("tasks"):
+                        task_data = data["tasks"][0]
+                        
+                        # Check results
+                        if task_data.get("result") and len(task_data["result"]) > 0:
+                            # The first result object contains the list of items
+                            first_result = task_data["result"][0]
+                            if first_result.get("items"):
+                                items = first_result["items"]
+                                logger.info("DataForSEO bulk traffic retrieved successfully", count=len(items))
+                                return items
+                            else:
+                                logger.warning("DataForSEO task finished but no items found", 
+                                             status_msg=task_data.get("status_message"))
+                                return None
+                        else:
+                             # Check for specific error in task
+                             logger.warning("DataForSEO task returned no result", 
+                                          status_msg=task_data.get("status_message"))
+                             return None
+                             
+                logger.error("DataForSEO bulk traffic request failed", 
+                             status=response.status_code, 
+                             response=response.text[:200])
+                return None
+                
+        except Exception as e:
+            logger.error("Failed to fetch DataForSEO bulk traffic", error=str(e))
+            return None
+
     def parse_domain_metrics(self, data: Dict[str, Any]) -> DataForSEOMetrics:
         """Parse DataForSEO data into domain metrics"""
         try:

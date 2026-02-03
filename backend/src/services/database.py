@@ -1457,6 +1457,11 @@ class DatabaseService:
                     query = query.eq('preferred', filters['preferred'])
                 if filters.get('auction_site'):
                     query = query.eq('auction_site', filters['auction_site'])
+                if filters.get('auction_sites'):
+                    # Filter by multiple auction sites
+                    sites = filters['auction_sites']
+                    if isinstance(sites, list) and len(sites) > 0:
+                        query = query.in_('auction_site', sites)
                 if filters.get('tld'):
                     # Filter by TLD: domain should end with the specified TLD
                     # TLD comes in format like ".com" or "com", handle both
@@ -1491,6 +1496,14 @@ class DatabaseService:
                     if isinstance(exp_to, str) and len(exp_to) == 10:  # Simple check for YYYY-MM-DD
                         exp_to = f"{exp_to}T23:59:59"
                     query = query.lte('expiration_date', exp_to)
+                
+                # Check for show_expired flag
+                show_expired = filters.get('show_expired', False)
+                if not show_expired and not filters.get('expiration_from_date'):
+                    # Default: only show auctions that haven't expired yet
+                    # Use current UTC time
+                    now = datetime.now(timezone.utc).isoformat()
+                    query = query.gte('expiration_date', now)
                 if filters.get('has_statistics') is not None:
                     query = query.eq('has_statistics', filters['has_statistics'])
                 if filters.get('scored') is not None:
@@ -1508,12 +1521,12 @@ class DatabaseService:
                     query = query.lte('score', filters['max_score'])
             
             # Apply sorting
-            valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain']
+            valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score', 'domain_rating', 'organic_traffic']
             if sort_by not in valid_sort_fields:
                 sort_by = 'expiration_date'
             
             if order == 'desc':
-                query = query.order(sort_by, desc=True)
+                query = query.order(sort_by, desc=True, nullsfirst=False) # python client uses nullsfirst=False for NULLS LAST
             else:
                 query = query.order(sort_by, desc=False)
             
@@ -1630,7 +1643,7 @@ class DatabaseService:
                     query = query.lte('score', filters['max_score'])
             
             # Apply sorting
-            valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain']
+            valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score']
             if sort_by not in valid_sort_fields:
                 sort_by = 'expiration_date'
             
@@ -1699,12 +1712,45 @@ class DatabaseService:
             updated_stats = current_stats.copy()
             updated_stats.update(page_statistics)
             
-            # Update the record
-            update_response = self.client.table('auctions').update({
+            # Prepare update data with top-level columns for sorting
+            update_data = {
                 'page_statistics': updated_stats,
                 'has_statistics': True,
                 'updated_at': datetime.now(timezone.utc).isoformat()
-            }).eq('domain', domain).execute()
+            }
+            
+            # Extract metrics to top-level columns if present
+            # Rank
+            if 'rank' in updated_stats and updated_stats['rank'] is not None:
+                update_data['ranking'] = updated_stats['rank']
+                
+            # Backlinks
+            if 'backlinks' in updated_stats and updated_stats['backlinks'] is not None:
+                update_data['backlinks'] = updated_stats['backlinks']
+                
+            # Referring Domains
+            if 'referring_domains' in updated_stats and updated_stats['referring_domains'] is not None:
+                update_data['referring_domains'] = updated_stats['referring_domains']
+                
+            # Spam Score (map spam_score or backlinks_spam_score)
+            spam_score = updated_stats.get('backlinks_spam_score') or updated_stats.get('spam_score')
+            if spam_score is not None:
+                update_data['backlinks_spam_score'] = spam_score
+            
+            # Domain Rating (DR)
+            # Check for various common keys for DR, fallback to 'rank' as proxy for DR/Authority
+            domain_rating = updated_stats.get('domain_rating') or updated_stats.get('dr') or updated_stats.get('rank')
+            if domain_rating is not None:
+                update_data['domain_rating'] = domain_rating
+                
+            # Organic Traffic
+            # Check for various common keys for Traffic
+            organic_traffic = updated_stats.get('organic_traffic') or updated_stats.get('etv') or updated_stats.get('traffic')
+            if organic_traffic is not None:
+                update_data['organic_traffic'] = organic_traffic
+
+            # Update the record
+            update_response = self.client.table('auctions').update(update_data).eq('domain', domain).execute()
             
             if update_response.data and len(update_response.data) > 0:
                 return True
@@ -1713,6 +1759,13 @@ class DatabaseService:
         except Exception as e:
             logger.error("Error updating auction page statistics", domain=domain, error=str(e))
             return False
+
+    async def update_auction_traffic_data(self, domain: str, traffic_data: Dict[str, Any]) -> bool:
+        """
+        Update traffic data for an auction
+        Aliased to update_auction_page_statistics to merge into the same JSONB column
+        """
+        return await self.update_auction_page_statistics(domain, traffic_data)
 
     async def get_unique_tlds(self) -> List[str]:
         """

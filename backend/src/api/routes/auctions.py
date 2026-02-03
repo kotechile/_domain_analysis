@@ -15,7 +15,8 @@ from services.database import get_database
 from services.n8n_service import N8NService
 from services.auction_scoring_service import AuctionScoringService
 from services.domain_scoring_service import DomainScoringService
-from services.external_apis import WaybackMachineService
+from services.domain_scoring_service import DomainScoringService
+from services.external_apis import WaybackMachineService, DataForSEOService
 from models.auctions import AuctionReportItem
 from models.domain_analysis import NamecheapDomain
 
@@ -2234,6 +2235,54 @@ async def trigger_bulk_backlinks_analysis(
         
         raise HTTPException(status_code=500, detail=f"Failed to trigger bulk backlinks analysis: {error_msg}")
 
+        raise HTTPException(status_code=500, detail=f"Failed to trigger bulk backlinks analysis: {error_msg}")
+
+
+async def process_traffic_metrics_background_task(domains: list[str]):
+    """
+    Background task to fetch and save traffic metrics using DataForSEO Live API.
+    """
+    try:
+        from services.external_apis import DataForSEOService
+        from services.database import get_database
+        
+        service = DataForSEOService()
+        db = get_database()
+        
+        logger.info("Starting background processing for traffic data", domains=len(domains))
+        
+        # Call Live API (this blocks this task but not the main thread)
+        items = await service.fetch_bulk_traffic_estimation_live(domains)
+        
+        if items:
+            logger.info("Traffic data retrieved", count=len(items))
+            
+            success_count = 0
+            for item in items:
+                # "item" structure based on verification:
+                # { "se_type": "google", "target": "google.com", "metrics": { "organic": { "etv": ..., "count": ... } } }
+                target = item.get('target')
+                metrics = item.get('metrics', {})
+                
+                if target and metrics:
+                    traffic_data = {
+                        "organic_traffic": metrics.get('organic', {}).get('etv', 0),
+                        "etv": metrics.get('organic', {}).get('etv', 0),
+                        "organic_keywords": metrics.get('organic', {}).get('count', 0),
+                        "traffic_timestamp": datetime.now(timezone.utc).isoformat()
+                    }
+                    
+                    # Update DB
+                    await db.update_auction_traffic_data(target, traffic_data)
+                    success_count += 1
+            
+            logger.info("Traffic data processing completed", success_count=success_count)
+        else:
+            logger.warning("No traffic data items returned")
+        
+    except Exception as e:
+        logger.error("Background traffic processing failed", error=str(e))
+
 
 @router.post("/auctions/trigger-bulk-all-metrics")
 async def trigger_bulk_all_metrics_analysis(
@@ -2252,7 +2301,8 @@ async def trigger_bulk_all_metrics_analysis(
     expiration_to_date: Optional[str] = Query(None, description="Filter by expiration date to (YYYY-MM-DD)"),
     sort_by: str = Query("expiration_date", description="Field to sort by"),
     sort_order: str = Query("asc", description="Sort order (asc, desc)"),
-    limit: int = Query(1000, description="Maximum number of domains to trigger (1000 per analysis type)", ge=1, le=1000)
+    limit: int = Query(1000, description="Maximum number of domains to trigger (1000 per analysis type)", ge=1, le=1000),
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """
     Trigger all four DataForSEO analyses (traffic, rank, backlinks, spam_score) for domains matching current filters
@@ -2340,19 +2390,20 @@ async def trigger_bulk_all_metrics_analysis(
         
         # 1. Traffic data
         try:
-            logger.info("Triggering traffic data analysis", domains=len(domain_names))
-            n8n_result = await n8n_service.trigger_bulk_traffic_batch_workflow(domain_names)
-            if n8n_result:
-                results["traffic_data"] = {
-                    "triggered": len(domain_names),
-                    "success": True,
-                    "request_id": n8n_result.get('request_id')
-                }
-                logger.info("Triggered traffic data analysis", 
-                           triggered=len(domain_names),
-                           request_id=n8n_result.get('request_id'))
-            else:
-                results["traffic_data"]["error"] = "Failed to trigger N8N workflow"
+            logger.info("Triggering traffic data analysis (Direct API)", domains=len(domain_names))
+            
+            # Use Direct DataForSEO API (Background Processing)
+            # Add background task to fetch and process data
+            background_tasks.add_task(process_traffic_metrics_background_task, domain_names)
+            
+            results["traffic_data"] = {
+                "triggered": len(domain_names),
+                "success": True,
+                "message": "Background processing started"
+            }
+            
+            logger.info("Triggered traffic data background task", triggered=len(domain_names))
+            
         except Exception as e:
             error_msg = str(e)
             logger.error("Failed to trigger traffic data analysis", error=error_msg)

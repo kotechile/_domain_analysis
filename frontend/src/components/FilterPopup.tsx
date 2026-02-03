@@ -32,9 +32,16 @@ export interface FilterValues {
   scored?: boolean;
   minScore?: number;
   maxScore?: number;
+  auctionSites?: string[];
+  showExpired?: boolean;
 }
 
 const COMMON_TLDS = ['.com', '.io', '.ai', '.org', '.net', '.co', '.app', '.dev', '.tech', '.xyz'];
+const AUCTION_SITES = [
+  { id: 'godaddy', label: 'GoDaddy' },
+  { id: 'namecheap', label: 'Namecheap' },
+  { id: 'namesilo', label: 'NameSilo' },
+];
 
 const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initialFilters }) => {
   const api = useApi();
@@ -45,6 +52,8 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
   const [scored, setScored] = useState<boolean>(initialFilters?.scored || false);
   const [minScore, setMinScore] = useState<string>(initialFilters?.minScore?.toString() || '');
   const [maxScore, setMaxScore] = useState<string>(initialFilters?.maxScore?.toString() || '');
+  const [selectedAuctionSites, setSelectedAuctionSites] = useState<string[]>(initialFilters?.auctionSites || []);
+  const [showExpired, setShowExpired] = useState<boolean>(initialFilters?.showExpired || false);
 
   useEffect(() => {
     if (initialFilters) {
@@ -54,6 +63,8 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
       setScored(initialFilters.scored || false);
       setMinScore(initialFilters.minScore?.toString() || '');
       setMaxScore(initialFilters.maxScore?.toString() || '');
+      setSelectedAuctionSites(initialFilters.auctionSites || []);
+      setShowExpired(initialFilters.showExpired || false);
     }
   }, [initialFilters]);
 
@@ -67,6 +78,18 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
 
   const handleAllTldsToggle = () => {
     setSelectedTlds([]);
+  };
+
+  const handleAuctionSiteToggle = (siteId: string) => {
+    setSelectedAuctionSites(prev =>
+      prev.includes(siteId)
+        ? prev.filter(s => s !== siteId)
+        : [...prev, siteId]
+    );
+  };
+
+  const handleAllAuctionSitesToggle = () => {
+    setSelectedAuctionSites([]);
   };
 
   const handleTodayClick = () => {
@@ -100,6 +123,8 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
       scored: scored || undefined,
       minScore: minScore ? parseFloat(minScore) : undefined,
       maxScore: maxScore ? parseFloat(maxScore) : undefined,
+      auctionSites: selectedAuctionSites.length > 0 ? selectedAuctionSites : undefined,
+      showExpired: showExpired || undefined,
     };
     onApply(filters);
     onClose();
@@ -112,6 +137,8 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
     setScored(false);
     setMinScore('');
     setMaxScore('');
+    setSelectedAuctionSites([]);
+    setShowExpired(false);
   };
 
   return (
@@ -154,6 +181,61 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
 
       <DialogContent sx={{ mt: 2 }}>
         <Stack spacing={4}>
+          {/* Auction Site Section */}
+          <Box>
+            <Typography variant="subtitle1" sx={{ color: '#FFFFFF', mb: 2, fontWeight: 600 }}>
+              Auction Sites
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={selectedAuctionSites.length === 0}
+                    onChange={handleAllAuctionSitesToggle}
+                    sx={{
+                      color: '#FFFFFF',
+                      '&.Mui-checked': {
+                        color: '#1976d2',
+                      },
+                    }}
+                  />
+                }
+                label="All"
+                sx={{
+                  color: '#FFFFFF',
+                  fontWeight: 600,
+                  '& .MuiFormControlLabel-label': {
+                    fontSize: '0.875rem',
+                  },
+                }}
+              />
+              {AUCTION_SITES.map((site) => (
+                <FormControlLabel
+                  key={site.id}
+                  control={
+                    <Checkbox
+                      checked={selectedAuctionSites.includes(site.id)}
+                      onChange={() => handleAuctionSiteToggle(site.id)}
+                      sx={{
+                        color: '#FFFFFF',
+                        '&.Mui-checked': {
+                          color: '#1976d2',
+                        },
+                      }}
+                    />
+                  }
+                  label={site.label}
+                  sx={{
+                    color: '#FFFFFF',
+                    '& .MuiFormControlLabel-label': {
+                      fontSize: '0.875rem',
+                    },
+                  }}
+                />
+              ))}
+            </Box>
+          </Box>
+
           {/* TLDs Section */}
           <Box>
             <Typography variant="subtitle1" sx={{ color: '#FFFFFF', mb: 2, fontWeight: 600 }}>
@@ -335,6 +417,28 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                 Tomorrow
               </Button>
             </Box>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={showExpired}
+                  onChange={(e) => setShowExpired(e.target.checked)}
+                  sx={{
+                    color: '#FFFFFF',
+                    '&.Mui-checked': {
+                      color: '#1976d2',
+                    },
+                  }}
+                />
+              }
+              label="Show Expired Auctions"
+              sx={{
+                mt: 1,
+                color: '#FFFFFF',
+                '& .MuiFormControlLabel-label': {
+                  fontSize: '0.875rem',
+                },
+              }}
+            />
           </Box>
 
           {/* Score Section */}
