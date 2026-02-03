@@ -1497,10 +1497,8 @@ class DatabaseService:
                         exp_to = f"{exp_to}T23:59:59"
                     query = query.lte('expiration_date', exp_to)
                 
-                # Check for show_expired flag
-                show_expired = filters.get('show_expired', False)
-                if not show_expired and not filters.get('expiration_from_date'):
-                    # Default: only show auctions that haven't expired yet
+                # Default: only show auctions that haven't expired yet
+                if not filters.get('expiration_from_date'):
                     # Use current UTC time
                     now = datetime.now(timezone.utc).isoformat()
                     query = query.gte('expiration_date', now)

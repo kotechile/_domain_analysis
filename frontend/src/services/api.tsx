@@ -1127,6 +1127,7 @@ class ApiService {
     maxScore?: number,
     expirationFromDate?: string,
     expirationToDate?: string,
+    auctionSites?: string[],
     sortBy: string = 'expiration_date',
     order: string = 'asc',
     limit: number = 50, // Reduced default to prevent timeouts with large JSONB responses
@@ -1158,7 +1159,9 @@ class ApiService {
       params.append('max_score', maxScore.toString());
     }
 
-    if (auctionSite) {
+    if (auctionSites && auctionSites.length > 0) {
+      params.append('auction_sites', auctionSites.join(','));
+    } else if (auctionSite) {
       params.append('auction_site', auctionSite);
     }
 

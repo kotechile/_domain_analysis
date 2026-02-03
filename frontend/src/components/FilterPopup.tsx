@@ -33,7 +33,6 @@ export interface FilterValues {
   minScore?: number;
   maxScore?: number;
   auctionSites?: string[];
-  showExpired?: boolean;
 }
 
 const COMMON_TLDS = ['.com', '.io', '.ai', '.org', '.net', '.co', '.app', '.dev', '.tech', '.xyz'];
@@ -53,7 +52,6 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
   const [minScore, setMinScore] = useState<string>(initialFilters?.minScore?.toString() || '');
   const [maxScore, setMaxScore] = useState<string>(initialFilters?.maxScore?.toString() || '');
   const [selectedAuctionSites, setSelectedAuctionSites] = useState<string[]>(initialFilters?.auctionSites || []);
-  const [showExpired, setShowExpired] = useState<boolean>(initialFilters?.showExpired || false);
 
   useEffect(() => {
     if (initialFilters) {
@@ -64,7 +62,6 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
       setMinScore(initialFilters.minScore?.toString() || '');
       setMaxScore(initialFilters.maxScore?.toString() || '');
       setSelectedAuctionSites(initialFilters.auctionSites || []);
-      setShowExpired(initialFilters.showExpired || false);
     }
   }, [initialFilters]);
 
@@ -124,7 +121,6 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
       minScore: minScore ? parseFloat(minScore) : undefined,
       maxScore: maxScore ? parseFloat(maxScore) : undefined,
       auctionSites: selectedAuctionSites.length > 0 ? selectedAuctionSites : undefined,
-      showExpired: showExpired || undefined,
     };
     onApply(filters);
     onClose();
@@ -138,7 +134,6 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
     setMinScore('');
     setMaxScore('');
     setSelectedAuctionSites([]);
-    setShowExpired(false);
   };
 
   return (
@@ -417,29 +412,8 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                 Tomorrow
               </Button>
             </Box>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={showExpired}
-                  onChange={(e) => setShowExpired(e.target.checked)}
-                  sx={{
-                    color: '#FFFFFF',
-                    '&.Mui-checked': {
-                      color: '#1976d2',
-                    },
-                  }}
-                />
-              }
-              label="Show Expired Auctions"
-              sx={{
-                mt: 1,
-                color: '#FFFFFF',
-                '& .MuiFormControlLabel-label': {
-                  fontSize: '0.875rem',
-                },
-              }}
-            />
           </Box>
+
 
           {/* Score Section */}
           <Box>
@@ -594,7 +568,7 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
           Apply
         </Button>
       </DialogActions>
-    </Dialog>
+    </Dialog >
   );
 };
 

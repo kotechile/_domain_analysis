@@ -159,7 +159,6 @@ const DomainsTablePage: React.FC = () => {
     expirationFromDate?: string;
     expirationToDate?: string;
     auctionSites?: string[];
-    showExpired?: boolean;
     sortBy?: string;
     sortOrder?: string;
   }>({});
@@ -190,7 +189,6 @@ const DomainsTablePage: React.FC = () => {
         expirationFromDate: filterData.filter.expiration_from_date ?? undefined,
         expirationToDate: filterData.filter.expiration_to_date ?? undefined,
         auctionSites: filterData.filter.auction_sites ?? undefined,
-        showExpired: filterData.filter.show_expired ?? undefined,
         sortBy: filterData.filter.sort_by || 'expiration_date',
         sortOrder: filterData.filter.sort_order || 'asc',
       });
@@ -252,6 +250,7 @@ const DomainsTablePage: React.FC = () => {
         filters.maxScore,
         expirationFromDate,
         expirationToDate,
+        filters.auctionSites,
         filters.sortBy || 'expiration_date',
         filters.sortOrder || 'asc',
         rowsPerPage,
@@ -512,7 +511,6 @@ const DomainsTablePage: React.FC = () => {
       minScore: filterValues.minScore,
       maxScore: filterValues.maxScore,
       auctionSites: filterValues.auctionSites,
-      showExpired: filterValues.showExpired,
       // offeringType is now controlled by radio buttons in the header, not from FilterPopup
     };
 
@@ -1323,7 +1321,6 @@ const DomainsTablePage: React.FC = () => {
             minScore: filters.minScore,
             maxScore: filters.maxScore,
             auctionSites: filters.auctionSites,
-            showExpired: filters.showExpired,
           }}
         />
 

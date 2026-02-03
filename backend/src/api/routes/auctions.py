@@ -1299,14 +1299,8 @@ async def process_existing_upload(
     try:
         job_id = str(uuid.uuid4())
         
-        # Create job entry
+        # Start background processing directly (job creation is handled in the background task)
         db = get_database()
-        await db.create_csv_upload_job(
-            job_id=job_id,
-            filename=request.filename,
-            auction_site=request.auction_site,
-            offering_type=request.offering_type
-        )
         
         # Start background processing directly
         background_tasks.add_task(
@@ -1671,10 +1665,7 @@ async def process_from_storage(
         if not (is_json or is_csv):
             raise HTTPException(status_code=400, detail="File must be CSV or JSON")
         
-        # Generate job ID
-        job_id = str(uuid.uuid4())
-        
-        # Generate job ID
+        # Generate unique job ID
         job_id = str(uuid.uuid4())
         
         # Create job in background to return immediately
@@ -2514,6 +2505,7 @@ async def get_auctions_report(
     max_score: Optional[float] = Query(None, description="Maximum score", ge=0, le=100),
     expiration_from_date: Optional[str] = Query(None, description="Filter by expiration date from (YYYY-MM-DD)"),
     expiration_to_date: Optional[str] = Query(None, description="Filter by expiration date to (YYYY-MM-DD)"),
+    auction_sites: Optional[str] = Query(None, description="Comma-separated list of auction sites (e.g., 'godaddy,namecheap')"),
     sort_by: str = Query("expiration_date", description="Field to sort by"),
     order: str = Query("asc", description="Sort order (asc, desc)"),
     limit: int = Query(50, description="Maximum number of records (reduced default to prevent timeouts)", ge=1, le=100),
@@ -2530,6 +2522,8 @@ async def get_auctions_report(
         filters = {}
         if preferred is not None:
             filters['preferred'] = preferred
+        if auction_sites:
+            filters['auction_sites'] = [s.strip().lower() for s in auction_sites.split(',') if s.strip()]
         if auction_site:
             filters['auction_site'] = auction_site
         if offering_type:
