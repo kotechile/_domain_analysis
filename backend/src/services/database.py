@@ -1671,6 +1671,49 @@ class DatabaseService:
             logger.error("Failed to get auctions missing metrics", error=str(e))
             raise
     
+    async def update_auction_page_statistics(self, domain: str, page_statistics: Dict[str, Any]) -> bool:
+        """
+        Update page_statistics for an auction
+        
+        Args:
+            domain: Domain name
+            page_statistics: Statistics data to update
+            
+        Returns:
+            True if updated, False if domain not found
+        """
+        try:
+            if not self.client:
+                self._initialize_client()
+                
+            # First fetch existing statistics to merge
+            response = self.client.table('auctions').select('page_statistics').eq('domain', domain).execute()
+            
+            if not response.data or len(response.data) == 0:
+                # logger.warning("Domain not found for statistics update", domain=domain)
+                return False
+                
+            current_stats = response.data[0].get('page_statistics') or {}
+            
+            # Merge new stats into existing
+            updated_stats = current_stats.copy()
+            updated_stats.update(page_statistics)
+            
+            # Update the record
+            update_response = self.client.table('auctions').update({
+                'page_statistics': updated_stats,
+                'has_statistics': True,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }).eq('domain', domain).execute()
+            
+            if update_response.data and len(update_response.data) > 0:
+                return True
+            return False
+            
+        except Exception as e:
+            logger.error("Error updating auction page statistics", domain=domain, error=str(e))
+            return False
+
     async def get_unique_tlds(self) -> List[str]:
         """
         Get all unique TLDs from the auctions table
