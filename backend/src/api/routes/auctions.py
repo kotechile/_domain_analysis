@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import structlog
 import uuid
 import asyncio
+import anyio
 
 from services.auctions_service import AuctionsService
 from services.database import get_database
@@ -40,7 +41,7 @@ async def _clear_staging_chunked(db, auction_site: str, job_id: str):
         # Use small sub-batches for IN filter to avoid URL length limit
         for j in range(0, len(domains_to_del), 100):
             sub_domains = domains_to_del[j:j + 100]
-            db.client.table('auctions_staging').delete().eq('auction_site', auction_site).in_('domain', sub_domains).execute()
+            db.client.table('auctions_staging').delete().eq('job_id', job_id).in_('domain', sub_domains).execute()
         
         total_cleared += len(domains_to_del)
         await asyncio.sleep(0.01)
@@ -60,7 +61,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
     
     while True:
         # 1. Fetch a batch of records from staging
-        result = db.client.table('auctions_staging').select('*').eq('auction_site', auction_site).limit(5000).execute()
+        result = db.client.table('auctions_staging').select('*').eq('job_id', job_id).limit(5000).execute()
         records = result.data
         
         if not records:
@@ -97,7 +98,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
             sub_batch_size = 100 # Safe size for URLs
             for j in range(0, len(domains), sub_batch_size):
                 sub_domains = domains[j:j + sub_batch_size]
-                db.client.table('auctions_staging').delete().eq('auction_site', auction_site).in_('domain', sub_domains).execute()
+                db.client.table('auctions_staging').delete().eq('job_id', job_id).in_('domain', sub_domains).execute()
             
             total_merged += len(records)
             logger.info("Merged batch successfully", job_id=job_id, site=auction_site, count=len(records), total=total_merged)
@@ -374,7 +375,8 @@ async def process_csv_upload_async(
                     'deletion_flag': deletion_flag,
                     # Add offer_type: for NameSilo, extracted from each record's Type field
                     # For other sites, from filename detection
-                    'offer_type': record_offer_type
+                    'offer_type': record_offer_type,
+                    'job_id': job_id
                 }
                 
                 if scored.filter_status == 'PASS':
@@ -390,6 +392,10 @@ async def process_csv_upload_async(
                 skipped_count += 1
                 continue
             
+            # Keep event loop responsive for health checks
+            if (idx + 1) % 500 == 0:
+                await asyncio.sleep(0.01)
+
             # Update progress more frequently for large files (every 50 records, or every 1000 for very large)
             update_interval = 50 if total_records < 100000 else 1000
             if (idx + 1) % update_interval == 0:
@@ -491,7 +497,7 @@ async def process_csv_upload_async(
                       auction_site=auction_site)
             
             try:
-                # Use chunked delete helper
+                # Use chunked delete helper with job_id isolation
                 await _clear_staging_chunked(db, auction_site, job_id)
                     
             except Exception as e:
@@ -1077,7 +1083,8 @@ async def process_json_upload_async(
                     'has_statistics': False,
                     'score': score_value,
                     'ranking': None,
-                    'offer_type': record_offer_type
+                    'offer_type': record_offer_type,
+                    'job_id': job_id
                 }
                 
                 if scored.filter_status == 'PASS':
@@ -1090,7 +1097,11 @@ async def process_json_upload_async(
                 skipped_count += 1
                 continue
             
-            if (idx + 1) % 100 == 0:
+            # Keep event loop responsive for health checks
+            if (idx + 1) % 500 == 0:
+                await asyncio.sleep(0.01)
+                
+            if (idx + 1) % 1000 == 0:
                 await db.update_csv_upload_progress(
                     job_id=job_id,
                     processed_records=idx + 1,
@@ -1144,6 +1155,8 @@ async def process_json_upload_async(
                  batch = auction_dicts[i:i + batch_size]
                  staging_batch = [{k: v for k, v in r.items() if k != 'ranking'} for r in batch]
                  db.client.table('auctions_staging').insert(staging_batch).execute()
+                 # Small sleep to yield control
+                 await asyncio.sleep(0.01)
              
              # Merge using robust Python-based chunked merge
              merged_count = await _perform_python_chunked_merge(db, auction_site, job_id)
