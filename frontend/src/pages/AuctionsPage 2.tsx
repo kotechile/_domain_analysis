@@ -132,6 +132,7 @@ const AuctionsPage: React.FC = () => {
         filters.maxScore,
         filters.expirationFromDate,
         filters.expirationToDate,
+        undefined, // auctionSites
         sortBy,
         sortOrder,
         pageSize,
@@ -174,7 +175,7 @@ const AuctionsPage: React.FC = () => {
             clearInterval(progressPollIntervalRef.current);
             progressPollIntervalRef.current = null;
           }
-          
+
           if (progress.status === 'completed') {
             setSelectedFile(null);
             setUploadJobId(null);
@@ -237,10 +238,10 @@ const AuctionsPage: React.FC = () => {
       const { batchSize = 10000, continuous = true } = options;
       setIsScoring(true);
       setScoringProgress({ batches_processed: 0, total_processed: 0, current_batch: 0 });
-      
+
       let batchNum = 0;
       let totalProcessed = 0;
-      
+
       try {
         while (true) {
           let stats;
@@ -252,16 +253,16 @@ const AuctionsPage: React.FC = () => {
           if (stats.unprocessed_count === 0) {
             break;
           }
-          
+
           if (!continuous && batchNum > 0) {
             break;
           }
-          
+
           batchNum++;
           setScoringProgress(prev => prev ? { ...prev, current_batch: batchNum } : null);
-          
+
           const result = await api.processScoringBatch(batchSize, undefined, false);
-          
+
           if (result.success) {
             totalProcessed += result.processed_count;
             setScoringProgress(prev => prev ? {
@@ -269,7 +270,7 @@ const AuctionsPage: React.FC = () => {
               batches_processed: batchNum,
               total_processed: totalProcessed
             } : null);
-            
+
             try {
               await fetchScoringStats();
             } catch (error) {
@@ -279,20 +280,20 @@ const AuctionsPage: React.FC = () => {
             throw new Error(result.error || 'Scoring batch failed');
           }
         }
-        
+
         try {
           await api.recalculateRankings();
         } catch (error) {
           console.warn('Ranking recalculation failed (non-critical):', error);
         }
-        
+
         try {
           await fetchScoringStats();
         } catch (error) {
           // Silently handle - stats fetch is non-critical
         }
         queryClient.invalidateQueries({ queryKey: ['auctions-report'] });
-        
+
         return { success: true, batches_processed: batchNum, total_processed: totalProcessed };
       } finally {
         setIsScoring(false);
@@ -358,7 +359,7 @@ const AuctionsPage: React.FC = () => {
     maxScore?: number;
   }) => {
     const cleanedFilters: typeof newFilters = {};
-    
+
     if (newFilters.preferred !== undefined) cleanedFilters.preferred = newFilters.preferred;
     if (newFilters.auctionSite !== undefined && newFilters.auctionSite !== '') cleanedFilters.auctionSite = newFilters.auctionSite;
     if (newFilters.tld !== undefined && newFilters.tld !== '') cleanedFilters.tld = newFilters.tld;
@@ -368,7 +369,7 @@ const AuctionsPage: React.FC = () => {
     if (newFilters.maxRank !== undefined && newFilters.maxRank !== null && !isNaN(newFilters.maxRank)) cleanedFilters.maxRank = newFilters.maxRank;
     if (newFilters.minScore !== undefined && newFilters.minScore !== null && !isNaN(newFilters.minScore)) cleanedFilters.minScore = newFilters.minScore;
     if (newFilters.maxScore !== undefined && newFilters.maxScore !== null && !isNaN(newFilters.maxScore)) cleanedFilters.maxScore = newFilters.maxScore;
-    
+
     setFilters(cleanedFilters);
     setPage(0);
   };
@@ -388,9 +389,9 @@ const AuctionsPage: React.FC = () => {
       <Container maxWidth="xl" sx={{ py: { xs: 3, sm: 4 } }}>
         {/* Page Header */}
         <Box sx={{ mb: 4 }}>
-          <Typography 
-            variant="h4" 
-            component="h1" 
+          <Typography
+            variant="h4"
+            component="h1"
             gutterBottom
             sx={{ fontWeight: 700 }}
           >
@@ -403,8 +404,8 @@ const AuctionsPage: React.FC = () => {
 
         {/* Tabs */}
         <Card sx={{ mb: 3 }}>
-          <Tabs 
-            value={tabValue} 
+          <Tabs
+            value={tabValue}
             onChange={handleTabChange}
             sx={{
               borderBottom: 1,
@@ -412,25 +413,25 @@ const AuctionsPage: React.FC = () => {
               px: 2,
             }}
           >
-            <Tab 
-              icon={<InsertDriveFileIcon />} 
+            <Tab
+              icon={<InsertDriveFileIcon />}
               iconPosition="start"
-              label="Load File" 
+              label="Load File"
             />
-            <Tab 
-              icon={<FilterListIcon />} 
+            <Tab
+              icon={<FilterListIcon />}
               iconPosition="start"
-              label="Filter & Search" 
+              label="Filter & Search"
             />
-            <Tab 
-              icon={<AnalyticsIcon />} 
+            <Tab
+              icon={<AnalyticsIcon />}
               iconPosition="start"
-              label="Data For SEO" 
+              label="Data For SEO"
             />
-            <Tab 
-              icon={<TableChartIcon />} 
+            <Tab
+              icon={<TableChartIcon />}
               iconPosition="start"
-              label="Table View" 
+              label="Table View"
             />
           </Tabs>
 
@@ -505,9 +506,9 @@ const AuctionsPage: React.FC = () => {
                               {uploadProgress.progress_percentage.toFixed(1)}%
                             </Typography>
                           </Box>
-                          <LinearProgress 
-                            variant="determinate" 
-                            value={uploadProgress.progress_percentage} 
+                          <LinearProgress
+                            variant="determinate"
+                            value={uploadProgress.progress_percentage}
                             sx={{ height: 8, borderRadius: 4 }}
                           />
                         </Box>
@@ -571,8 +572,8 @@ const AuctionsPage: React.FC = () => {
                       Upload completed successfully!
                     </Typography>
                     <Typography variant="body2" sx={{ mt: 0.5 }}>
-                      Processed: {uploadProgress.processed_records.toLocaleString()} records | 
-                      Inserted: {uploadProgress.inserted_count.toLocaleString()} | 
+                      Processed: {uploadProgress.processed_records.toLocaleString()} records |
+                      Inserted: {uploadProgress.inserted_count.toLocaleString()} |
                       Skipped: {uploadProgress.skipped_count.toLocaleString()}
                     </Typography>
                   </Alert>
@@ -668,9 +669,9 @@ const AuctionsPage: React.FC = () => {
                             {((scoringStats.processed_count / scoringStats.total_count) * 100).toFixed(1)}%
                           </Typography>
                         </Box>
-                        <LinearProgress 
-                          variant="determinate" 
-                          value={(scoringStats.processed_count / scoringStats.total_count) * 100} 
+                        <LinearProgress
+                          variant="determinate"
+                          value={(scoringStats.processed_count / scoringStats.total_count) * 100}
                           sx={{ height: 8, borderRadius: 4 }}
                         />
                       </Box>
@@ -684,7 +685,7 @@ const AuctionsPage: React.FC = () => {
                       Processing Scoring...
                     </Typography>
                     <Typography variant="body2">
-                      Batch {scoringProgress.current_batch} | 
+                      Batch {scoringProgress.current_batch} |
                       Processed: {scoringProgress.total_processed.toLocaleString()} records
                     </Typography>
                   </Alert>

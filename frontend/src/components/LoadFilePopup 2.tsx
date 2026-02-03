@@ -34,7 +34,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
   const api = useApi();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -58,6 +58,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
       undefined, // maxScore
       undefined, // expirationFromDate
       undefined, // expirationToDate
+      undefined, // auctionSites
       'expiration_date', // sortBy
       'asc', // sortOrder
       1, // limit
@@ -81,7 +82,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
     if (open && !jobId) {
       setHasCheckedForActiveJob(false);
     }
-    
+
     // Check immediately on mount, and also when popup opens if no jobId is set
     if (jobId) {
       return; // Already have a jobId, no need to check
@@ -131,7 +132,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
           const activeProgress = await api.getLatestActiveUploadProgress();
           if (activeProgress && activeProgress.job_id) {
             console.log('Found job via latest-active:', activeProgress.job_id, 'Status:', activeProgress.status);
-            
+
             // If job is failed or completed, don't treat it as active - just show the error/result
             if (activeProgress.status === 'failed' || activeProgress.status === 'completed') {
               console.log('Job is completed/failed, not treating as active:', activeProgress.status);
@@ -149,7 +150,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
               // Don't store in localStorage or set jobId - job is done
               return; // Exit early, don't block new uploads
             }
-            
+
             // Only restore jobId if job is actually active (processing, parsing, pending)
             console.log('Found active job via latest-active:', activeProgress.job_id, 'Status:', activeProgress.status);
             setJobId(activeProgress.job_id);
@@ -159,7 +160,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
             } catch (e) {
               console.warn('Failed to store jobId in localStorage:', e);
             }
-            
+
             // Restore filename if available
             if (activeProgress.filename) {
               // Create a minimal File-like object for display purposes
@@ -170,7 +171,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
               } as File;
               setSelectedFile(fileLikeObject);
             }
-            
+
             // Provider is now auto-detected from filename, no need to restore
           } else {
             // No active job found - clear any stale state
@@ -251,18 +252,18 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
 
   // Poll for upload progress using jobId
   // Keep query enabled even after completion to preserve progress data
-  const { 
-    data: progressDataById, 
+  const {
+    data: progressDataById,
     refetch: refetchProgress,
     isLoading: isLoadingProgressById,
-    error: progressErrorById 
+    error: progressErrorById
   } = useQuery({
     queryKey: ['upload-progress', jobId],
     queryFn: async () => {
       console.log('Fetching progress for jobId:', jobId);
       const result = await api.getUploadProgress(jobId!);
       console.log('Progress data received:', result);
-      
+
       // Log error details when job fails
       if (result.status === 'failed' && result.error_message) {
         console.error('CSV Upload Failed - Error Details:', {
@@ -276,7 +277,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
         // Also log the full error message separately so it's not truncated
         console.error('Full Error Message:', result.error_message);
       }
-      
+
       return result;
     },
     enabled: !!jobId && !isPaused,
@@ -330,10 +331,10 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
 
   // Fallback: Poll for latest active upload progress when jobId is not set
   // This runs when popup is open OR when component is mounted (to detect active jobs on page load)
-  const { 
-    data: progressDataByActive, 
+  const {
+    data: progressDataByActive,
     isLoading: isLoadingProgressByActive,
-    error: progressErrorByActive 
+    error: progressErrorByActive
   } = useQuery({
     queryKey: ['upload-progress', 'latest-active'],
     queryFn: async () => {
@@ -361,7 +362,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
             // Don't return the result - return null so progressDataByActive is null and doesn't block uploads
             return null;
           }
-          
+
           console.log('Found active job via fallback query:', result.job_id);
           setHasCheckedForActiveJob(true);
           // Set jobId so we can switch to the jobId-based query
@@ -415,7 +416,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
       // Poll every 2 seconds if we have active data, stop if no data (404 means no active job)
       const data = query.state.data;
       const error = query.state.error as any;
-      
+
       // Stop polling if we got a 404 or timeout (no active job found)
       if (error?.response?.status === 404 || error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) {
         setHasCheckedForActiveJob(true); // Mark as checked so we don't keep polling
@@ -481,25 +482,25 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
   // But for hasActiveJob, we filter out completed/failed
   // Also check for 404 or timeout errors - if we got a 404/timeout, don't use the data even if it exists in cache
   const progressErrorByIdIs404 = progressErrorById && (progressErrorById as any)?.response?.status === 404;
-  const progressErrorByActiveIs404 = progressErrorByActive && 
-    ((progressErrorByActive as any)?.response?.status === 404 || 
-     (progressErrorByActive as any)?.code === 'ECONNABORTED' || 
-     (progressErrorByActive as any)?.message?.includes('timeout'));
-  
+  const progressErrorByActiveIs404 = progressErrorByActive &&
+    ((progressErrorByActive as any)?.response?.status === 404 ||
+      (progressErrorByActive as any)?.code === 'ECONNABORTED' ||
+      (progressErrorByActive as any)?.message?.includes('timeout'));
+
   // For display: show all progress data (including completed/failed) if no errors
-  const progressDataForDisplay = (!progressErrorByIdIs404 && progressDataById) || 
+  const progressDataForDisplay = (!progressErrorByIdIs404 && progressDataById) ||
     (!progressErrorByActiveIs404 && progressDataByActive) || null;
-  
+
   // For hasActiveJob: only consider active jobs (not completed/failed)
-  const progressDataByIdActive = progressDataById && 
+  const progressDataByIdActive = progressDataById &&
     !progressErrorByIdIs404 &&
-    progressDataById.status !== 'completed' && 
-    progressDataById.status !== 'failed' 
+    progressDataById.status !== 'completed' &&
+    progressDataById.status !== 'failed'
     ? progressDataById : null;
-  const progressDataByActiveActive = progressDataByActive && 
+  const progressDataByActiveActive = progressDataByActive &&
     !progressErrorByActiveIs404 &&
-    progressDataByActive.status !== 'completed' && 
-    progressDataByActive.status !== 'failed' 
+    progressDataByActive.status !== 'completed' &&
+    progressDataByActive.status !== 'failed'
     ? progressDataByActive : null;
   const progressData = progressDataByIdActive || progressDataByActiveActive;
   // Use progressDataForDisplay for UI, progressData for hasActiveJob logic
@@ -776,10 +777,10 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
   // Scored records would be domains that have been scored - we can estimate from processed records
   // or query separately. For now, we'll show processed as a proxy.
   const scoredRecords = processedRecords;
-  
+
   // Check if we have data to display (not just loading state)
   const hasProgressData = displayProgressData !== undefined && displayProgressData !== null;
-  
+
   // Check if there's an active job (processing, parsing, or pending)
   // Only consider checking if we haven't checked yet AND popup is open AND we're not already loading
   const isCheckingForActiveJob = !hasCheckedForActiveJob && !jobId && open && !isLoadingProgressByActive;
@@ -797,9 +798,9 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
   // - we got a timeout error (means no active job)
   // - we've checked and found no active job (hasCheckedForActiveJob is true and no jobId)
   // Note: progressData already filters out 404/timeout errors, so if progressData exists, it's valid
-  const progressErrorByActiveIsTimeout = progressErrorByActive && 
-    ((progressErrorByActive as any)?.code === 'ECONNABORTED' || 
-     (progressErrorByActive as any)?.message?.includes('timeout'));
+  const progressErrorByActiveIsTimeout = progressErrorByActive &&
+    ((progressErrorByActive as any)?.code === 'ECONNABORTED' ||
+      (progressErrorByActive as any)?.message?.includes('timeout'));
   // If we've checked for an active job and found none (timeout/404), don't block uploads
   // If we've checked and confirmed no active job (404/timeout), or if we've checked and there's no jobId/data and not loading
   const hasConfirmedNoActiveJob = (hasCheckedForActiveJob && !jobId && (progressErrorByActiveIsTimeout || progressErrorByActiveIs404)) ||
@@ -810,7 +811,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
     (isLoadingProgressById && !!jobId && !progressDataById && !progressErrorByIdIs404 && !progressErrorByActiveIsTimeout) || // Only if we're loading and don't have data yet AND no 404/timeout error
     (!!jobId && !progressData && !progressErrorByIdIs404 && !progressErrorByActiveIsTimeout) // If we have a jobId but no progress data yet (initial upload phase)
   );
-  
+
   // Also disable if we have a selected file that's being processed (additional safety check)
   const isProcessing = Boolean(hasActiveJob || (selectedFile && (uploadMutation.isPending || !!jobId)));
 
@@ -1085,9 +1086,9 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
                     <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>
                       Total Records:
                     </Typography>
-                    <Typography 
-                      sx={{ 
-                        color: !hasProgressData ? 'rgba(255, 255, 255, 0.5)' : '#FFFFFF', 
+                    <Typography
+                      sx={{
+                        color: !hasProgressData ? 'rgba(255, 255, 255, 0.5)' : '#FFFFFF',
                         fontWeight: 600,
                         fontStyle: !hasProgressData ? 'italic' : 'normal'
                       }}
@@ -1099,9 +1100,9 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
                     <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>
                       Processed:
                     </Typography>
-                    <Typography 
-                      sx={{ 
-                        color: !hasProgressData ? 'rgba(76, 175, 80, 0.5)' : '#4CAF50', 
+                    <Typography
+                      sx={{
+                        color: !hasProgressData ? 'rgba(76, 175, 80, 0.5)' : '#4CAF50',
                         fontWeight: 600,
                         fontStyle: !hasProgressData ? 'italic' : 'normal'
                       }}
@@ -1113,9 +1114,9 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
                     <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>
                       Unprocessed:
                     </Typography>
-                    <Typography 
-                      sx={{ 
-                        color: !hasProgressData ? 'rgba(255, 82, 82, 0.5)' : '#FF5252', 
+                    <Typography
+                      sx={{
+                        color: !hasProgressData ? 'rgba(255, 82, 82, 0.5)' : '#FF5252',
                         fontWeight: 600,
                         fontStyle: !hasProgressData ? 'italic' : 'normal'
                       }}
@@ -1127,9 +1128,9 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
                     <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.6)' }}>
                       Scored:
                     </Typography>
-                    <Typography 
-                      sx={{ 
-                        color: !hasProgressData ? 'rgba(102, 204, 255, 0.5)' : '#66CCFF', 
+                    <Typography
+                      sx={{
+                        color: !hasProgressData ? 'rgba(102, 204, 255, 0.5)' : '#66CCFF',
                         fontWeight: 600,
                         fontStyle: !hasProgressData ? 'italic' : 'normal'
                       }}
@@ -1223,7 +1224,7 @@ const LoadFilePopup: React.FC<LoadFilePopupProps> = ({ open, onClose }) => {
             fontSize: '0.875rem',
           }}
         >
-          
+
         </Typography>
         <Button
           onClick={onClose}
