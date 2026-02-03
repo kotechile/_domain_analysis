@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     N8N_WEBHOOK_URL: Optional[str] = None  # For detailed backlinks
     N8N_WEBHOOK_URL_SUMMARY: Optional[str] = None  # For summary backlinks
     N8N_WEBHOOK_URL_BULK: Optional[str] = None  # For bulk page summary
+    N8N_WEBHOOK_URL_BULK_RANK: Optional[str] = None  # For bulk rank
+    N8N_WEBHOOK_URL_BULK_BACKLINKS: Optional[str] = None  # For bulk backlinks
+    N8N_WEBHOOK_URL_BULK_SPAM_SCORE: Optional[str] = None  # For bulk spam score
+    N8N_WEBHOOK_URL_BULK_TRAFFIC: Optional[str] = None  # For bulk traffic
     N8N_WEBHOOK_URL_TRUNCATE: Optional[str] = None  # For truncating tables via SQL
     N8N_WEBHOOK_URL_AUCTION_SCORING: Optional[str] = None  # For auction scoring workflow
     N8N_CALLBACK_URL: Optional[str] = None
