@@ -44,7 +44,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return [\n  {\n    json: {\n      url: 'https://inventory.auctions.godaddy.com/all_listings_ending_tomorrow.json.zip',\n      filename: 'godaddy_tomorrow.json',\n      is_compressed: true\n    }\n  },\n  {\n    json: {\n      url: 'https://inventory.auctions.godaddy.com/all_listings_ending_today.json.zip',\n      filename: 'godaddy_today.json',\n      is_compressed: true\n    }\n  },\n  {\n    json: {\n      url: 'https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales.csv',\n      filename: 'Namecheap_Market_Sales.csv',\n      is_compressed: false\n    }\n  },\n  {\n    json: {\n      url: 'https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales_Buy_Now.csv',\n      filename: 'Namecheap_Market_Sales_Buy_Now.csv',\n      is_compressed: false\n    }\n  },\n  {\n    json: {\n      url: 'https://www.namesilo.com/auctions/api/search?keyword=&keywordLocation=anywhere&type=all&domainAge=any&reserve=any&digits=any&addedOn=all&format=csv',\n      filename: 'namesilo_export.csv',\n      is_compressed: false\n    }\n  }\n];"
+        "jsCode": "return [\n  {\n    json: {\n      url: 'https://inventory.auctions.godaddy.com/all_listings_ending_tomorrow.json.zip',\n      filename: 'godaddy_tomorrow.json',\n      is_compressed: true,\n      auction_site: 'godaddy'\n    }\n  },\n  {\n    json: {\n      url: 'https://inventory.auctions.godaddy.com/all_listings_ending_today.json.zip',\n      filename: 'godaddy_today.json',\n      is_compressed: true,\n      auction_site: 'godaddy'\n    }\n  },\n  {\n    json: {\n      url: 'https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales.csv',\n      filename: 'Namecheap_Market_Sales.csv',\n      is_compressed: false,\n      auction_site: 'namecheap'\n    }\n  },\n  {\n    json: {\n      url: 'https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales_Buy_Now.csv',\n      filename: 'Namecheap_Market_Sales_Buy_Now.csv',\n      is_compressed: false,\n      auction_site: 'namecheap',\n      offering_type: 'buy_now'\n    }\n  },\n  {\n    json: {\n      url: 'https://www.namesilo.com/auctions/api/search?keyword=&keywordLocation=anywhere&type=all&domainAge=any&reserve=any&digits=any&addedOn=all&format=csv',\n      filename: 'namesilo_export.csv',\n      is_compressed: false,\n      auction_site: 'namesilo'\n    }\n  }\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -176,12 +176,20 @@
         "bodyParameters": {
           "parameters": [
             {
-              "name": "job_id",
-              "value": "={{ $('Process One By One').item.json.filename }}"
+              "name": "storage_path",
+              "value": "={{ $('Process One By One').first().json.filename }}"
             },
             {
-              "name": "file_path",
-              "value": "={{ $('Process One By One').item.json.filename }}"
+              "name": "filename",
+              "value": "={{ $('Process One By One').first().json.filename }}"
+            },
+            {
+              "name": "auction_site",
+              "value": "={{ $('Process One By One').first().json.auction_site }}"
+            },
+            {
+              "name": "offering_type",
+              "value": "={{ $('Process One By One').first().json.offering_type || 'auction' }}"
             }
           ]
         },
