@@ -30,8 +30,8 @@ async def _clear_staging_chunked(db, auction_site: str, job_id: str):
     logger.info("Clearing staging table in chunks", job_id=job_id, site=auction_site)
     total_cleared = 0
     while True:
-        # Fetch domains for this site
-        clear_res = db.client.table('auctions_staging').select('domain').eq('auction_site', auction_site).limit(5000).execute()
+        # Fetch domains for this job
+        clear_res = db.client.table('auctions_staging').select('domain').eq('job_id', job_id).limit(5000).execute()
         if not clear_res.data:
             break
         
