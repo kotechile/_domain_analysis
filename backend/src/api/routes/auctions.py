@@ -9,13 +9,11 @@ from datetime import datetime, timezone
 import structlog
 import uuid
 import asyncio
-import anyio
 
 from services.auctions_service import AuctionsService
 from services.database import get_database
 from services.n8n_service import N8NService
 from services.auction_scoring_service import AuctionScoringService
-from services.domain_scoring_service import DomainScoringService
 from services.domain_scoring_service import DomainScoringService
 from services.external_apis import WaybackMachineService, DataForSEOService
 from models.auctions import AuctionReportItem
