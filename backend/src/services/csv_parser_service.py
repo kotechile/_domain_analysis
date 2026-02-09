@@ -263,10 +263,11 @@ class CSVParserService:
             csv_file = content if is_handle else io.StringIO(content)
             
             # Debug: Read first bit of file to ensure it's not empty/garbled
+            sample = "N/A"
             if is_handle and hasattr(csv_file, 'readable') and csv_file.readable():
                 # Peek start of file
                 pos = csv_file.tell()
-                sample = csv_file.read(100)
+                sample = csv_file.read(500) # Read more bytes to see full header
                 csv_file.seek(pos)
                 logger.info("NameSilo CSV File Content Peek", sample=sample, position=pos)
             
@@ -276,8 +277,9 @@ class CSVParserService:
             if reader.fieldnames:
                 logger.info("NameSilo CSV columns detected", columns=list(reader.fieldnames))
             else:
-                logger.warning("NameSilo CSV has no header row or empty file", fieldnames=reader.fieldnames)
-                return []
+                msg = f"NameSilo CSV has no header row or empty file. Content Start: {sample!r}"
+                logger.warning(msg)
+                raise ValueError(msg)
             
             for row_num, row in enumerate(reader, start=2):
                 try:
