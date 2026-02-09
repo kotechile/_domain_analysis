@@ -1956,7 +1956,11 @@ class DatabaseService:
         import time
         from pathlib import Path
         
-        storage_url = f"{self.settings.SUPABASE_URL}/storage/v1/object/{bucket}/{path}"
+        base_url = self.settings.SUPABASE_URL.rstrip('/')
+        bucket_clean = bucket.strip('/')
+        path_clean = path.lstrip('/')
+        storage_url = f"{base_url}/storage/v1/object/{bucket_clean}/{path_clean}"
+        
         service_role_key = self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY
         
         headers = {
@@ -1984,6 +1988,11 @@ class DatabaseService:
                             async for chunk in response.aiter_bytes(chunk_size=8192):
                                 f.write(chunk)
                                 total_bytes += len(chunk)
+                        
+                        if total_bytes == 0:
+                            logger.warning("Downloaded 0 bytes from storage", bucket=bucket, path=path)
+                            # We don't raise here strictly in case empty files are valid, but for CSVs usually not.
+                            # But let the parser handle empty files to distinguish between "download failed" and "file is empty".
                         
                         logger.info("Downloaded file to disk successfully", 
                                    bucket=bucket, 
