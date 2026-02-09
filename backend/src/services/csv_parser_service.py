@@ -297,6 +297,13 @@ class CSVParserService:
                     # Use "Auction End" if available, otherwise far future
                     auction_end_date = self._parse_date(row.get('Auction End', ''))
                     
+                    # Parse Current Bid
+                    try:
+                        current_bid_str = row.get('Current Bid', '0').strip()
+                        current_bid = float(current_bid_str) if current_bid_str else 0.0
+                    except (ValueError, TypeError):
+                        current_bid = 0.0
+
                     from datetime import datetime, timezone
                     far_future_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
                     
@@ -312,7 +319,7 @@ class CSVParserService:
                         end_date=final_expiration_date,
                         current_bid=current_bid,
                         auction_site='namesilo',
-                        source_data=source_data
+                        source_data=row
                     )
                     
                     auctions.append(auction)
