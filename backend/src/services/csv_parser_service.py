@@ -321,6 +321,11 @@ class CSVParserService:
                     logger.warning("Failed to parse NameSilo CSV row", row=row_num, error=str(e))
                     continue
             
+            if not auctions:
+                msg = f"No valid NameSilo auctions found. Headers: {reader.fieldnames}. Content Start: {sample!r}"
+                logger.warning(msg)
+                raise ValueError(msg)
+            
             logger.info("Parsed NameSilo CSV", total_rows=len(auctions))
             return auctions
             
