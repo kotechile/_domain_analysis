@@ -30,3 +30,15 @@ ALTER TABLE auctions_staging ENABLE ROW LEVEL SECURITY;
 -- 5. Policy: Service role full access
 DROP POLICY IF EXISTS "Service Role Full Access On Staging" ON auctions_staging;
 CREATE POLICY "Service Role Full Access On Staging" ON auctions_staging FOR ALL USING (auth.role() = 'service_role');
+
+
+-- 6. CRITICAL: Add job_id to MAIN auctions table too
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'auctions' AND column_name = 'job_id') THEN
+        ALTER TABLE auctions ADD COLUMN job_id UUID;
+        
+        -- Create index for faster lookups/deletions by job
+        CREATE INDEX IF NOT EXISTS idx_auctions_job_id ON auctions(job_id);
+    END IF;
+END $$;
