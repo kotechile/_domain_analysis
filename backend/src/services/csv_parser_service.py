@@ -127,9 +127,19 @@ class CSVParserService:
                             logger.warning("Skipping row with empty name", row=row_num)
                             continue
                         
-                        # Parse dates
-                        start_date = self._parse_date(row.get('startDate', ''))
-                        end_date = self._parse_date(row.get('endDate', ''))
+                        # Parse dates with robust column checking
+                        start_date = (
+                            self._parse_date(row.get('startDate', '')) or
+                            self._parse_date(row.get('StartDate', '')) or
+                            self._parse_date(row.get('start_date', ''))
+                        )
+                        
+                        end_date = (
+                            self._parse_date(row.get('endDate', '')) or
+                            self._parse_date(row.get('EndDate', '')) or
+                            self._parse_date(row.get('end_date', '')) or
+                            self._parse_date(row.get('Auction End', ''))
+                        )
                         
                         if not end_date:
                             logger.warning("Skipping row without endDate", row=row_num, domain=domain_name)
@@ -271,28 +281,24 @@ class CSVParserService:
                     # Parse "Domain Created On" as start_date (when domain was created)
                     start_date = self._parse_date(row.get('Domain Created On', ''))
                     
-                    # NameSilo auctions do NOT have an expiration_date
-                    # They are active auctions, not backorders
-                    # Use "Auction End" as a reference date, but don't treat it as expiration
+                    # NameSilo auctions SHOULD have an expiration_date for auctions
+                    # For 'Offer/Counter Offer' (Buy Now), it might be empty or valid
+                    # Use "Auction End" if available, otherwise far future
                     auction_end_date = self._parse_date(row.get('Auction End', ''))
                     
-                    # Parse current_bid from "Current Bid" column
-                    current_bid = self._parse_price(row.get('Current Bid', ''))
-                    
-                    # Store all original data in source_data
-                    source_data = {k: v for k, v in row.items()}
-                    
-                    # NameSilo auctions don't have expiration dates
-                    # Use a far future date (2099-12-31) to indicate they don't expire
-                    # This is required because the database requires expiration_date to be NOT NULL
                     from datetime import datetime, timezone
                     far_future_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+                    
+                    final_expiration_date = auction_end_date if auction_end_date else far_future_date
+                    
+                    # For active auctions, we want the real end date
+                    # For buy now/make offer, 2099 is appropriate if no date provided
                     
                     auction = AuctionInput(
                         domain=domain_name,
                         start_date=start_date,
-                        expiration_date=far_future_date,  # Use far future date for NameSilo (no expiration)
-                        end_date=far_future_date,  # Also set to far future date
+                        expiration_date=final_expiration_date,
+                        end_date=final_expiration_date,
                         current_bid=current_bid,
                         auction_site='namesilo',
                         source_data=source_data
