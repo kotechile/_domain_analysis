@@ -261,13 +261,22 @@ class CSVParserService:
         
         try:
             csv_file = content if is_handle else io.StringIO(content)
+            
+            # Debug: Read first bit of file to ensure it's not empty/garbled
+            if is_handle and hasattr(csv_file, 'readable') and csv_file.readable():
+                # Peek start of file
+                pos = csv_file.tell()
+                sample = csv_file.read(100)
+                csv_file.seek(pos)
+                logger.info("NameSilo CSV File Content Peek", sample=sample, position=pos)
+            
             reader = csv.DictReader(csv_file)
             
             # Log available columns for debugging
             if reader.fieldnames:
                 logger.info("NameSilo CSV columns detected", columns=list(reader.fieldnames))
             else:
-                logger.warning("NameSilo CSV has no header row or empty file")
+                logger.warning("NameSilo CSV has no header row or empty file", fieldnames=reader.fieldnames)
                 return []
             
             for row_num, row in enumerate(reader, start=2):
