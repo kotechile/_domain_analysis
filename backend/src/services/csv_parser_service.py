@@ -304,6 +304,9 @@ class CSVParserService:
                     except (ValueError, TypeError):
                         current_bid = 0.0
 
+                    # Parse Url
+                    url = row.get('Url', '').strip()
+
                     from datetime import datetime, timezone
                     far_future_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
                     
@@ -319,7 +322,8 @@ class CSVParserService:
                         end_date=final_expiration_date,
                         current_bid=current_bid,
                         auction_site='namesilo',
-                        source_data=row
+                        source_data=row,
+                        link=url
                     )
                     
                     auctions.append(auction)
