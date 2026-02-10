@@ -76,7 +76,7 @@ class Settings(BaseSettings):
     TIER_1_TLDS: List[str] = ['.com', '.net', '.org', '.co', '.io', '.ai']
     MAX_DOMAIN_LENGTH: int = 15  # characters (excluding TLD)
     MAX_NUMBERS: int = 2
-    MIN_WORD_RECOGNITION_RATIO: float = 0.5  # 50%
+    MIN_WORD_RECOGNITION_RATIO: float = 0.0  # Disabled: dictionary is too small (causing valid domains to fail)
     TOP_DOMAINS_FOR_ANALYSIS: int = 1000
     TOP_RANK_THRESHOLD: int = 3000
     SCORING_CACHE_TTL_HOURS: int = 1
