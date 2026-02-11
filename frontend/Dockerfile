@@ -4,7 +4,7 @@ ARG REACT_APP_SUPABASE_URL
 ARG REACT_APP_SUPABASE_ANON_KEY
 
 # Multi-stage build for React app
-FROM node:18-alpine as build
+FROM node:20-alpine as build
 
 # Pass build arg to environment
 ENV REACT_APP_API_URL=$REACT_APP_API_URL
