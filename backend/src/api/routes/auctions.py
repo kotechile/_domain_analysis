@@ -407,31 +407,18 @@ async def process_csv_upload_async(
             processed_records=processed_count
         )
         
-        logger.info("Merging staging to main table", job_id=job_id)
+        logger.info("Merging staging to main table (using python chunked merge)", job_id=job_id)
         
-        # Call SQL function
-        # process_staging_data takes p_job_id
         try:
-             # Use the specialized DB function if available, or generic merge
-             # Assuming process_staging_data(p_job_id, p_auction_site)
-             # Check database.py for signature logic if needed, but direct RPC is best
+             # Use the Python-based chunked merge helper instead of RPC
+             # This aligns with the JSON upload logic which is working correctly
+             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id)
              
-             # Calling `process_staging_data` rpc
-             merge_result = db.client.rpc('process_staging_data', {
-                 'p_job_id': job_id,
-                 'p_auction_site': auction_site
-                 # p_integration_type? 
-             }).execute()
-             
-             # Calculate stats from merge result if returned, otherwise use local counts
-             # Usually process_staging_data returns {inserted: X, updated: Y, ...}
-             merge_stats = merge_result.data if merge_result.data else {}
+             merge_stats = {'inserted': merged_count, 'updated': 0}
              logger.info("Merge complete", stats=merge_stats)
              
         except Exception as merge_err:
              logger.error("Merge failed", error=str(merge_err), job_id=job_id)
-             # Try to surface error but don't fail complete job if possible? 
-             # No, merge failure is critical.
              raise merge_err
 
         # 5. Success

@@ -1,5 +1,5 @@
--- Update process_staging_data to be robust and handle all columns
--- This function merges data from auctions_staging to auctions for a specific job_id
+-- Update process_staging_data to be robust and match table schema
+-- This function merged data from auctions_staging to auctions for a specific job_id
 
 CREATE OR REPLACE FUNCTION process_staging_data(
     p_job_id UUID,
@@ -11,7 +11,6 @@ AS $$
 DECLARE
     v_inserted_count INTEGER := 0;
     v_updated_count INTEGER := 0;
-    v_processed_count INTEGER := 0;
 BEGIN
     -- Merge from staging into auctions
     -- We filter by job_id to only process records for this specific upload
@@ -22,7 +21,7 @@ BEGIN
             expiration_date,
             auction_site,
             current_bid,
-            source_data,
+            source_data,  -- This should be JSONB
             processed,
             preferred,
             has_statistics,
@@ -52,7 +51,8 @@ BEGIN
             deletion_flag,
             offer_type,
             link,
-            job_id
+            job_id,
+            updated_at
         )
         SELECT 
             domain,
@@ -69,12 +69,13 @@ BEGIN
             deletion_flag,
             offer_type,
             link,
-            job_id
+            job_id,
+            NOW()
         FROM chunk_staging
         ON CONFLICT (domain, auction_site, expiration_date)
         DO UPDATE SET
             start_date = EXCLUDED.start_date,
-            expiration_date = EXCLUDED.expiration_date,
+            -- expiration_date is part of PK, so we don't update it usually, but if it matches PK it's same.
             current_bid = EXCLUDED.current_bid,
             source_data = EXCLUDED.source_data,
             processed = EXCLUDED.processed,
@@ -117,7 +118,7 @@ EXCEPTION WHEN OTHERS THEN
     RETURN jsonb_build_object(
         'success', false,
         'error', SQLERRM,
-        'error_detail', PG_EXCEPTION_DETAIL
+        'detail', PG_EXCEPTION_DETAIL
     );
 END;
 $$;
