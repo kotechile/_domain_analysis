@@ -78,6 +78,9 @@ class CSVParserService:
                 logger.warning("CSV file has no headers or is empty", filename=filename)
                 return
             
+            # Clean headers (strip whitespace)
+            reader.fieldnames = [h.strip() for h in reader.fieldnames] if reader.fieldnames else []
+
             # Helper to find column case-insensitively
             def find_col(possible_names):
                 for name in possible_names:
@@ -148,6 +151,8 @@ class CSVParserService:
                 logger.info("Parsed NameCheap Buy Now CSV")
             else:
                 # Parse Market Sales format: url, name, startDate, endDate, price, ...
+                logger.info("Detected headers for Market Sales", headers=reader.fieldnames, filename=filename)
+                
                 name_key = find_col(['name', 'Name', 'Domain', 'domain', 'domain_name']) or 'name'
                 
                 # Date keys
@@ -160,11 +165,22 @@ class CSVParserService:
                 found_end_key = find_col(end_date_keys)
                 found_price_key = find_col(price_keys)
                 
+                logger.info("Mapped columns for Market Sales", 
+                           name_key=name_key, 
+                           start_key=found_start_key, 
+                           end_key=found_end_key, 
+                           price_key=found_price_key)
+
+                skipped_log_count = 0
+                MAX_SKIPPED_LOGS = 10
+                
                 for row_num, row in enumerate(reader, start=2):
                     try:
                         domain_name = row.get(name_key, '').strip()
                         if not domain_name:
-                            logger.warning("Skipping row with empty name", row=row_num)
+                            if skipped_log_count < MAX_SKIPPED_LOGS:
+                                logger.warning("Skipping row with empty name", row=row_num)
+                                skipped_log_count += 1
                             continue
                         
                         # Parse dates with robust column checking
@@ -172,7 +188,9 @@ class CSVParserService:
                         end_date = self._parse_date(row.get(found_end_key, '')) if found_end_key else None
                         
                         if not end_date:
-                            logger.warning("Skipping row without endDate", row=row_num, domain=domain_name)
+                            if skipped_log_count < MAX_SKIPPED_LOGS:
+                                logger.warning("Skipping row without endDate", row=row_num, domain=domain_name, found_key=found_end_key, raw_value=row.get(found_end_key, '') if found_end_key else 'N/A')
+                                skipped_log_count += 1
                             continue
                         
                         # Parse current_bid/price
@@ -194,7 +212,9 @@ class CSVParserService:
                         yield auction
                         
                     except Exception as e:
-                        logger.warning("Failed to parse CSV row", row=row_num, error=str(e))
+                        if skipped_log_count < MAX_SKIPPED_LOGS:
+                            logger.warning("Failed to parse CSV row", row=row_num, error=str(e))
+                            skipped_log_count += 1
                         continue
                 
                 logger.info("Parsed Namecheap Market Sales CSV")
