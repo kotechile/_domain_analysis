@@ -368,6 +368,9 @@ async def process_csv_upload_async(
                 if len(batch_list) >= BATCH_SIZE:
                     await process_batch(batch_list)
                     batch_list = []
+                    # Log progress to stdout for observability
+                    logger.info("Processed batch", job_id=job_id, count=processed_count, total_estimated=total_records)
+
                     
             except Exception as e:
                 logger.warning("Failed to process auction record", domain=auction_input.domain if auction_input else '?', error=str(e))
