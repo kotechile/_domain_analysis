@@ -2,7 +2,7 @@
 Auctions Service for managing multi-source domain auction data
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Iterator
 import structlog
 from datetime import datetime
 
@@ -20,28 +20,20 @@ class AuctionsService:
         self.db = get_database()
         self.csv_parser = CSVParserService()
     
-    def load_auctions_from_csv(self, file_content: Any, auction_site: str, filename: str = '', is_file: bool = False) -> List[AuctionInput]:
+    def load_auctions_from_csv(self, csv_content: str, auction_site: str, filename: str = '', is_file: bool = False) -> Iterator[AuctionInput]:
         """
-        Parse CSV file and return list of AuctionInput objects
-        
-        Args:
-            file_content: Raw CSV content as string OR file path if is_file=True
-            auction_site: Source auction site ('namecheap', 'godaddy', 'namesilo', etc.)
-            filename: Original filename (used for format detection)
-            is_file: Whether file_content is a file path
-            
-        Returns:
-            List of AuctionInput objects
+        Load auctions from CSV content using the appropriate parser.
+        Returns an iterator to support streaming large files.
         """
-        logger.info("Loading auctions from CSV", auction_site=auction_site, filename=filename, is_file=is_file)
-        
+        parser = CSVParserService()
         try:
-            auctions = self.csv_parser.parse_csv(file_content, auction_site, filename, is_file=is_file)
-            logger.info("Parsed CSV", auction_site=auction_site, filename=filename, count=len(auctions))
-            return auctions
+            # parser.parse_csv now returns a generator
+            auction_inputs_iter = parser.parse_csv(csv_content, auction_site, filename, is_file=is_file)
+            yield from auction_inputs_iter
         except Exception as e:
-            logger.error("Failed to parse CSV", auction_site=auction_site, filename=filename, error=str(e))
-            raise
+            logger.error("Failed to load auctions from CSV", auction_site=auction_site, filename=filename, error=str(e))
+            # Return empty iterator on error
+            return
     
     def load_auctions_from_json(self, file_content: Any, auction_site: str, filename: str = '', is_file: bool = False) -> List[AuctionInput]:
         """

@@ -5,7 +5,7 @@ CSV Parser Service for multiple auction site formats
 import csv
 import io
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Iterator
 from datetime import datetime
 import structlog
 
@@ -17,7 +17,7 @@ logger = structlog.get_logger()
 class CSVParserService:
     """Service for parsing CSV files from different auction sites"""
     
-    def parse_csv(self, source: Any, auction_site: str, filename: str = '', is_file: bool = False) -> List[AuctionInput]:
+    def parse_csv(self, source: Any, auction_site: str, filename: str = '', is_file: bool = False) -> Iterator[AuctionInput]:
         """
         Parse CSV content based on auction site format
         
@@ -28,16 +28,17 @@ class CSVParserService:
             is_file: Whether source is a file path
             
         Returns:
-            List of AuctionInput objects
+            Iterator of AuctionInput objects
         """
         if is_file:
-            with open(source, 'r', encoding='utf-8', errors='replace') as f:
-                return self._parse_csv_internal(f, auction_site, filename)
+            # Use utf-8-sig to handle BOM automatically
+            with open(source, 'r', encoding='utf-8-sig', errors='replace') as f:
+                yield from self._parse_csv_internal(f, auction_site, filename)
         else:
             csv_file = io.StringIO(source)
-            return self._parse_csv_internal(csv_file, auction_site, filename)
+            yield from self._parse_csv_internal(csv_file, auction_site, filename)
 
-    def _parse_csv_internal(self, csv_file: Any, auction_site: str, filename: str = '') -> List[AuctionInput]:
+    def _parse_csv_internal(self, csv_file: Any, auction_site: str, filename: str = '') -> Iterator[AuctionInput]:
         # Check for empty file
         if hasattr(csv_file, 'seek') and hasattr(csv_file, 'read'):
             pos = csv_file.tell()
@@ -45,22 +46,22 @@ class CSVParserService:
             csv_file.seek(pos)
             if not content:
                 logger.warning("CSV file is empty", filename=filename, auction_site=auction_site)
-                return []
+                return
         
         auction_site_lower = auction_site.lower().strip()
         
         if auction_site_lower == 'namecheap':
-            return self.parse_namecheap_csv(csv_file, filename, is_handle=True)
+            yield from self.parse_namecheap_csv(csv_file, filename, is_handle=True)
         elif auction_site_lower == 'godaddy':
-            return self.parse_godaddy_csv(csv_file, is_handle=True)
+            yield from self.parse_godaddy_csv(csv_file, is_handle=True)
         elif auction_site_lower == 'namesilo':
-            return self.parse_namesilo_csv(csv_file, is_handle=True)
+            yield from self.parse_namesilo_csv(csv_file, is_handle=True)
         else:
             # Try generic parser
             logger.warning("Unknown auction site, using generic parser", auction_site=auction_site)
-            return self.parse_generic_csv(csv_file, auction_site, is_handle=True)
+            yield from self.parse_generic_csv(csv_file, auction_site, is_handle=True)
     
-    def parse_namecheap_csv(self, content: Any, filename: str = '', is_handle: bool = False) -> List[AuctionInput]:
+    def parse_namecheap_csv(self, content: Any, filename: str = '', is_handle: bool = False) -> Iterator[AuctionInput]:
         """
         Parse Namecheap CSV format
         
@@ -68,8 +69,6 @@ class CSVParserService:
         1. Namecheap_Market_Sales: url, name, startDate, endDate, price, ... (auction format)
         2. Namecheap_Market_Sales_Buy_Now: permalink, domain, price, extensions_taken (buy now format)
         """
-        auctions = []
-        
         try:
             csv_file = content if is_handle else io.StringIO(content)
             reader = csv.DictReader(csv_file)
@@ -77,18 +76,31 @@ class CSVParserService:
             # Check if headers exist
             if not reader.fieldnames:
                 logger.warning("CSV file has no headers or is empty", filename=filename)
-                return []
+                return
             
+            # Helper to find column case-insensitively
+            def find_col(possible_names):
+                for name in possible_names:
+                    if name in reader.fieldnames:
+                        return name
+                # Fallback: check case-insensitive match
+                lower_map = {f.lower(): f for f in reader.fieldnames}
+                for name in possible_names:
+                    if name.lower() in lower_map:
+                        return lower_map[name.lower()]
+                return None
+
             # Check if this is the Buy Now format (has 'domain' and 'permalink' columns, no 'name' or 'startDate')
             is_buy_now_format = False
             if reader.fieldnames:
-                has_domain = 'domain' in reader.fieldnames
-                has_permalink = 'permalink' in reader.fieldnames
-                has_name = 'name' in reader.fieldnames
-                has_start_date = 'startDate' in reader.fieldnames
+                # Use flexible column detection
+                domain_col = find_col(['domain', 'Domain'])
+                permalink_col = find_col(['permalink', 'Permalink'])
+                name_col = find_col(['name', 'Name'])
+                start_date_col = find_col(['startDate', 'start_date', 'Start Date'])
                 
                 # Buy Now format: has domain and permalink, but no name or startDate
-                if has_domain and has_permalink and not has_name and not has_start_date:
+                if domain_col and permalink_col and not name_col and not start_date_col:
                     is_buy_now_format = True
                     logger.info("Detected NameCheap Buy Now format from columns", filename=filename)
                 elif filename and 'namecheap_market_sales_buy_now' in filename.lower():
@@ -97,9 +109,12 @@ class CSVParserService:
             
             if is_buy_now_format:
                 # Parse Buy Now format: permalink, domain, price, extensions_taken
+                domain_key = find_col(['domain', 'Domain']) or 'domain'
+                price_key = find_col(['price', 'Price']) or 'price'
+                
                 for row_num, row in enumerate(reader, start=2):
                     try:
-                        domain_name = row.get('domain', '').strip()
+                        domain_name = row.get(domain_key, '').strip()
                         if not domain_name:
                             logger.warning("Skipping row with empty domain", row=row_num)
                             continue
@@ -109,7 +124,7 @@ class CSVParserService:
                         far_future_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
                         
                         # Parse price (this is the buy now price)
-                        current_bid = self._parse_price(row.get('price', ''))
+                        current_bid = self._parse_price(row.get(price_key, ''))
                         
                         # Store all original data in source_data
                         source_data = {k: v for k, v in row.items()}
@@ -124,43 +139,44 @@ class CSVParserService:
                             source_data=source_data
                         )
                         
-                        auctions.append(auction)
+                        yield auction
                         
                     except Exception as e:
                         logger.warning("Failed to parse NameCheap Buy Now CSV row", row=row_num, error=str(e))
                         continue
                 
-                logger.info("Parsed NameCheap Buy Now CSV", total_rows=len(auctions))
-                return auctions
+                logger.info("Parsed NameCheap Buy Now CSV")
             else:
                 # Parse Market Sales format: url, name, startDate, endDate, price, ...
+                name_key = find_col(['name', 'Name', 'Domain', 'domain', 'domain_name']) or 'name'
+                
+                # Date keys
+                start_date_keys = ['startDate', 'StartDate', 'start_date', 'Start Date']
+                end_date_keys = ['endDate', 'EndDate', 'end_date', 'End Date', 'Auction End']
+                price_keys = ['price', 'Price', 'currentBid', 'current_bid', 'Current Bid']
+                
+                # Pre-fetch existing keys to avoid searching every row
+                found_start_key = find_col(start_date_keys)
+                found_end_key = find_col(end_date_keys)
+                found_price_key = find_col(price_keys)
+                
                 for row_num, row in enumerate(reader, start=2):
                     try:
-                        domain_name = row.get('name', '').strip()
+                        domain_name = row.get(name_key, '').strip()
                         if not domain_name:
                             logger.warning("Skipping row with empty name", row=row_num)
                             continue
                         
                         # Parse dates with robust column checking
-                        start_date = (
-                            self._parse_date(row.get('startDate', '')) or
-                            self._parse_date(row.get('StartDate', '')) or
-                            self._parse_date(row.get('start_date', ''))
-                        )
-                        
-                        end_date = (
-                            self._parse_date(row.get('endDate', '')) or
-                            self._parse_date(row.get('EndDate', '')) or
-                            self._parse_date(row.get('end_date', '')) or
-                            self._parse_date(row.get('Auction End', ''))
-                        )
+                        start_date = self._parse_date(row.get(found_start_key, '')) if found_start_key else None
+                        end_date = self._parse_date(row.get(found_end_key, '')) if found_end_key else None
                         
                         if not end_date:
                             logger.warning("Skipping row without endDate", row=row_num, domain=domain_name)
                             continue
                         
                         # Parse current_bid/price
-                        current_bid = self._parse_price(row.get('price', '') or row.get('currentBid', '') or row.get('current_bid', ''))
+                        current_bid = self._parse_price(row.get(found_price_key, '')) if found_price_key else None
                         
                         # Store all original data in source_data
                         source_data = {k: v for k, v in row.items()}
@@ -175,28 +191,25 @@ class CSVParserService:
                             source_data=source_data
                         )
                         
-                        auctions.append(auction)
+                        yield auction
                         
                     except Exception as e:
                         logger.warning("Failed to parse CSV row", row=row_num, error=str(e))
                         continue
                 
-                logger.info("Parsed Namecheap Market Sales CSV", total_rows=len(auctions))
-                return auctions
+                logger.info("Parsed Namecheap Market Sales CSV")
             
         except Exception as e:
             logger.error("Failed to parse Namecheap CSV", error=str(e), filename=filename)
             raise
     
-    def parse_godaddy_csv(self, content: Any, is_handle: bool = False) -> List[AuctionInput]:
+    def parse_godaddy_csv(self, content: Any, is_handle: bool = False) -> Iterator[AuctionInput]:
         """
         Parse GoDaddy CSV format
         
         Expected columns: Domain, Start Date, End Date, Price, ...
         (Format to be determined based on actual GoDaddy export)
         """
-        auctions = []
-        
         try:
             csv_file = content if is_handle else io.StringIO(content)
             reader = csv.DictReader(csv_file)
@@ -204,7 +217,7 @@ class CSVParserService:
             # Check if headers exist
             if not reader.fieldnames:
                 logger.warning("GoDaddy CSV file has no headers or is empty")
-                return []
+                return
             
             for row_num, row in enumerate(reader, start=2):
                 try:
@@ -253,20 +266,19 @@ class CSVParserService:
                         source_data=source_data
                     )
                     
-                    auctions.append(auction)
+                    yield auction
                     
                 except Exception as e:
                     logger.warning("Failed to parse GoDaddy CSV row", row=row_num, error=str(e))
                     continue
             
-            logger.info("Parsed GoDaddy CSV", total_rows=len(auctions))
-            return auctions
+            logger.info("Parsed GoDaddy CSV")
             
         except Exception as e:
             logger.error("Failed to parse GoDaddy CSV", error=str(e))
             raise
     
-    def parse_namesilo_csv(self, content: Any, is_handle: bool = False) -> List[AuctionInput]:
+    def parse_namesilo_csv(self, content: Any, is_handle: bool = False) -> Iterator[AuctionInput]:
         """
         Parse NameSilo CSV format
         
@@ -276,8 +288,6 @@ class CSVParserService:
         Note: NameSilo auctions do NOT have an end_date (expiration_date). They are active auctions.
         The "Auction End" field is used as the start_date for tracking purposes.
         """
-        auctions = []
-        
         try:
             csv_file = content if is_handle else io.StringIO(content)
             
@@ -298,8 +308,9 @@ class CSVParserService:
             else:
                 msg = f"NameSilo CSV has no header row or empty file. Content Start: '{sample}'"
                 logger.warning(msg)
-                return []
+                return
             
+            count = 0
             for row_num, row in enumerate(reader, start=2):
                 try:
                     # NameSilo format uses "Domain" column (case-sensitive)
@@ -345,32 +356,28 @@ class CSVParserService:
                         link=url
                     )
                     
-                    auctions.append(auction)
+                    yield auction
+                    count += 1
                     
                 except Exception as e:
                     logger.warning("Failed to parse NameSilo CSV row", row=row_num, error=str(e))
                     continue
             
-            if not auctions:
-                msg = f"No valid NameSilo auctions found. Headers: {reader.fieldnames}. Content Start: {sample!r}"
-                logger.warning(msg)
-                raise ValueError(msg)
+            if count == 0:
+                logger.warning(f"No valid NameSilo auctions found. Headers: {reader.fieldnames}. Content Start: '{sample}'")
             
-            logger.info("Parsed NameSilo CSV", total_rows=len(auctions))
-            return auctions
+            logger.info("Parsed NameSilo CSV streaming started")
             
         except Exception as e:
             logger.error("Failed to parse NameSilo CSV", error=str(e))
             raise
     
-    def parse_generic_csv(self, content: Any, auction_site: str, is_handle: bool = False) -> List[AuctionInput]:
+    def parse_generic_csv(self, content: Any, auction_site: str, is_handle: bool = False) -> Iterator[AuctionInput]:
         """
         Generic CSV parser that tries to detect common column patterns
         
         Looks for: domain, name, expiration_date, end_date, expiration, etc.
         """
-        auctions = []
-        
         try:
             csv_file = content if is_handle else io.StringIO(content)
             reader = csv.DictReader(csv_file)
@@ -438,14 +445,13 @@ class CSVParserService:
                         source_data=source_data
                     )
                     
-                    auctions.append(auction)
+                    yield auction
                     
                 except Exception as e:
                     logger.warning("Failed to parse generic CSV row", row=row_num, error=str(e))
                     continue
             
-            logger.info("Parsed generic CSV", total_rows=len(auctions), auction_site=auction_site)
-            return auctions
+            logger.info("Parsed generic CSV", auction_site=auction_site)
             
         except Exception as e:
             logger.error("Failed to parse generic CSV", error=str(e))
