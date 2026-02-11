@@ -42,7 +42,8 @@ class DatabaseService:
             import httpx
             
             # Configure HTTP client with SSL verification setting and increased timeout
-            timeout = httpx.Timeout(300.0, connect=30.0)  # 5 minutes for requests, 30s for connection
+            # Increased to 600s (10m) to handle large CSV downloads which effectively prevents "peer closed connection" on slow networks
+            timeout = httpx.Timeout(600.0, connect=60.0)
             
             # Default options
             options = None
@@ -1867,6 +1868,46 @@ class DatabaseService:
                         error_type=type(e).__name__)
             raise
     
+    async def delete_file_from_storage(self, bucket: str, path: str) -> bool:
+        """
+        Delete file from Supabase storage
+        
+        Args:
+            bucket: Storage bucket name
+            path: File path in storage
+            
+        Returns:
+            True if deleted successfully, False otherwise
+        """
+        try:
+            if not self.client:
+                raise Exception("Supabase client not available")
+            
+            logger.info("Deleting file from storage", bucket=bucket, path=path)
+            
+            # Supabase Storage API: remove accepts a list of paths
+            # returns a list of deleted objects
+            response = self.client.storage.from_(bucket).remove([path])
+            
+            if response and len(response) > 0:
+                logger.info("Deleted file from storage successfully", bucket=bucket, path=path)
+                return True
+            else:
+                # Note: Supabase implementation of storage.remove might return empty list 
+                # even if successful if it doesn't return metadata, or if file didn't exist.
+                # But typically it returns the deleted object metadata.
+                logger.warning("Storage delete response empty (file might not exist)", bucket=bucket, path=path)
+                return False
+                
+        except Exception as e:
+            logger.error("Failed to delete file from storage", 
+                        bucket=bucket, 
+                        path=path, 
+                        error=str(e),
+                        error_type=type(e).__name__)
+            # Don't raise, just return False so we don't break the calling process
+            return False
+
     async def download_from_storage(self, bucket: str, path: str) -> bytes:
         """
         Download file from Supabase storage
