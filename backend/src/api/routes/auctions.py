@@ -408,12 +408,15 @@ async def process_csv_upload_async(
                 skipped_count += 1
                 continue
             
-            # Keep event loop responsive for health checks
-            if (idx + 1) % 500 == 0:
-                await asyncio.sleep(0.01)
+            # Keep event loop responsive for health checks - yield frequently (every 50 records ~ 1-2s max)
+            if (idx + 1) % 50 == 0:
+                await asyncio.sleep(0.001)  # Minimal sleep just to yield control
 
-            # Update progress more frequently for large files (every 50 records, or every 1000 for very large)
-            update_interval = 50 if total_records < 100000 else 1000
+            # Update progress less frequently to reduce DB load
+            # For > 10k records, update every 1000
+            # For < 10k records, update every 100 (was 50)
+            update_interval = 100 if total_records < 10000 else 1000
+            
             if (idx + 1) % update_interval == 0:
                 try:
                     await db.update_csv_upload_progress(
@@ -422,7 +425,10 @@ async def process_csv_upload_async(
                         skipped_count=skipped_count,
                         current_stage='scoring'
                     )
-                    if (idx + 1) % 10000 == 0:
+                    
+                    # Log progress periodically
+                    log_interval = 1000 if total_records < 50000 else 5000
+                    if (idx + 1) % log_interval == 0:
                         logger.info("Scoring progress", 
                                   job_id=job_id,
                                   processed=idx + 1, 
@@ -1592,9 +1598,7 @@ async def process_file_from_storage_async(
     import tempfile
     import os
     
-    # Create a unique temp file path
-    temp_fd, temp_path = tempfile.mkstemp(suffix=f"_{filename}")
-    os.close(temp_fd) # Close file descriptor, we'll open it by path
+    temp_path = None
     
     try:
         db = get_database()
@@ -1607,9 +1611,30 @@ async def process_file_from_storage_async(
             offering_type=offering_type
         )
         
+        # Sanitize filename for temp file usage (replace slashes with underscores)
+        # This prevents "No such file or directory" errors if filename contains folders
+        safe_filename = filename.replace('/', '_').replace('\\', '_')
+        
+        # Create a unique temp file path
+        # We do this INSIDE the try block to catch any FS errors
+        temp_fd, temp_path = tempfile.mkstemp(suffix=f"_{safe_filename}")
+        os.close(temp_fd) # Close file descriptor, we'll open it by path
+        
+        # Update status to downloading
+        await db.update_csv_upload_progress(
+            job_id=job_id,
+            status='downloading',
+            current_stage='downloading_from_storage'
+        )
+        
         # Download file to temp disk location
         logger.info("Downloading file from storage to temp disk", job_id=job_id, bucket=bucket, path=path, local_path=temp_path)
-        await db.download_to_file(bucket, path, temp_path)
+        
+        file_size = await db.download_to_file(bucket, path, temp_path)
+        
+        if file_size == 0:
+            logger.warning("Downloaded empty file", job_id=job_id, path=path)
+            # We continue processing, parser will handle empty file
         
         # Determine file type and process
         is_json = filename.lower().endswith('.json')
@@ -1642,6 +1667,21 @@ async def process_file_from_storage_async(
                 error_message="File must be CSV or JSON"
             )
             logger.error("Invalid file type", job_id=job_id, filename=filename)
+        
+        # Check job status and delete file from storage if successful
+        try:
+            job_status = await db.get_csv_upload_progress(job_id)
+            if job_status and job_status.get('status') == 'completed':
+                logger.info("Job completed successfully, deleting file from storage", job_id=job_id, bucket=bucket, path=path)
+                await db.delete_file_from_storage(bucket, path)
+            else:
+                logger.info("Job did not complete successfully, keeping file in storage", 
+                           job_id=job_id, 
+                           status=job_status.get('status') if job_status else 'unknown',
+                           bucket=bucket, 
+                           path=path)
+        except Exception as cleanup_error:
+            logger.warning("Failed to perform storage cleanup check", job_id=job_id, error=str(cleanup_error))
             
     except Exception as e:
         error_msg = str(e)
@@ -1654,6 +1694,8 @@ async def process_file_from_storage_async(
         
         try:
             db = get_database()
+            # If job exists, update it. If create_job failed, this might also fail or update non-existent job.
+            # But mostly create_job succeeds, and error happens later.
             await db.update_csv_upload_progress(
                 job_id=job_id,
                 status='failed',
@@ -1664,7 +1706,7 @@ async def process_file_from_storage_async(
             
     finally:
         # ALWAYS clean up the temp file
-        if os.path.exists(temp_path):
+        if temp_path and os.path.exists(temp_path):
             try:
                 os.remove(temp_path)
                 logger.info("Cleaned up temp processing file", local_path=temp_path)

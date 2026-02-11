@@ -38,6 +38,15 @@ class CSVParserService:
             return self._parse_csv_internal(csv_file, auction_site, filename)
 
     def _parse_csv_internal(self, csv_file: Any, auction_site: str, filename: str = '') -> List[AuctionInput]:
+        # Check for empty file
+        if hasattr(csv_file, 'seek') and hasattr(csv_file, 'read'):
+            pos = csv_file.tell()
+            content = csv_file.read(1)
+            csv_file.seek(pos)
+            if not content:
+                logger.warning("CSV file is empty", filename=filename, auction_site=auction_site)
+                return []
+        
         auction_site_lower = auction_site.lower().strip()
         
         if auction_site_lower == 'namecheap':
@@ -64,6 +73,11 @@ class CSVParserService:
         try:
             csv_file = content if is_handle else io.StringIO(content)
             reader = csv.DictReader(csv_file)
+            
+            # Check if headers exist
+            if not reader.fieldnames:
+                logger.warning("CSV file has no headers or is empty", filename=filename)
+                return []
             
             # Check if this is the Buy Now format (has 'domain' and 'permalink' columns, no 'name' or 'startDate')
             is_buy_now_format = False
@@ -187,6 +201,11 @@ class CSVParserService:
             csv_file = content if is_handle else io.StringIO(content)
             reader = csv.DictReader(csv_file)
             
+            # Check if headers exist
+            if not reader.fieldnames:
+                logger.warning("GoDaddy CSV file has no headers or is empty")
+                return []
+            
             for row_num, row in enumerate(reader, start=2):
                 try:
                     # GoDaddy format may use different column names
@@ -277,9 +296,9 @@ class CSVParserService:
             if reader.fieldnames:
                 logger.info("NameSilo CSV columns detected", columns=list(reader.fieldnames))
             else:
-                msg = f"NameSilo CSV has no header row or empty file. Content Start: {sample!r}"
+                msg = f"NameSilo CSV has no header row or empty file. Content Start: '{sample}'"
                 logger.warning(msg)
-                raise ValueError(msg)
+                return []
             
             for row_num, row in enumerate(reader, start=2):
                 try:
