@@ -55,5 +55,29 @@ https://www.namecheap.com/market/sale/qMNdQL59ujA93Mo8yDKmzk/,menu.pro,2026-02-0
     else:
          print("FAILED to parse user sample")
 
+
+    # Test Case 6: Market Sales with Quoted Headers and Spaces (Simulating potential issue)
+    content_complex = """"Name"," Start Date "," End Date "," Price "
+    "quoted.com","2023-01-01","2023-12-31","100.00"
+    """
+    print("\n--- Test 6: Complex Market Sales Headers ---")
+    results = list(parser.parse_csv(content_complex, 'namecheap', 'Namecheap_Market_Sales.csv'))
+    print(f"Results: {len(results)}")
+    if len(results) > 0:
+        print(f"First Record: {results[0]}")
+    else:
+        print("FAILED to parse complex headers")
+
+
+    # Test Case 7: Tab Delimited File (Simulating different dialect)
+    content_tab = """Name\tStart Date\tEnd Date\tPrice\n"tab.com"\t"2023-01-01"\t"2023-12-31"\t"50.00" """
+    print("\n--- Test 7: Tab Delimited Headers ---")
+    results = list(parser.parse_csv(content_tab, 'namecheap', 'Namecheap_Market_Sales.csv'))
+    print(f"Results: {len(results)}")
+    if len(results) > 0:
+        print(f"First Record: {results[0]}")
+    else:
+        print("FAILED to parse tab delimited headers")
+
 if __name__ == "__main__":
     test_namecheap_parsing()

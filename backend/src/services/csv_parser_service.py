@@ -70,8 +70,33 @@ class CSVParserService:
         2. Namecheap_Market_Sales_Buy_Now: permalink, domain, price, extensions_taken (buy now format)
         """
         try:
-            csv_file = content if is_handle else io.StringIO(content)
-            reader = csv.DictReader(csv_file)
+            # Load content into string if bytes or file handle
+            if hasattr(content, 'read'):
+                content_str = content.read()
+            else:
+                content_str = content
+
+            # Log raw start of file to debug structure/BOM/delimiters
+            logger.info("Raw CSV Content Start", 
+                       filename=filename, 
+                       preview=content_str[:500] if len(content_str) > 0 else "EMPTY",
+                       length=len(content_str))
+
+            if not content_str:
+                logger.warning("CSV content is empty", filename=filename)
+                return
+
+            csv_file = io.StringIO(content_str)
+            
+            # Use Sniffer to detect delimiter
+            try:
+                dialect = csv.Sniffer().sniff(content_str[:4096], delimiters=',;\t')
+                logger.info("Detected CSV dialect", delimiter=dialect.delimiter, quotechar=dialect.quotechar)
+                reader = csv.DictReader(csv_file, dialect=dialect)
+            except Exception as e:
+                logger.warning("CSV Sniffer failed, falling back to default", error=str(e))
+                csv_file.seek(0)
+                reader = csv.DictReader(csv_file)
             
             # Check if headers exist
             if not reader.fieldnames:
@@ -79,15 +104,19 @@ class CSVParserService:
                 return
             
             # Clean headers (strip whitespace)
-            reader.fieldnames = [h.strip() for h in reader.fieldnames] if reader.fieldnames else []
+            reader.fieldnames = [str(h).strip() for h in reader.fieldnames] if reader.fieldnames else []
+            
+            logger.info("Final Cleaned Headers", headers=reader.fieldnames)
 
             # Helper to find column case-insensitively
             def find_col(possible_names):
+                if not reader.fieldnames:
+                    return None
                 for name in possible_names:
                     if name in reader.fieldnames:
                         return name
                 # Fallback: check case-insensitive match
-                lower_map = {f.lower(): f for f in reader.fieldnames}
+                lower_map = {str(f).lower(): f for f in reader.fieldnames}
                 for name in possible_names:
                     if name.lower() in lower_map:
                         return lower_map[name.lower()]
