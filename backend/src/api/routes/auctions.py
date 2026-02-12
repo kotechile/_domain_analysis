@@ -2087,11 +2087,30 @@ async def get_auctions_report(
             filters['min_score'] = min_score
         if max_score is not None:
             filters['max_score'] = max_score
+        
+        # Defensive date parsing for expiration_from_date
         if expiration_from_date:
-            filters['expiration_from_date'] = expiration_from_date
+            try:
+                # Try simple format first
+                # Check if it's already ISO format (contains T)
+                if 'T' in expiration_from_date:
+                    # Validate it's parseable
+                    datetime.fromisoformat(expiration_from_date.replace('Z', '+00:00'))
+                    filters['expiration_from_date'] = expiration_from_date
+                else:
+                    # Assume YYYY-MM-DD, convert to ISO start of day
+                    dt = datetime.strptime(expiration_from_date, "%Y-%m-%d")
+                    # Make it UTC aware if possible, or just ISO string
+                    filters['expiration_from_date'] = dt.isoformat()
+            except ValueError:
+                logger.warning("Invalid expiration_from_date format, defaulting to NOW", date=expiration_from_date)
+                filters['expiration_from_date'] = datetime.now(timezone.utc).isoformat()
+        
         if expiration_to_date:
             filters['expiration_to_date'] = expiration_to_date
         
+        logger.info("Fetching auctions report", filters=filters, limit=limit, offset=offset)
+
         auctions_service = AuctionsService()
         result = await auctions_service.get_auctions_report(
             filters=filters,
@@ -2101,10 +2120,14 @@ async def get_auctions_report(
             offset=offset
         )
         
+        count = result.get("count", 0)
+        total_count = result.get("total_count", 0)
+        logger.info("Auctions report result", count=count, total=total_count, has_more=result.get("has_more", False))
+        
         return {
             "success": True,
-            "count": result.get("count", 0),
-            "total_count": result.get("total_count", 0),
+            "count": count,
+            "total_count": total_count,
             "has_more": result.get("has_more", False),
             "auctions": result.get("auctions", [])
         }

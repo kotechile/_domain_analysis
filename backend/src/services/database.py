@@ -1559,7 +1559,7 @@ class DatabaseService:
             # For better accuracy, check if there are more records
             has_more = len(auctions) == limit
             
-            logger.info("Fetched auctions with statistics", count=len(report_items), total_estimate=total_count, offset=offset, has_more=has_more)
+            logger.info("Fetched auctions with statistics", count=len(report_items), total_estimate=total_count, offset=offset, has_more=has_more, filters=filters)
             
             return {
                 "auctions": report_items,
