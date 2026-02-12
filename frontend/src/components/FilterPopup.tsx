@@ -310,6 +310,13 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                   minWidth: '150px',
                   '& .MuiOutlinedInput-root': {
                     backgroundColor: 'transparent',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    },
+                    '&.Mui-focused': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    },
                     '& fieldset': {
                       borderColor: 'rgba(255, 255, 255, 0.3)',
                     },
@@ -355,6 +362,13 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                   minWidth: '150px',
                   '& .MuiOutlinedInput-root': {
                     backgroundColor: 'transparent',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    },
+                    '&.Mui-focused': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    },
                     '& fieldset': {
                       borderColor: 'rgba(255, 255, 255, 0.3)',
                     },
@@ -457,6 +471,13 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                     flex: 1,
                     '& .MuiOutlinedInput-root': {
                       backgroundColor: 'transparent',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      },
+                      '&.Mui-focused': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      },
                       '& fieldset': {
                         borderColor: 'rgba(255, 255, 255, 0.3)',
                       },
@@ -499,6 +520,13 @@ const FilterPopup: React.FC<FilterPopupProps> = ({ open, onClose, onApply, initi
                     flex: 1,
                     '& .MuiOutlinedInput-root': {
                       backgroundColor: 'transparent',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      },
+                      '&.Mui-focused': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      },
                       '& fieldset': {
                         borderColor: 'rgba(255, 255, 255, 0.3)',
                       },
