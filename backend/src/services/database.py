@@ -1979,9 +1979,9 @@ class DatabaseService:
                         error_type=type(e).__name__)
             raise
 
-    async def download_to_file(self, bucket: str, path: str, target_path: str, max_retries: int = 3) -> int:
+    async def download_to_file(self, bucket: str, path: str, target_path: str, max_retries: int = 5) -> int:
         """
-        Download file from Supabase storage into a local file using streaming and retries
+        Download file from Supabase storage into a local file using streaming and retries with resume support.
         
         Args:
             bucket: Storage bucket name
@@ -1995,6 +1995,7 @@ class DatabaseService:
         import httpx
         import asyncio
         import time
+        import os
         from pathlib import Path
         
         base_url = self.settings.SUPABASE_URL.rstrip('/')
@@ -2012,28 +2013,49 @@ class DatabaseService:
         last_error = None
         for attempt in range(max_retries + 1):
             try:
+                start_byte = 0
+                file_mode = 'wb'
+                request_headers = headers.copy()
+                
+                # Check for existing file to resume
+                if attempt > 0 and os.path.exists(target_path):
+                    current_size = os.path.getsize(target_path)
+                    if current_size > 0:
+                        start_byte = current_size
+                        file_mode = 'ab'
+                        request_headers['Range'] = f"bytes={start_byte}-"
+                        logger.info("Resuming download", bucket=bucket, path=path, start_byte=start_byte)
+
                 if attempt > 0:
                     wait_time = 2 ** attempt
                     logger.info("Retrying storage download", attempt=attempt, wait_time=wait_time, bucket=bucket, path=path)
                     await asyncio.sleep(wait_time)
                 
                 async with httpx.AsyncClient(timeout=600.0, verify=bool(getattr(self.settings, 'SUPABASE_VERIFY_SSL', True))) as client:
-                    async with client.stream("GET", storage_url, headers=headers) as response:
+                    async with client.stream("GET", storage_url, headers=request_headers) as response:
                         if response.status_code == 404:
                             raise Exception(f"File not found in storage: bucket={bucket}, path={path}")
                         
+                        # Handle case where file is already fully downloaded (Range Not Satisfiable)
+                        if response.status_code == 416:
+                            if os.path.exists(target_path):
+                                total_size = os.path.getsize(target_path)
+                                logger.info("File already fully downloaded (Range Not Satisfiable)", bucket=bucket, path=path, size=total_size)
+                                return total_size
+                            else:
+                                # Should not happen if we sent Range, but handling just in case
+                                logger.warning("416 Range Not Satisfiable but local file missing", bucket=bucket, path=path)
+                        
                         response.raise_for_status()
                         
-                        total_bytes = 0
-                        with open(target_path, 'wb') as f:
-                            async for chunk in response.aiter_bytes(chunk_size=8192):
+                        total_bytes = start_byte
+                        with open(target_path, file_mode) as f:
+                            async for chunk in response.aiter_bytes(chunk_size=65536):
                                 f.write(chunk)
                                 total_bytes += len(chunk)
                         
                         if total_bytes == 0:
                             logger.warning("Downloaded 0 bytes from storage", bucket=bucket, path=path)
-                            # We don't raise here strictly in case empty files are valid, but for CSVs usually not.
-                            # But let the parser handle empty files to distinguish between "download failed" and "file is empty".
                         
                         logger.info("Downloaded file to disk successfully", 
                                    bucket=bucket, 
@@ -2042,7 +2064,7 @@ class DatabaseService:
                                    size_mb=round(total_bytes / (1024 * 1024), 2))
                         return total_bytes
             
-            except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+            except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.StreamError, httpx.NetworkError) as e:
                 last_error = e
                 logger.warning("Transient error during storage download", attempt=attempt, error=str(e))
                 continue

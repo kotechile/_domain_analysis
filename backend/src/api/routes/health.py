@@ -122,13 +122,13 @@ async def health_check():
         
         # Run external API checks in parallel with timeouts
         services_status['dataforseo'] = await check_service_with_timeout(
-            'DataForSEO', check_dataforseo, timeout=3.0
+            'DataForSEO', check_dataforseo, timeout=5.0
         )
         services_status['wayback_machine'] = await check_service_with_timeout(
-            'Wayback Machine', check_wayback, timeout=3.0
+            'Wayback Machine', check_wayback, timeout=10.0
         )
         services_status['llm'] = await check_service_with_timeout(
-            'LLM', check_llm, timeout=3.0
+            'LLM', check_llm, timeout=5.0
         )
         
         # Determine overall status

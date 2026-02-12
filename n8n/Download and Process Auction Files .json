@@ -1,0 +1,365 @@
+{
+  "name": "Download and Process Auction Files - RELIABLE",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        13216,
+        2832
+      ],
+      "id": "422ade93-e9d4-4969-b369-50dcfd35a158",
+      "name": "Daily Schedule (6 AM)"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT delete_expired_auctions() as deleted_count;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        13424,
+        2832
+      ],
+      "id": "f9cbe94f-b243-4f4b-b291-83c1560b4832",
+      "name": "Delete Expired Auctions",
+      "retryOnFail": true,
+      "credentials": {
+        "postgres": {
+          "id": "DxQODs2W8TambApf",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    json: {\n      url: 'https://inventory.auctions.godaddy.com/all_listings_ending_tomorrow.json.zip',\n      filename: 'godaddy_tomorrow.json',\n      is_compressed: true,\n      auction_site: 'godaddy'\n    }\n  },\n  {\n    json: {\n      url: 'https://inventory.auctions.godaddy.com/all_listings_ending_today.json.zip',\n      filename: 'godaddy_today.json',\n      is_compressed: true,\n      auction_site: 'godaddy'\n    }\n  },\n  {\n    json: {\n      url: 'https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales.csv',\n      filename: 'Namecheap_Market_Sales.csv',\n      is_compressed: false,\n      auction_site: 'namecheap'\n    }\n  },\n  {\n    json: {\n      url: 'https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales_Buy_Now.csv',\n      filename: 'Namecheap_Market_Sales_Buy_Now.csv',\n      is_compressed: false,\n      auction_site: 'namecheap',\n      offering_type: 'buy_now'\n    }\n  },\n  {\n    json: {\n      url: 'https://www.namesilo.com/auctions/api/search?keyword=&keywordLocation=anywhere&type=all&domainAge=any&reserve=any&digits=any&addedOn=all&format=csv',\n      filename: 'namesilo_export.csv',\n      is_compressed: false,\n      auction_site: 'namesilo'\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        13616,
+        2832
+      ],
+      "id": "acc34529-f738-43bc-804e-1851fa65e957",
+      "name": "Define Files"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        13824,
+        2832
+      ],
+      "id": "3584ba51-95ed-4e8e-923e-8a619d90f7b3",
+      "name": "Process One By One"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        14016,
+        2832
+      ],
+      "id": "3d4fd5c1-403e-4a89-bd3c-1367befd2677",
+      "name": "Download File"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.is_compressed }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        14224,
+        2832
+      ],
+      "id": "ec2d0c64-6eb3-486f-a524-311e4df4f323",
+      "name": "Check Compression"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.compression",
+      "typeVersion": 1.1,
+      "position": [
+        14416,
+        2720
+      ],
+      "id": "12c6a59c-2910-44d4-ace0-e5252642c046",
+      "name": "Decompress"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ensure binary data is in 'data' field and filename/mime is synced\n// Process ALL items in valid input\nreturn $input.all().map(item => {\n\n    // Restore filename if missing (from upstream context)\n    let filename = item.json.filename;\n    if (!filename) {\n       try {\n          filename = $('Process One By One').first().json.filename;\n          item.json.filename = filename;\n       } catch (e) { \n           // Only update if we can recover it\n       }\n    }\n\n    if (item.binary) {\n        const keys = Object.keys(item.binary);\n        if (keys.length > 0) {\n            // If 'data' exists, good. If not, map first key to 'data'\n            if (!item.binary.data) {\n                item.binary.data = item.binary[keys[0]];\n            }\n            \n            // Sync binary metadata with JSON filename\n            if (filename) {\n                item.binary.data.fileName = filename;\n                // Simple extension extraction\n                const ext = filename.split('.').pop();\n                if (ext) {\n                    item.binary.data.fileExtension = ext;\n                }\n            }\n            \n            // Ensure valid mimeType\n            if (!item.binary.data.mimeType || item.binary.data.mimeType === 'application/json') {\n                 // If logic says it's a CSV but mime says JSON (common with some APIs), force it\n                 if (filename && filename.endsWith('.csv')) {\n                     item.binary.data.mimeType = 'text/csv';\n                 } else if (filename && filename.endsWith('.json')) {\n                     item.binary.data.mimeType = 'application/json';\n                 } else {\n                     item.binary.data.mimeType = 'application/octet-stream';\n                 }\n            }\n        }\n    }\n    return item;\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        14624,
+        2832
+      ],
+      "id": "e21d8aca-ba70-4a97-a2df-c45c1a9f196e",
+      "name": "Standardize Binary"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sbdomain.giniloh.com/storage/v1/object/auction-csvs/' + $('Process One By One').first().json.filename }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc2NDYzNjk2MCwiZXhwIjo0OTIwMzEwNTYwLCJyb2xlIjoic2VydmljZV9yb2xlIn0.hMqiDDJIp9xxZtHJtyfvxs6utizP9F-mHqonRw0EFVc"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            },
+            {
+              "name": "Content-Type",
+              "value": "={{ $binary.data.mimeType }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        14816,
+        2832
+      ],
+      "id": "c379289f-7a62-4b4a-af4b-ed85c369a014",
+      "name": "Upload to Supabase"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://domain.aichieve.net/api/v1/auctions/process-existing-upload",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "storage_path",
+              "value": "={{ $('Process One By One').first().json.filename }}"
+            },
+            {
+              "name": "filename",
+              "value": "={{ $('Process One By One').first().json.filename }}"
+            },
+            {
+              "name": "auction_site",
+              "value": "={{ $('Process One By One').first().json.auction_site }}"
+            },
+            {
+              "name": "offering_type",
+              "value": "={{ $('Process One By One').first().json.offering_type || 'auction' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        15008,
+        2832
+      ],
+      "id": "8b1f0192-65a7-4a53-9a22-ff7f35826522",
+      "name": "Trigger Backend"
+    },
+    {
+      "parameters": {
+        "amount": 15,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        15232,
+        2832
+      ],
+      "id": "d8e3518c-c603-4c9d-a34f-011270273295",
+      "name": "Wait 15 Minutes"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Schedule (6 AM)": {
+      "main": [
+        [
+          {
+            "node": "Delete Expired Auctions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Expired Auctions": {
+      "main": [
+        [
+          {
+            "node": "Define Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define Files": {
+      "main": [
+        [
+          {
+            "node": "Process One By One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process One By One": {
+      "main": [
+        [
+          {
+            "node": "Download File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download File": {
+      "main": [
+        [
+          {
+            "node": "Check Compression",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Compression": {
+      "main": [
+        [
+          {
+            "node": "Decompress",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Standardize Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decompress": {
+      "main": [
+        [
+          {
+            "node": "Standardize Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standardize Binary": {
+      "main": [
+        [
+          {
+            "node": "Upload to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Trigger Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Backend": {
+      "main": [
+        [
+          {
+            "node": "Wait 15 Minutes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Process One By One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "06f1186f-4204-4f41-9a49-a8d69012254f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8ed9ed81fad64d2f2e539654b7152113b5201cf79b5e9548649591c372302289"
+  },
+  "id": "hM8ssCvxLrMb1tsa",
+  "tags": []
+}
