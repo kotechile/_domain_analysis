@@ -193,12 +193,14 @@ class CSVParserService:
                 found_start_key = find_col(start_date_keys)
                 found_end_key = find_col(end_date_keys)
                 found_price_key = find_col(price_keys)
+                found_url_key = find_col(['url', 'Url', 'URL', 'link', 'Link'])
                 
                 logger.info("Mapped columns for Market Sales", 
                            name_key=name_key, 
                            start_key=found_start_key, 
                            end_key=found_end_key, 
-                           price_key=found_price_key)
+                           price_key=found_price_key,
+                           url_key=found_url_key)
 
                 skipped_log_count = 0
                 MAX_SKIPPED_LOGS = 10
@@ -224,6 +226,9 @@ class CSVParserService:
                         
                         # Parse current_bid/price
                         current_bid = self._parse_price(row.get(found_price_key, '')) if found_price_key else None
+
+                        # Parse URL
+                        url = row.get(found_url_key, '').strip() if found_url_key else None
                         
                         # Store all original data in source_data
                         source_data = {k: v for k, v in row.items()}
@@ -235,7 +240,8 @@ class CSVParserService:
                             end_date=end_date,  # Also set for compatibility
                             current_bid=current_bid,
                             auction_site='namecheap',
-                            source_data=source_data
+                            source_data=source_data,
+                            link=url
                         )
                         
                         yield auction
