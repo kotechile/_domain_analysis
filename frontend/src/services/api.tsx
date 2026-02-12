@@ -594,7 +594,13 @@ class ApiService {
         return response;
       },
       (error) => {
-        console.error('API Response Error:', error.response?.data || error.message);
+        console.error('API Response Error:', {
+          url: error.config?.url,
+          method: error.config?.method,
+          status: error.response?.status,
+          data: error.response?.data,
+          message: error.message
+        });
         return Promise.reject(error);
       }
     );
