@@ -1498,11 +1498,6 @@ class DatabaseService:
                         exp_to = f"{exp_to}T23:59:59"
                     query = query.lte('expiration_date', exp_to)
                 
-                # Default: only show auctions that haven't expired yet
-                if not filters.get('expiration_from_date'):
-                    # Use current UTC time
-                    now = datetime.now(timezone.utc).isoformat()
-                    query = query.gte('expiration_date', now)
                 if filters.get('has_statistics') is not None:
                     query = query.eq('has_statistics', filters['has_statistics'])
                 if filters.get('scored') is not None:
@@ -1518,6 +1513,13 @@ class DatabaseService:
                     query = query.gte('score', filters['min_score'])
                 if filters.get('max_score') is not None:
                     query = query.lte('score', filters['max_score'])
+            
+            # Default: only show auctions that haven't expired yet
+            # Apply this if no expiration_from_date filter is provided (either filters is None or key missing)
+            if not filters or not filters.get('expiration_from_date'):
+                # Use current UTC time
+                now = datetime.now(timezone.utc).isoformat()
+                query = query.gte('expiration_date', now)
             
             # Apply sorting
             valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score', 'domain_rating', 'organic_traffic']
