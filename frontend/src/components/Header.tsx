@@ -95,9 +95,9 @@ const Header: React.FC = () => {
               color: '#FFFFFF',
             }}
           >
-            DomainScope
+            Domain
             <Box component="span" sx={{ color: '#66CCFF', ml: 0.5 }}>
-              AI
+              Scout
             </Box>
           </Typography>
         </Box>

@@ -6,6 +6,10 @@ from datetime import datetime
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), 'src/.env')) # Try src/.env first
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))     # Try backend/.env
+
 from services.database import get_database, init_database
 
 async def list_jobs():
@@ -37,8 +41,8 @@ async def list_jobs():
             error = job.get('error_message', '') or ''
             
             # Truncate error if too long
-            if len(error) > 80:
-                error = error[:77] + "..."
+            if len(error) > 1000:
+                error = error[:997] + "..."
                 
             print(f"{job_id:<38} | {site:<10} | {status:<10} | {records:<8} | {error}")
 

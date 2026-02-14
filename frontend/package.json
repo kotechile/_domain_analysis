@@ -1,7 +1,7 @@
 {
   "name": "domain-analysis-frontend",
   "version": "1.0.0",
-  "description": "Domain Analysis System - React Frontend",
+  "description": "Domain Scout - React Frontend",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.11.1",

@@ -1,6 +1,6 @@
-# Domain Analysis System - Frontend
+# Domain Scout - Frontend
 
-A modern React frontend for the Domain Analysis System, providing a comprehensive interface for domain SEO analysis with real-time data visualization and AI-powered insights.
+A modern React frontend for Domain Scout, providing a comprehensive interface for domain SEO analysis with real-time data visualization and AI-powered insights.
 
 ## Features
 

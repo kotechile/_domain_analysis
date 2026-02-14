@@ -1,6 +1,6 @@
 {
-  "short_name": "Domain Analysis",
-  "name": "Domain Analysis System",
+  "short_name": "Scout",
+  "name": "Domain Scout",
   "icons": [
     {
       "src": "favicon.ico",
@@ -13,11 +13,3 @@
   "theme_color": "#000000",
   "background_color": "#ffffff"
 }
-
-
-
-
-
-
-
-
