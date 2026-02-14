@@ -2057,7 +2057,8 @@ async def get_auctions_report(
         if preferred is not None:
             filters['preferred'] = preferred
         if auction_sites:
-            filters['auction_sites'] = [s.strip().lower() for s in auction_sites.split(',') if s.strip()]
+            # Handle "Go Daddy" vs "godaddy" by removing spaces and lowercasing
+            filters['auction_sites'] = [s.strip().lower().replace(' ', '') for s in auction_sites.split(',') if s.strip()]
         if auction_site:
             filters['auction_site'] = auction_site
         if offering_type:

@@ -111,11 +111,11 @@ const getDefaultDateRange = () => {
   const sevenDaysLater = new Date(now);
   sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
 
-  // Use full ISO datetime string to ensure we exclude records from earlier today
-  // Format: YYYY-MM-DDTHH:mm:ss.sssZ
+  // Use full ISO datetime string for 'from' to ensure we only show future/active auctions
+  // Set 'to' to the end of the current day (YYYY-MM-DD on backend covers until 23:59:59)
   return {
-    from: now.toISOString(), // Full datetime, not just date
-    to: sevenDaysLater.toISOString().split('T')[0], // End date only (inclusive of the full day)
+    from: now.toISOString(),
+    to: now.toISOString().split('T')[0],
   };
 };
 
