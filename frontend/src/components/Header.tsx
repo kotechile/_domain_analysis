@@ -17,7 +17,10 @@ import { supabase } from '../supabaseClient';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import {
   Language as LanguageIcon,
+  AccountBalanceWallet as WalletIcon,
 } from '@mui/icons-material';
+import { useQuery } from '@tanstack/react-query';
+import { useApi } from '../services/api';
 
 const Header: React.FC = () => {
   const navigate = useNavigate();
@@ -38,6 +41,16 @@ const Header: React.FC = () => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const api = useApi();
+
+  // Fetch credit balance
+  const { data: balanceData } = useQuery({
+    queryKey: ['user-balance', session?.user?.id],
+    queryFn: () => api.getBalance(),
+    enabled: !!session?.user?.id,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -137,6 +150,34 @@ const Header: React.FC = () => {
           >
             Analysis History
           </Button>
+          {/* Credits Display */}
+          {session && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 1.5,
+                py: 0.5,
+                borderRadius: '12px',
+                bgcolor: 'rgba(102, 204, 255, 0.1)',
+                border: '1px solid rgba(102, 204, 255, 0.2)',
+              }}
+            >
+              <WalletIcon sx={{ fontSize: 18, color: '#66CCFF' }} />
+              <Typography
+                variant="body2"
+                sx={{
+                  color: '#FFFFFF',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                }}
+              >
+                ${balanceData?.balance?.toFixed(2) || '0.00'}
+              </Typography>
+            </Box>
+          )}
+
           {/* Auth Menu */}
           <Box>
             {session ? (

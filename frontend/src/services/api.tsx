@@ -552,6 +552,35 @@ export interface AuctionReportResponse {
   auctions: Auction[];
 }
 
+// Credits Response Types
+export interface BalanceResponse {
+  user_id: string;
+  balance: number;
+  currency: string;
+}
+
+export interface TransactionResponse {
+  id: string;
+  amount: number;
+  transaction_type: string;
+  description: string;
+  reference_id?: string;
+  balance_after: number;
+  created_at: string;
+}
+
+export interface PurchaseRequest {
+  amount: number;
+  description?: string;
+  reference_id?: string;
+}
+
+export interface PurchaseResponse {
+  success: boolean;
+  new_balance: number;
+  message: string;
+}
+
 // API Service Class
 class ApiService {
   private client: AxiosInstance;
@@ -1379,6 +1408,31 @@ class ApiService {
     const response: AxiosResponse<TriggerMissingResponse> = await this.client.post(
       '/bulk-analysis/trigger-missing'
     );
+    return response.data;
+  }
+
+  // Credits API Methods
+  async getBalance(): Promise<BalanceResponse> {
+    const response: AxiosResponse<BalanceResponse> = await this.client.get('/credits/balance');
+    return response.data;
+  }
+
+  async getTransactions(limit: number = 20, offset: number = 0): Promise<TransactionResponse[]> {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      offset: offset.toString(),
+    });
+    const response: AxiosResponse<TransactionResponse[]> = await this.client.get(
+      `/credits/transactions?${params.toString()}`
+    );
+    return response.data;
+  }
+
+  async purchaseCredits(amount: number, description: string = 'Credit purchase'): Promise<PurchaseResponse> {
+    const response: AxiosResponse<PurchaseResponse> = await this.client.post('/credits/purchase', {
+      amount,
+      description,
+    });
     return response.data;
   }
 
