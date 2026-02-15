@@ -69,7 +69,7 @@ class UsageTrackingService:
                 
             # Calculate cost if not provided
             if cost_estimated == 0.0:
-                cost_estimated = self._pricing_service.calculate_cost(
+                cost_estimated = await self._pricing_service.calculate_cost(
                     resource_type=resource_type,
                     provider=provider,
                     model=model,

@@ -1,34 +1,72 @@
+from typing import Optional, Dict, Any, List
+from datetime import datetime, timedelta
+import structlog
+from services.database import get_database
 
-from typing import Optional, Dict, Any
+logger = structlog.get_logger()
 
 class PricingService:
-    """Service for calculating costs of resource usage"""
+    """Service for calculating costs of resource usage using database config"""
 
-    # Base costs (USD)
-    # Applying 2x multiplier rule here by defining base cost and multiplier
-    COST_MULTIPLIER = 2.0
+    def __init__(self):
+        self._db = None
+        self._rates_cache = {}
+        self._multiplier_cache = 2.0
+        self._last_refresh = None
+        self._cache_ttl = timedelta(minutes=5)
 
-    # DataForSEO costs (per request)
-    DATAFORSEO_COSTS = {
-        'domain_analytics': 0.05,
-        'backlinks': 0.05,
-        'keywords': 0.02
-    }
+    @property
+    def db(self):
+        if self._db is None:
+            self._db = get_database()
+        return self._db
 
-    # LLM costs (per 1k tokens) - approximate
-    LLM_COSTS = {
-        'openai': {
-            'gpt-4o': {'input': 0.005, 'output': 0.015},
-            'gpt-4-turbo': {'input': 0.01, 'output': 0.03},
-            'gpt-3.5-turbo': {'input': 0.0005, 'output': 0.0015}
-        },
-        'gemini': {
-            'gemini-1.5-pro': {'input': 0.0035, 'output': 0.0105},
-            'gemini-1.5-flash': {'input': 0.00035, 'output': 0.00105}
-        }
-    }
+    async def _refresh_config_if_needed(self):
+        """Refresh pricing configuration from database if cache is expired"""
+        now = datetime.utcnow()
+        if self._last_refresh and (now - self._last_refresh) < self._cache_ttl:
+            return
 
-    def calculate_cost(
+        try:
+            if not self.db or not self.db.client:
+                logger.warning("Database client not available, using default pricing")
+                return
+
+            # Fetch multiplier
+            settings_resp = self.db.client.table('system_settings').select('value').eq('key', 'cost_multiplier').execute()
+            if settings_resp.data:
+                try:
+                    self._multiplier_cache = float(settings_resp.data[0]['value'])
+                except (ValueError, TypeError):
+                    logger.error("Invalid cost_multiplier in settings", value=settings_resp.data[0]['value'])
+
+            # Fetch all active rates
+            rates_resp = self.db.client.table('pricing_rates').select('*').eq('is_active', True).execute()
+            if rates_resp.data:
+                new_rates = {}
+                for rate in rates_resp.data:
+                    rtype = rate['resource_type']
+                    provider = rate['provider'].lower()
+                    model = rate['model']
+                    
+                    if rtype not in new_rates:
+                        new_rates[rtype] = {}
+                    if provider not in new_rates[rtype]:
+                        new_rates[rtype][provider] = {}
+                    
+                    new_rates[rtype][provider][model] = {
+                        'input': float(rate['input_cost']),
+                        'output': float(rate['output_cost'])
+                    }
+                self._rates_cache = new_rates
+            
+            self._last_refresh = now
+            logger.info("Pricing configuration refreshed from database")
+        except Exception as e:
+            logger.error("Failed to refresh pricing config", error=str(e))
+            # Keep existing cache if refresh fails
+
+    async def calculate_cost(
         self,
         resource_type: str,
         provider: str,
@@ -41,32 +79,36 @@ class PricingService:
         Calculate the cost in credits (USD) for a given usage.
         Applies the configurable multiplier to base costs.
         """
+        await self._refresh_config_if_needed()
+        
         base_cost = 0.0
+        provider = provider.lower()
 
         if resource_type == 'dataforseo':
             operation = details.get('operation', 'domain_analytics') if details else 'domain_analytics'
-            # Map operation to cost key
-            cost_key = 'domain_analytics' # Default
+            # Map common operation names to model keys used in the DB
+            cost_key = 'domain_analytics'
             if 'backlinks' in operation:
                 cost_key = 'backlinks'
             elif 'keyword' in operation:
                 cost_key = 'keywords'
             
-            base_cost = self.DATAFORSEO_COSTS.get(cost_key, 0.05)
+            # Look up in cache
+            provider_rates = self._rates_cache.get('dataforseo', {}).get('dataforseo', {})
+            rate_info = provider_rates.get(cost_key, provider_rates.get('domain_analytics', {'input': 0.05}))
+            base_cost = rate_info['input']
 
         elif resource_type == 'llm':
-            provider_costs = self.LLM_COSTS.get(provider.lower())
-            if provider_costs:
-                # Default to a mid-tier model if unknown
-                model_costs = provider_costs.get(model, provider_costs.get(list(provider_costs.keys())[0]))
+            provider_rates = self._rates_cache.get('llm', {}).get(provider)
+            if provider_rates:
+                # Default to the first available model if specific model not found
+                model_costs = provider_rates.get(model, provider_rates.get(list(provider_rates.keys())[0]))
                 if model_costs:
                     input_cost = (tokens_input / 1000) * model_costs['input']
                     output_cost = (tokens_output / 1000) * model_costs['output']
                     base_cost = input_cost + output_cost
         
         # Apply multiplier
-        total_cost = base_cost * self.COST_MULTIPLIER
+        total_cost = base_cost * self._multiplier_cache
         
-        # Ensure minimum cost for some operations? 
-        # For now, just return calculated cost.
         return round(total_cost, 6)
