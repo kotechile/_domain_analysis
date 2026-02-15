@@ -18,7 +18,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import structlog
 from contextlib import asynccontextmanager
 
-from api.routes import analysis, reports, health, development_plan, n8n_webhook, bulk_analysis, auctions, filters, auth_test
+from api.routes import analysis, reports, health, development_plan, n8n_webhook, bulk_analysis, auctions, filters, auth_test, credits
 from api.routes import debug_offer_type
 from services.database import init_database
 from services.cache import init_cache
@@ -111,6 +111,7 @@ app.include_router(n8n_webhook.router, prefix="/api/v1", tags=["n8n"])
 app.include_router(bulk_analysis.router, prefix="/api/v1/bulk-analysis", tags=["bulk-analysis"])
 app.include_router(auctions.router, prefix="/api/v1", tags=["auctions"])
 app.include_router(filters.router, prefix="/api/v1", tags=["filters"])
+app.include_router(credits.router, prefix="/api/v1", tags=["credits"])
 
 app.include_router(auth_test.router, prefix="/api/v1", tags=["auth"])
 app.include_router(debug_offer_type.router, prefix="/api/v1", tags=["debug"])

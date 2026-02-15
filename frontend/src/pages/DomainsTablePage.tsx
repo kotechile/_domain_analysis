@@ -115,7 +115,7 @@ const getDefaultDateRange = () => {
   // Set 'to' to the end of the current day (YYYY-MM-DD on backend covers until 23:59:59)
   return {
     from: now.toISOString(),
-    to: now.toISOString().split('T')[0],
+    to: sevenDaysLater.toISOString().split('T')[0], // Use the calculated 7 days later date
   };
 };
 
@@ -186,8 +186,10 @@ const DomainsTablePage: React.FC = () => {
         maxRank: filterData.filter.max_rank ?? undefined,
         minScore: filterData.filter.min_score ?? undefined,
         maxScore: filterData.filter.max_score ?? undefined,
-        expirationFromDate: filterData.filter.expiration_from_date ?? undefined,
-        expirationToDate: filterData.filter.expiration_to_date ?? undefined,
+
+        // Don't load saved dates - always default to "Now" view
+        // expirationFromDate: filterData.filter.expiration_from_date ?? undefined,
+        // expirationToDate: filterData.filter.expiration_to_date ?? undefined,
         auctionSites: filterData.filter.auction_sites ?? undefined,
         sortBy: filterData.filter.sort_by || 'expiration_date',
         sortOrder: filterData.filter.sort_order || 'asc',
@@ -528,8 +530,9 @@ const DomainsTablePage: React.FC = () => {
     try {
       await api.updateFilters({
         tlds: filterValues.tlds,
-        expiration_from_date: filterValues.expirationFromDate,
-        expiration_to_date: filterValues.expirationToDate,
+        // Don't save dates - let them reset to default on next visit
+        // expiration_from_date: filterValues.expirationFromDate,
+        // expiration_to_date: filterValues.expirationToDate,
         scored: filterValues.scored,
         min_score: filterValues.minScore,
         max_score: filterValues.maxScore,
