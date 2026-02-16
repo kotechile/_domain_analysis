@@ -28,6 +28,7 @@ import {
   FormControlLabel,
   Snackbar,
   Alert,
+  Tooltip,
 } from '@mui/material';
 import {
   FilterList as FilterListIcon,
@@ -38,6 +39,7 @@ import {
   FiberNew as FiberNewIcon,
   History as HistoryIcon,
   Analytics as AnalyticsIcon,
+  Bolt as BoltIcon,
 } from '@mui/icons-material';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -54,7 +56,7 @@ const DomainAnalyzeButton: React.FC<{
   domain: string;
   hasAnalysis: boolean;
   onCheckAnalysis: (domain: string, hasAnalysis: boolean) => void;
-  onClick: (domain: string) => void;
+  onClick: (domain: string, mode?: string) => void;
 }> = ({ domain, hasAnalysis, onCheckAnalysis, onClick }) => {
   const api = useApi();
 
@@ -77,29 +79,69 @@ const DomainAnalyzeButton: React.FC<{
     retry: false,
   });
 
-  const buttonColor = hasAnalysis ? '#4CAF50' : '#66CCFF';
-  const borderColor = hasAnalysis ? 'rgba(76, 175, 80, 0.3)' : 'rgba(102, 204, 255, 0.3)';
-  const hoverBgColor = hasAnalysis ? 'rgba(76, 175, 80, 0.1)' : 'rgba(102, 204, 255, 0.1)';
+  if (hasAnalysis) {
+    return (
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<TrendingUpIcon />}
+        onClick={() => onClick(domain)}
+        sx={{
+          color: '#4CAF50',
+          borderColor: 'rgba(76, 175, 80, 0.3)',
+          textTransform: 'none',
+          fontWeight: 500,
+          '&:hover': {
+            borderColor: '#4CAF50',
+            backgroundColor: 'rgba(76, 175, 80, 0.1)',
+          },
+        }}
+      >
+        View Analysis
+      </Button>
+    );
+  }
 
   return (
-    <Button
-      variant="outlined"
-      size="small"
-      startIcon={<TrendingUpIcon />}
-      onClick={() => onClick(domain)}
-      sx={{
-        color: buttonColor,
-        borderColor: borderColor,
-        textTransform: 'none',
-        fontWeight: 500,
-        '&:hover': {
-          borderColor: buttonColor,
-          backgroundColor: hoverBgColor,
-        },
-      }}
-    >
-      {hasAnalysis ? 'View Analysis' : 'Analyze'}
-    </Button>
+    <Stack direction="row" spacing={1}>
+      <Tooltip title="Quick Summary (0.25 credits)">
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={() => onClick(domain, 'legacy')}
+          sx={{
+            minWidth: '40px',
+            color: '#FFB300',
+            borderColor: 'rgba(255, 179, 0, 0.3)',
+            px: 1,
+            '&:hover': {
+              borderColor: '#FFB300',
+              backgroundColor: 'rgba(255, 179, 0, 0.1)',
+            },
+          }}
+        >
+          <BoltIcon fontSize="small" />
+        </Button>
+      </Tooltip>
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<TrendingUpIcon />}
+        onClick={() => onClick(domain, 'dual')}
+        sx={{
+          color: '#66CCFF',
+          borderColor: 'rgba(102, 204, 255, 0.3)',
+          textTransform: 'none',
+          fontWeight: 500,
+          '&:hover': {
+            borderColor: '#66CCFF',
+            backgroundColor: 'rgba(102, 204, 255, 0.1)',
+          },
+        }}
+      >
+        Analyze
+      </Button>
+    </Stack>
   );
 };
 
@@ -379,7 +421,7 @@ const DomainsTablePage: React.FC = () => {
     setPage(0);
   };
 
-  const handleMoreClick = async (domain: string) => {
+  const handleAnalysisAction = async (domain: string, mode?: string) => {
     // Check if domain already has an analysis
     try {
       const report = await api.getReport(domain);
@@ -387,12 +429,14 @@ const DomainsTablePage: React.FC = () => {
         // Domain has analysis, navigate to the report page
         navigate(`/reports/${domain}`);
       } else {
-        // No analysis exists, navigate to main page with domain pre-filled
-        navigate(`/?domain=${encodeURIComponent(domain)}`);
+        // No analysis exists, navigate to main page with domain and mode pre-filled
+        const modeParam = mode ? `&mode=${mode}` : '';
+        navigate(`/?domain=${encodeURIComponent(domain)}${modeParam}`);
       }
     } catch (error) {
-      // If error (likely 404), navigate to main page with domain pre-filled
-      navigate(`/?domain=${encodeURIComponent(domain)}`);
+      // If error (likely 404), navigate to main page with domain and mode pre-filled
+      const modeParam = mode ? `&mode=${mode}` : '';
+      navigate(`/?domain=${encodeURIComponent(domain)}${modeParam}`);
     }
   };
 
@@ -1261,7 +1305,7 @@ const DomainsTablePage: React.FC = () => {
                                   setDomainsWithAnalysis(prev => new Set(prev).add(domain));
                                 }
                               }}
-                              onClick={handleMoreClick}
+                              onClick={handleAnalysisAction}
                             />
                           </TableCell>
                         </TableRow>

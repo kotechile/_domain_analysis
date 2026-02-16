@@ -21,6 +21,8 @@ from models.domain_analysis import (
 )
 from services.analysis_service import AnalysisService
 from services.database import get_database
+from services.pricing_service import PricingService
+from services.credits_service import CreditsService
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -43,30 +45,60 @@ async def analyze_domain(
         # Check if analysis already exists
         existing_report = await db.get_report(request.domain)
         if existing_report:
+            # If same mode or higher mode exists, return existing
             if existing_report.status == AnalysisStatus.COMPLETED:
-                return AnalysisResponse(
-                    success=True,
-                    message="Analysis already exists for this domain",
-                    report_id=request.domain
-                )
+                # If existing is DUAL or matches requested mode, return it
+                if existing_report.analysis_mode == request.mode or existing_report.analysis_mode == AnalysisMode.DUAL:
+                    return AnalysisResponse(
+                        success=True,
+                        message="Analysis already exists for this domain",
+                        report_id=request.domain
+                    )
             elif existing_report.status == AnalysisStatus.IN_PROGRESS:
                 return AnalysisResponse(
                     success=True,
                     message="Analysis already in progress for this domain",
                     report_id=request.domain
                 )
-            else:
-                # Update existing report to pending
-                existing_report.status = AnalysisStatus.PENDING
-                existing_report.analysis_timestamp = datetime.utcnow()
-                existing_report.error_message = None
-                existing_report.processing_time_seconds = None
-                report_id = await db.save_report(existing_report)
+        
+        # Initialize pricing and credits services
+        pricing_service = PricingService(db)
+        credits_service = CreditsService(db)
+        
+        # Determine action and cost
+        # Map LEGACY mode to ai_domain_summary, DUAL/ASYNC to deep_content_analysis
+        action_name = "ai_domain_summary" if request.mode == AnalysisMode.LEGACY else "deep_content_analysis"
+        cost = await pricing_service.calculate_action_cost(action_name)
+        
+        # Check balance
+        balance = await credits_service.get_balance(current_user.id)
+        if balance < cost:
+            raise HTTPException(
+                status_code=402, 
+                detail=f"Insufficient credits. This analysis requires {cost} credits but you only have {balance}."
+            )
+            
+        # Deduct credits
+        description = f"Domain analysis for {request.domain} ({'Summary' if action_name == 'ai_domain_summary' else 'Deep'})"
+        success = await credits_service.deduct_credits(current_user.id, cost, description, f"analysis_{request.domain}")
+        
+        if not success:
+            raise HTTPException(status_code=402, detail="Insufficient credits or credit deduction failed")
+
+        if existing_report:
+            # Update existing report to pending
+            existing_report.status = AnalysisStatus.PENDING
+            existing_report.analysis_mode = request.mode
+            existing_report.analysis_timestamp = datetime.utcnow()
+            existing_report.error_message = None
+            existing_report.processing_time_seconds = None
+            report_id = await db.save_report(existing_report)
         else:
             # Create initial report record
             report = DomainAnalysisReport(
                 domain_name=request.domain,
-                status=AnalysisStatus.PENDING
+                status=AnalysisStatus.PENDING,
+                analysis_mode=request.mode
             )
             
             # Save initial report
@@ -77,17 +109,17 @@ async def analyze_domain(
             analysis_service.analyze_domain,
             request.domain,
             report_id,
-            "dual", # Default mode
+            request.mode.value,
             current_user.id
         )
         
-        logger.info("Domain analysis started", domain=request.domain, report_id=report_id, user_id=current_user.id)
+        logger.info("Domain analysis started", domain=request.domain, mode=request.mode, report_id=report_id, user_id=current_user.id)
         
         return AnalysisResponse(
             success=True,
-            message="Analysis started successfully",
+            message=f"Analysis started successfully ({'Summary' if action_name == 'ai_domain_summary' else 'Deep'})",
             report_id=report_id,
-            estimated_completion_time=15  # seconds
+            estimated_completion_time=15 if action_name == "ai_domain_summary" else 45
         )
         
     except Exception as e:

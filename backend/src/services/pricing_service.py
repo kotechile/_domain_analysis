@@ -11,6 +11,8 @@ class PricingService:
     def __init__(self):
         self._db = None
         self._rates_cache = {}
+        self._action_rates_cache = {}
+        self._tiers_cache = {}
         self._multiplier_cache = 2.0
         self._last_refresh = None
         self._cache_ttl = timedelta(minutes=5)
@@ -32,7 +34,7 @@ class PricingService:
                 logger.warning("Database client not available, using default pricing")
                 return
 
-            # Fetch multiplier
+            # 1. Fetch multiplier
             settings_resp = self.db.client.table('system_settings').select('value').eq('key', 'cost_multiplier').execute()
             if settings_resp.data:
                 try:
@@ -40,7 +42,7 @@ class PricingService:
                 except (ValueError, TypeError):
                     logger.error("Invalid cost_multiplier in settings", value=settings_resp.data[0]['value'])
 
-            # Fetch all active rates
+            # 2. Fetch all active legacy rates
             rates_resp = self.db.client.table('pricing_rates').select('*').eq('is_active', True).execute()
             if rates_resp.data:
                 new_rates = {}
@@ -60,11 +62,67 @@ class PricingService:
                     }
                 self._rates_cache = new_rates
             
+            # 3. Fetch Action Rates (Tiering System)
+            try:
+                actions_resp = self.db.client.table('action_rates').select('*').execute()
+                if actions_resp.data:
+                    self._action_rates_cache = {r['action_name']: r for r in actions_resp.data}
+            except Exception as ae:
+                logger.warning("action_rates table not available yet", error=str(ae))
+
+            # 4. Fetch Tiers
+            try:
+                tiers_resp = self.db.client.table('subscription_tiers').select('*').execute()
+                if tiers_resp.data:
+                    self._tiers_cache = {t['id']: t for t in tiers_resp.data}
+            except Exception as te:
+                logger.warning("subscription_tiers table not available yet", error=str(te))
+            
             self._last_refresh = now
             logger.info("Pricing configuration refreshed from database")
         except Exception as e:
             logger.error("Failed to refresh pricing config", error=str(e))
             # Keep existing cache if refresh fails
+
+    async def calculate_action_cost(self, action_name: str, quantity: float = 1.0) -> float:
+        """
+        Calculate cost for a specific tiered action.
+        Example: calculate_action_cost('stats_sync', 2000) -> 0.16 credits
+        """
+        await self._refresh_config_if_needed()
+        
+        action_info = self._action_rates_cache.get(action_name)
+        if not action_info:
+            logger.warning("Action rate not found, using legacy calculation", action=action_name)
+            return 0.0
+
+        base_credit_cost = float(action_info['credit_cost'])
+        unit_amount = int(action_info.get('unit_amount', 1))
+        
+        # Calculate proportional cost based on quantity and unit_amount
+        total_cost = (quantity / unit_amount) * base_credit_cost
+        
+        return round(total_cost, 4)
+
+    async def get_user_subscription(self, user_id: str) -> Dict[str, Any]:
+        """Get user's current subscription details"""
+        try:
+            resp = self.db.client.table('user_subscriptions').select('*, subscription_tiers(*)').eq('user_id', user_id).execute()
+            if resp.data:
+                return resp.data[0]
+            
+            # Default to free tier if no subscription record
+            await self._refresh_config_if_needed()
+            free_tier = self._tiers_cache.get('free', {'name': 'Free Tier', 'id': 'free'})
+            return {
+                'user_id': user_id,
+                'tier_id': 'free',
+                'status': 'active',
+                'subscription_tiers': free_tier
+            }
+        except Exception as e:
+            logger.error("Failed to get user subscription", user_id=user_id, error=str(e))
+            return {'tier_id': 'free', 'status': 'active'}
 
     async def calculate_cost(
         self,
@@ -77,10 +135,19 @@ class PricingService:
     ) -> float:
         """
         Calculate the cost in credits (USD) for a given usage.
-        Applies the configurable multiplier to base costs.
+        Prioritizes action-based tiering if specified in details.
         """
         await self._refresh_config_if_needed()
         
+        # Check if an explicit action is provided (Tiering System)
+        if details and 'action' in details:
+            action_name = details['action']
+            quantity = details.get('quantity', 1.0)
+            action_cost = await self.calculate_action_cost(action_name, quantity)
+            if action_cost > 0:
+                return action_cost
+
+        # Fallback to legacy resource-based calculation
         base_cost = 0.0
         provider = provider.lower()
 
@@ -108,7 +175,7 @@ class PricingService:
                     output_cost = (tokens_output / 1000) * model_costs['output']
                     base_cost = input_cost + output_cost
         
-        # Apply multiplier
+        # Apply multiplier for legacy costs
         total_cost = base_cost * self._multiplier_cache
         
         return round(total_cost, 6)

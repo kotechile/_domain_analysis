@@ -642,9 +642,10 @@ class ApiService {
   }
 
   // Domain Analysis
-  async analyzeDomain(domain: string): Promise<AnalysisResponse> {
+  async analyzeDomain(domain: string, mode: string = 'dual'): Promise<AnalysisResponse> {
     const response: AxiosResponse<AnalysisResponse> = await this.client.post('/analyze', {
       domain,
+      mode,
     });
     return response.data;
   }

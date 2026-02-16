@@ -56,6 +56,7 @@ class DataSource(str, Enum):
 class DomainAnalysisRequest(BaseModel):
     """Request model for domain analysis"""
     domain: str = Field(..., min_length=3, max_length=255, description="Domain to analyze")
+    mode: AnalysisMode = Field(default=AnalysisMode.DUAL, description="Analysis mode (legacy for summary, dual for deep)")
     
     @validator('domain')
     def validate_domain(cls, v):

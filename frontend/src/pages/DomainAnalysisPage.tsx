@@ -15,6 +15,7 @@ import {
   Search as SearchIcon,
   Store as StoreIcon,
   History as HistoryIcon,
+  Bolt as BoltIcon,
 } from '@mui/icons-material';
 import { useMutation } from '@tanstack/react-query';
 
@@ -24,6 +25,7 @@ import Header from '../components/Header';
 const DomainAnalysisPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const [domain, setDomain] = useState('');
+  const [mode, setMode] = useState('dual');
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const api = useApi();
@@ -31,14 +33,18 @@ const DomainAnalysisPage: React.FC = () => {
   // Check for domain in URL params on mount
   useEffect(() => {
     const domainParam = searchParams.get('domain');
+    const modeParam = searchParams.get('mode');
     if (domainParam) {
       setDomain(domainParam);
+    }
+    if (modeParam) {
+      setMode(modeParam);
     }
   }, [searchParams]);
 
   // Analysis mutation
   const analysisMutation = useMutation({
-    mutationFn: (domain: string) => api.analyzeDomain(domain),
+    mutationFn: ({ domain, mode }: { domain: string; mode: string }) => api.analyzeDomain(domain, mode),
     onSuccess: (data) => {
       if (data.success) {
         navigate(`/reports/${domain}`);
@@ -66,7 +72,7 @@ const DomainAnalysisPage: React.FC = () => {
       return;
     }
 
-    analysisMutation.mutate(formattedDomain);
+    analysisMutation.mutate({ domain: formattedDomain, mode });
   };
 
   return (
@@ -75,11 +81,11 @@ const DomainAnalysisPage: React.FC = () => {
       <Container maxWidth="md" sx={{ py: { xs: 6, sm: 8, md: 10 } }}>
         {/* Hero Section */}
         <Box sx={{ textAlign: 'center', mb: 6 }}>
-          <Typography 
-            variant="h2" 
-            component="h1" 
+          <Typography
+            variant="h2"
+            component="h1"
             gutterBottom
-            sx={{ 
+            sx={{
               fontWeight: 700,
               mb: 3,
               fontSize: { xs: '2.5rem', sm: '3rem', md: '3.5rem' },
@@ -96,10 +102,10 @@ const DomainAnalysisPage: React.FC = () => {
               Domain
             </Box>
           </Typography>
-          <Typography 
-            variant="body1" 
-            sx={{ 
-              maxWidth: 600, 
+          <Typography
+            variant="body1"
+            sx={{
+              maxWidth: 600,
               mx: 'auto',
               mb: 6,
               lineHeight: 1.7,
@@ -158,24 +164,24 @@ const DomainAnalysisPage: React.FC = () => {
                   type="submit"
                   variant="contained"
                   disabled={analysisMutation.isPending || !domain.trim()}
-                  sx={{ 
+                  sx={{
                     minWidth: 120,
-                    backgroundColor: '#2962FF',
+                    backgroundColor: mode === 'legacy' ? '#FFB300' : '#2962FF',
                     color: '#FFFFFF',
                     borderRadius: '12px',
                     fontSize: '1rem',
                     fontWeight: 600,
                     px: 3,
                     '&:hover': {
-                      backgroundColor: '#1E4ED8',
+                      backgroundColor: mode === 'legacy' ? '#FFA000' : '#1E4ED8',
                     },
                     '&:disabled': {
-                      backgroundColor: 'rgba(41, 98, 255, 0.5)',
+                      backgroundColor: mode === 'legacy' ? 'rgba(255, 179, 0, 0.5)' : 'rgba(41, 98, 255, 0.5)',
                     },
                   }}
-                  startIcon={analysisMutation.isPending ? <CircularProgress size={18} color="inherit" /> : null}
+                  startIcon={analysisMutation.isPending ? <CircularProgress size={18} color="inherit" /> : (mode === 'legacy' ? <BoltIcon /> : null)}
                 >
-                  {analysisMutation.isPending ? 'Analyzing...' : 'Analyze'}
+                  {analysisMutation.isPending ? 'Analyzing...' : (mode === 'legacy' ? 'Quick Summary' : 'Deep Analysis')}
                 </Button>
               </Box>
 
@@ -233,15 +239,15 @@ const DomainAnalysisPage: React.FC = () => {
 
           {analysisMutation.isPending && (
             <Box sx={{ mt: 4 }}>
-              <LinearProgress 
-                sx={{ 
-                  borderRadius: 1, 
+              <LinearProgress
+                sx={{
+                  borderRadius: 1,
                   height: 6,
                   backgroundColor: 'rgba(255, 255, 255, 0.1)',
                   '& .MuiLinearProgress-bar': {
                     backgroundColor: '#2962FF',
                   },
-                }} 
+                }}
               />
               <Typography variant="body2" sx={{ mt: 2, textAlign: 'center', color: '#FFFFFF', opacity: 0.8 }}>
                 Starting analysis...
