@@ -456,7 +456,7 @@ const DomainsTablePage: React.FC = () => {
     } else if (site === 'godaddy' || site === 'go daddy') {
       return `https://auctions.godaddy.com/`;
     } else if (site === 'namesilo') {
-      return `https://www.namesilo.com/marketplace`;
+      return link || `https://www.namesilo.com/marketplace/domain-details/${domain}`;
     } else if (site === 'catchclub' || site === 'catch.club') {
       return `https://catch.club/bid/${domain}`;
     }

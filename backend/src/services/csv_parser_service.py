@@ -391,6 +391,9 @@ class CSVParserService:
 
                     # Parse Url
                     url = row.get('Url', '').strip()
+                    if not url and domain_name:
+                        # Fallback to domain-specific details page if URL is missing
+                        url = f"https://www.namesilo.com/marketplace/domain-details/{domain_name}"
 
                     from datetime import datetime, timezone
                     far_future_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
