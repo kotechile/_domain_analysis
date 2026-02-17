@@ -8,7 +8,7 @@ This workflow uploads auction files to Supabase Storage and then triggers the ba
 
 ### 1. Get Supabase Service Role Key
 
-1. Go to your Supabase project: https://sbdomain.aichieve.net
+1. Go to your Supabase project: https://sbdomain.giniloh.com
 2. Navigate to **Settings** → **API**
 3. Copy the **Service Role Key** (not the anon key - you need service role for storage uploads)
 
@@ -55,7 +55,7 @@ The workflow uses environment variables for backend URL. Set this in Coolify for
 
 The workflow uses:
 - Header Auth credential (`sbdomainservice`) for `Authorization: Bearer` header
-- Hardcoded Supabase URL: `https://sbdomain.aichieve.net`
+- Hardcoded Supabase URL: `https://sbdomain.giniloh.com`
 - `{{ $env.SUPABASE_SERVICE_ROLE_KEY }}` for `apikey` header (if env vars are accessible)
 - `{{ $env.BACKEND_API_URL }}` for backend processing triggers
 

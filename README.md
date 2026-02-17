@@ -1,4 +1,4 @@
-# Domain Scout
+# Get Domain
 
 A comprehensive domain analysis platform that provides detailed SEO insights, backlink analysis, keyword research, and AI-powered recommendations for domain investment decisions.
 

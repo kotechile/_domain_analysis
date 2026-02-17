@@ -1,4 +1,4 @@
-# Domain Scout - Backend
+# Get Domain - Backend
 
 A FastAPI-based backend service for comprehensive domain analysis with SEO data, backlinks, and LLM-powered insights.
 

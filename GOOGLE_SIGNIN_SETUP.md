@@ -6,7 +6,7 @@ This guide will walk you through enabling Google OAuth authentication in your se
 
 - Access to your Google Cloud Console
 - Access to your Coolify dashboard
-- Your Supabase domain: `sbdomain.aichieve.net`
+- Your Supabase domain: `sbdomain.giniloh.com`
 - Your frontend domain (if different)
 
 ---
@@ -35,15 +35,15 @@ This guide will walk you through enabling Google OAuth authentication in your se
 5. **Name**: Supabase Auth (or any name)
 6. **Authorized JavaScript origins**:
    ```
-   https://sbdomain.aichieve.net
-   http://sbdomain.aichieve.net:8000
+   https://sbdomain.giniloh.com
+   http://sbdomain.giniloh.com:8000
    ```
    (Add your frontend domain if different)
 
 7. **Authorized redirect URIs**:
    ```
-   https://sbdomain.aichieve.net/auth/v1/callback
-   http://sbdomain.aichieve.net:8000/auth/v1/callback
+   https://sbdomain.giniloh.com/auth/v1/callback
+   http://sbdomain.giniloh.com:8000/auth/v1/callback
    ```
    (Add your frontend callback URL if you have one)
 
@@ -69,10 +69,10 @@ Add or update the following environment variables:
 GOTRUE_EXTERNAL_GOOGLE_ENABLED=true
 GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=your-google-client-id-here
 GOTRUE_EXTERNAL_GOOGLE_SECRET=your-google-client-secret-here
-GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=https://sbdomain.aichieve.net/auth/v1/callback
+GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=https://sbdomain.giniloh.com/auth/v1/callback
 
 # Site URL (important for redirects)
-GOTRUE_SITE_URL=https://sbdomain.aichieve.net
+GOTRUE_SITE_URL=https://sbdomain.giniloh.com
 
 # Additional redirect URLs (if you have a frontend app)
 ADDITIONAL_REDIRECT_URLS=https://your-frontend-domain.com/auth/callback,https://your-frontend-domain.com
@@ -84,8 +84,8 @@ Make sure these are set correctly (they should already be there):
 
 ```bash
 # These should already exist from your setup
-SUPABASE_URL=https://sbdomain.aichieve.net
-SUPABASE_PUBLIC_URL=https://sbdomain.aichieve.net
+SUPABASE_URL=https://sbdomain.giniloh.com
+SUPABASE_PUBLIC_URL=https://sbdomain.giniloh.com
 API_EXTERNAL_URL=http://supabase-kong:8000
 ```
 
@@ -111,7 +111,7 @@ You can test if Google OAuth is configured by checking:
 
 ```bash
 # Get the auth URL (replace with your actual domain)
-curl https://sbdomain.aichieve.net/auth/v1/authorize?provider=google
+curl https://sbdomain.giniloh.com/auth/v1/authorize?provider=google
 ```
 
 This should redirect you to Google's OAuth consent screen.
@@ -136,7 +136,7 @@ Create `frontend/src/lib/supabase.ts`:
 ```typescript
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://sbdomain.aichieve.net'
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://sbdomain.giniloh.com'
 const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'your-anon-key'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
@@ -147,7 +147,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 Update `frontend/.env`:
 
 ```bash
-REACT_APP_SUPABASE_URL=https://sbdomain.aichieve.net
+REACT_APP_SUPABASE_URL=https://sbdomain.giniloh.com
 REACT_APP_SUPABASE_ANON_KEY=your-supabase-anon-key
 REACT_APP_API_URL=http://localhost:8010/api/v1
 ```
@@ -252,7 +252,7 @@ You should see new users with `raw_user_meta_data` containing Google profile inf
 
 **Solution**: 
 - Verify the redirect URI in Google Cloud Console matches exactly:
-  - `https://sbdomain.aichieve.net/auth/v1/callback`
+  - `https://sbdomain.giniloh.com/auth/v1/callback`
 - Check `GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI` in Coolify
 - Make sure there are no trailing slashes
 
@@ -273,7 +273,7 @@ You should see new users with `raw_user_meta_data` containing Google profile inf
 ### Issue: "Connection refused" or SSL errors
 
 **Solution**:
-- Verify your domain is accessible: `https://sbdomain.aichieve.net`
+- Verify your domain is accessible: `https://sbdomain.giniloh.com`
 - Check SSL certificate is valid
 - Verify firewall rules allow HTTPS (port 443)
 
@@ -284,14 +284,14 @@ You should see new users with `raw_user_meta_data` containing Google profile inf
 ### 7.1 Test via Supabase Dashboard
 
 1. Access your Supabase Studio (if available):
-   - `https://sbdomain.aichieve.net` (or your configured Studio URL)
+   - `https://sbdomain.giniloh.com` (or your configured Studio URL)
 2. Try signing in with Google
 
 ### 7.2 Test via API
 
 ```bash
 # Get the authorization URL
-curl "https://sbdomain.aichieve.net/auth/v1/authorize?provider=google"
+curl "https://sbdomain.giniloh.com/auth/v1/authorize?provider=google"
 
 # This should return a redirect URL to Google
 ```
@@ -309,7 +309,7 @@ If you've set up the frontend:
 ## 📝 Summary Checklist
 
 - [ ] Created Google OAuth credentials in Google Cloud Console
-- [ ] Added authorized redirect URI: `https://sbdomain.aichieve.net/auth/v1/callback`
+- [ ] Added authorized redirect URI: `https://sbdomain.giniloh.com/auth/v1/callback`
 - [ ] Set `GOTRUE_EXTERNAL_GOOGLE_ENABLED=true` in Coolify
 - [ ] Set `GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID` in Coolify
 - [ ] Set `GOTRUE_EXTERNAL_GOOGLE_SECRET` in Coolify

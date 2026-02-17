@@ -7,7 +7,7 @@ Your application has been successfully configured to connect to your self-hosted
 ### ✅ What Was Configured
 
 1. **Backend `.env` File** - Updated with:
-   - `SUPABASE_URL=https://sbdomain.aichieve.net`
+   - `SUPABASE_URL=https://sbdomain.giniloh.com`
    - `SUPABASE_KEY` - Anon key from Coolify (`SERVICE_SUPABASEANON_KEY`)
    - `SUPABASE_SERVICE_ROLE_KEY` - Service role key from Coolify (`SERVICE_SUPABASESERVICE_KEY`)
    - `SUPABASE_VERIFY_SSL=false` - Disabled SSL verification for self-signed certificate
@@ -77,7 +77,7 @@ If you encounter connection issues:
 
 1. **Check SSL Certificate**: The connection works with SSL verification disabled. If you want to enable it, you'll need to add your self-signed certificate to the system trust store.
 
-2. **Verify API URL**: Make sure `https://sbdomain.aichieve.net` is accessible from your backend server.
+2. **Verify API URL**: Make sure `https://sbdomain.giniloh.com` is accessible from your backend server.
 
 3. **Check Firewall**: Ensure port 443 (HTTPS) is open for your Supabase API.
 
@@ -87,4 +87,4 @@ If you encounter connection issues:
 
 - Supabase Self-Hosted Docs: [Your Supabase instance documentation]
 - Coolify Documentation: [Coolify docs for environment variables]
-- PostgreSQL Connection String: `postgresql://postgres:mySecurePass123@sbdomain.aichieve.net:5434/postgres?sslmode=require`
+- PostgreSQL Connection String: `postgresql://postgres:mySecurePass123@sbdomain.giniloh.com:5434/postgres?sslmode=require`

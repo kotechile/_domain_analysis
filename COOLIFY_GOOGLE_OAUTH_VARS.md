@@ -15,7 +15,7 @@ GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.co
 GOTRUE_EXTERNAL_GOOGLE_SECRET=your-google-client-secret-here
 
 # OAuth Redirect URI (must match Google Cloud Console)
-GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=https://sbdomain.aichieve.net/auth/v1/callback
+GOTRUE_EXTERNAL_GOOGLE_REDIRECT_URI=https://sbdomain.giniloh.com/auth/v1/callback
 ```
 
 ## ✅ Verify These Existing Variables
@@ -25,7 +25,7 @@ These should already be set (from your current setup):
 ```bash
 # Site URL (used for redirects)
 GOTRUE_SITE_URL=${SERVICE_URL_SUPABASEKONG}
-# Which should be: https://sbdomain.aichieve.net
+# Which should be: https://sbdomain.giniloh.com
 
 # API External URL
 API_EXTERNAL_URL=http://supabase-kong:8000
@@ -64,7 +64,7 @@ ADDITIONAL_REDIRECT_URLS=https://your-frontend.com/auth/callback,https://your-fr
 After setting variables and restarting, test with:
 
 ```bash
-curl "https://sbdomain.aichieve.net/auth/v1/authorize?provider=google"
+curl "https://sbdomain.giniloh.com/auth/v1/authorize?provider=google"
 ```
 
 This should redirect to Google's OAuth consent screen.

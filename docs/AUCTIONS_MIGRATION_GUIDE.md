@@ -19,7 +19,7 @@ This migration creates:
 ### Steps:
 
 1. **Access Supabase Studio**
-   - Open your Supabase dashboard: `https://sbdomain.aichieve.net` (or your configured URL)
+   - Open your Supabase dashboard: `https://sbdomain.giniloh.com` (or your configured URL)
    - Log in with your admin credentials
 
 2. **Navigate to SQL Editor**
@@ -48,7 +48,7 @@ This migration creates:
 
 1. **Connect to PostgreSQL**
    ```bash
-   psql -h sbdomain.aichieve.net -U postgres -d postgres -p 5434
+   psql -h sbdomain.giniloh.com -U postgres -d postgres -p 5434
    ```
    (Enter your PostgreSQL password when prompted)
 

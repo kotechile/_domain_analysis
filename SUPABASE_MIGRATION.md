@@ -2,7 +2,7 @@
 
 ## ✅ Configuration Updated
 
-Your `.env` files have been updated to use your self-hosted Supabase instance at `sbdomain.aichieve.net`.
+Your `.env` files have been updated to use your self-hosted Supabase instance at `sbdomain.giniloh.com`.
 
 ## 📋 Next Steps Required
 
@@ -10,7 +10,7 @@ Your `.env` files have been updated to use your self-hosted Supabase instance at
 
 You need to retrieve the API keys from your self-hosted Supabase instance:
 
-1. **Access your Supabase dashboard** at `https://sbdomain.aichieve.net` (or your configured URL)
+1. **Access your Supabase dashboard** at `https://sbdomain.giniloh.com` (or your configured URL)
 2. **Navigate to Settings > API**
 3. **Copy the following keys:**
    - **Anon/Public Key** → Use for `SUPABASE_KEY`
@@ -30,12 +30,12 @@ SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY_HERE
 
 The API URL has been set to:
 ```
-SUPABASE_URL=https://sbdomain.aichieve.net
+SUPABASE_URL=https://sbdomain.giniloh.com
 ```
 
 **If your self-hosted Supabase API is on a different URL or port**, update this value. Common alternatives:
-- `http://sbdomain.aichieve.net:8000` (if using HTTP on port 8000)
-- `https://sbdomain.aichieve.net:443` (if using HTTPS on custom port)
+- `http://sbdomain.giniloh.com:8000` (if using HTTP on port 8000)
+- `https://sbdomain.giniloh.com:443` (if using HTTPS on custom port)
 
 ### 4. Test the Connection
 
@@ -51,7 +51,7 @@ python test_supabase.py
 
 **PostgreSQL Connection String:**
 ```
-postgresql://postgres:mySecurePass123@sbdomain.aichieve.net:5434/postgres?sslmode=require
+postgresql://postgres:mySecurePass123@sbdomain.giniloh.com:5434/postgres?sslmode=require
 ```
 
 This connection string is stored for reference. The application uses the Supabase Python SDK which requires the API URL and keys, not the direct PostgreSQL connection.

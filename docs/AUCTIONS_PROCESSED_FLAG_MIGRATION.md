@@ -14,7 +14,7 @@ Added a `processed` boolean flag to the `auctions` table to track which records 
 
 **Option B: Using psql**
 ```bash
-psql -h sbdomain.aichieve.net -U postgres -d postgres -f supabase/migrations/20250125000003_add_processed_flag_to_auctions.sql
+psql -h sbdomain.giniloh.com -U postgres -d postgres -f supabase/migrations/20250125000003_add_processed_flag_to_auctions.sql
 ```
 
 ### 2. Verify Migration
