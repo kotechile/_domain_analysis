@@ -3,7 +3,7 @@
 ## Changes Made
 
 Updated all domain references from:
-- `sb_domain.aichieve.net` → `sbdomain.aichieve.net`
+- `sb_domain.aichieve.net` → `sbdomain.giniloh.com`
 - `sb_content.aichieve.net` → `sbcontent.aichieve.net` (no references found)
 
 ## ✅ Files Updated
@@ -26,8 +26,8 @@ SUPABASE_URL=https://sb_domain.aichieve.net
 postgresql://postgres:mySecurePass123@sb_domain.aichieve.net:5434/postgres?sslmode=require
 
 # After
-SUPABASE_URL=https://sbdomain.aichieve.net
-postgresql://postgres:mySecurePass123@sbdomain.aichieve.net:5434/postgres?sslmode=require
+SUPABASE_URL=https://sbdomain.giniloh.com
+postgresql://postgres:mySecurePass123@sbdomain.giniloh.com:5434/postgres?sslmode=require
 ```
 
 ## ⚠️ Important: Next Steps
@@ -37,22 +37,22 @@ postgresql://postgres:mySecurePass123@sbdomain.aichieve.net:5434/postgres?sslmod
 You need to update your Coolify environment variables to match the new domain:
 
 **In your Supabase service in Coolify, update:**
-- `SERVICE_FQDN_SUPABASEKONG` → `sbdomain.aichieve.net`
-- `SERVICE_URL_SUPABASEKONG` → `https://sbdomain.aichieve.net`
-- `GOTRUE_SITE_URL` → `https://sbdomain.aichieve.net`
-- `SUPABASE_URL` → `https://sbdomain.aichieve.net`
-- `SUPABASE_PUBLIC_URL` → `https://sbdomain.aichieve.net`
+- `SERVICE_FQDN_SUPABASEKONG` → `sbdomain.giniloh.com`
+- `SERVICE_URL_SUPABASEKONG` → `https://sbdomain.giniloh.com`
+- `GOTRUE_SITE_URL` → `https://sbdomain.giniloh.com`
+- `SUPABASE_URL` → `https://sbdomain.giniloh.com`
+- `SUPABASE_PUBLIC_URL` → `https://sbdomain.giniloh.com`
 
 ### 2. Update Google OAuth Configuration
 
 In Google Cloud Console, update the authorized redirect URIs:
 - Old: `https://sb_domain.aichieve.net/auth/v1/callback`
-- New: `https://sbdomain.aichieve.net/auth/v1/callback`
+- New: `https://sbdomain.giniloh.com/auth/v1/callback`
 
 ### 3. Update DNS Records
 
 Make sure your DNS records point to the new domain:
-- `sbdomain.aichieve.net` → Your server IP
+- `sbdomain.giniloh.com` → Your server IP
 - `sbcontent.aichieve.net` → Your server IP (if applicable)
 
 ### 4. Restart Services
@@ -70,12 +70,12 @@ source venv/bin/activate
 python test_supabase.py
 
 # Test API endpoint
-curl https://sbdomain.aichieve.net/auth/v1/authorize?provider=google
+curl https://sbdomain.giniloh.com/auth/v1/authorize?provider=google
 ```
 
 ## ✅ Verification
 
-All references to `sb_domain.aichieve.net` have been replaced with `sbdomain.aichieve.net`.
+All references to `sb_domain.aichieve.net` have been replaced with `sbdomain.giniloh.com`.
 
 No references to `sb_content.aichieve.net` were found in the codebase.
 

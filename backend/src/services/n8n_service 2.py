@@ -271,7 +271,7 @@ class N8NService:
             }
             
             # Use configured bulk webhook URL or fallback to default
-            webhook_url = self.settings.N8N_WEBHOOK_URL_BULK or "https://n8n.aichieve.net/webhook/webhook/backlinks-bulk-page-summary"
+            webhook_url = self.settings.N8N_WEBHOOK_URL_BULK or "https://n8n.giniloh.com/webhook/webhook/backlinks-bulk-page-summary"
             
             if not webhook_url:
                 logger.error("N8N bulk webhook URL not configured")
@@ -374,7 +374,7 @@ class N8NService:
             }
             
             # Use configured bulk rank webhook URL or fallback to default
-            webhook_url = getattr(self.settings, 'N8N_WEBHOOK_URL_BULK_RANK', None) or "https://n8n.aichieve.net/webhook/webhook/backlinks-bulk-rank"
+            webhook_url = getattr(self.settings, 'N8N_WEBHOOK_URL_BULK_RANK', None) or "https://n8n.giniloh.com/webhook/webhook/backlinks-bulk-rank"
             
             if not webhook_url:
                 logger.error("N8N bulk rank webhook URL not configured")
@@ -480,7 +480,7 @@ class N8NService:
             }
             
             # Use configured bulk backlinks webhook URL or fallback to default
-            webhook_url = getattr(self.settings, 'N8N_WEBHOOK_URL_BULK_BACKLINKS', None) or "https://n8n.aichieve.net/webhook/webhook/backlinks-bulk-backlinks"
+            webhook_url = getattr(self.settings, 'N8N_WEBHOOK_URL_BULK_BACKLINKS', None) or "https://n8n.giniloh.com/webhook/webhook/backlinks-bulk-backlinks"
             
             if not webhook_url:
                 logger.error("N8N bulk backlinks webhook URL not configured")
@@ -577,7 +577,7 @@ class N8NService:
             }
             
             # Use configured bulk traffic webhook URL or fallback to default
-            webhook_url = getattr(self.settings, 'N8N_WEBHOOK_URL_BULK_TRAFFIC', None) or "https://n8n.aichieve.net/webhook/webhook/bulk-traffic-batch"
+            webhook_url = getattr(self.settings, 'N8N_WEBHOOK_URL_BULK_TRAFFIC', None) or "https://n8n.giniloh.com/webhook/webhook/bulk-traffic-batch"
             
             if not webhook_url:
                 logger.error("N8N bulk traffic webhook URL not configured")
@@ -683,7 +683,7 @@ class N8NService:
             }
             
             # Use configured bulk spam score webhook URL or fallback to default
-            webhook_url = getattr(self.settings, 'N8N_WEBHOOK_URL_BULK_SPAM_SCORE', None) or "https://n8n.aichieve.net/webhook/webhook/backlinks-bulk-spam-score"
+            webhook_url = getattr(self.settings, 'N8N_WEBHOOK_URL_BULK_SPAM_SCORE', None) or "https://n8n.giniloh.com/webhook/webhook/backlinks-bulk-spam-score"
             
             if not webhook_url:
                 logger.error("N8N bulk spam score webhook URL not configured")

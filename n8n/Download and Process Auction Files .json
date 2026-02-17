@@ -172,7 +172,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://domain.aichieve.net/api/v1/auctions/process-existing-upload",
+        "url": "https://getdomain.aichieve.net/api/v1/auctions/process-existing-upload",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

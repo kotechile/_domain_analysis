@@ -32,7 +32,7 @@
         {
             "parameters": {
                 "method": "POST",
-                "url": "https://domain.aichieve.net/api/v1/auctions/upload-csv",
+                "url": "https://getdomain.aichieve.net/api/v1/auctions/upload-csv",
                 "sendBody": true,
                 "contentType": "multipart-form-data",
                 "bodyParameters": {

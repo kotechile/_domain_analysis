@@ -34,7 +34,7 @@ services:
       - DATAFORSEO_PASSWORD=${DATAFORSEO_PASSWORD}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SECRET_KEY=${SECRET_KEY}
-      - ALLOWED_ORIGINS=["http://localhost:3000", "http://frontend:3000", "https://${COOLIFY_FQDN}", "https://n8n.giniloh.com", "https://domain.aichieve.net"]
+      - ALLOWED_ORIGINS=["http://localhost:3000", "http://frontend:3000", "https://${COOLIFY_FQDN}", "https://n8n.giniloh.com", "https://getdomain.aichieve.net"]
       - ALLOWED_HOSTS=["*"]
     depends_on:
       redis:
