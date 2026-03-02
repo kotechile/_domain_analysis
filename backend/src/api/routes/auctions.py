@@ -59,7 +59,9 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
     
     while True:
         # 1. Fetch a batch of records from staging
-        result = db.client.table('auctions_staging').select('*').eq('job_id', job_id).limit(5000).execute()
+        # We also need to fetch columns that we want to keep if they are in the staging record, 
+        # but the staging record usually only has basic auction info.
+        result = db.client.table('auctions_staging').select('*').eq('job_id', job_id).limit(2000).execute()
         records = result.data
         
         if not records:
@@ -90,12 +92,16 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
                 'current_bid': r.get('current_bid'),
                 'source_data': r.get('source_data'),
                 'link': link,
-                'processed': r.get('processed', True),
-                'preferred': r.get('preferred', False),
-                'has_statistics': r.get('has_statistics', False),
+                'offer_type': r.get('offer_type'),
                 'score': r.get('score'),
-                'offer_type': r.get('offer_type')
+                'first_seen': r.get('first_seen')
             }
+            # Remove keys with None values to let Supabase/Postgres handle defaults/preservation
+            clean_r = {k: v for k, v in clean_r.items() if v is not None}
+            
+            # NOTE: We EXPLICITLY do NOT include 'has_statistics', 'page_statistics', or 'traffic_data'
+            # to prevent overwriting them with nulls.
+            
             # Overwrite existing - assuming later records in batch might be newer or identical
             unique_records[key] = clean_r
             

@@ -103,10 +103,11 @@ const Auth: React.FC = () => {
     const handleGoogleLogin = async () => {
         setLoading(true);
         try {
+            const baseUrl = (process.env.REACT_APP_URL || window.location.origin).replace(/\/$/, '');
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: `${process.env.REACT_APP_URL || window.location.origin}/auth/callback`,
+                    redirectTo: `${baseUrl}/auth/callback`,
                 },
             });
             if (error) throw error;
