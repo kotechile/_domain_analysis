@@ -256,7 +256,8 @@ class AuctionsService:
         filters: Optional[Dict[str, Any]] = None,
         sort_by: str = 'expiration_date',
         sort_order: str = 'asc',
-        limit: int = 1000
+        limit: int = 1000,
+        force_refresh: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Get auctions matching filters that are missing ANY of the four DataForSEO metrics
@@ -274,7 +275,8 @@ class AuctionsService:
             filters=filters,
             sort_by=sort_by,
             sort_order=sort_order,
-            limit=limit
+            limit=limit,
+            force_refresh=force_refresh
         )
     
 

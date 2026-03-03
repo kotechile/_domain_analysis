@@ -1868,6 +1868,7 @@ async def trigger_bulk_all_metrics_analysis(
     sort_by: str = Query("expiration_date", description="Field to sort by"),
     sort_order: str = Query("asc", description="Sort order (asc, desc)"),
     limit: int = Query(1000, description="Maximum number of domains to trigger (1000 per analysis type)", ge=1, le=1000),
+    force_refresh: bool = Query(False, description="Force refresh even if some metrics already exist"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user = Depends(get_current_user)
 ):
@@ -1921,12 +1922,13 @@ async def trigger_bulk_all_metrics_analysis(
         
         auctions_service = AuctionsService()
         
-        # Get auctions matching filters and missing any metric
+        # Get auctions matching filters (missing any metric OR force refresh)
         auctions = await auctions_service.get_auctions_missing_any_metric_with_filters(
             filters=filters,
             sort_by=sort_by,
             sort_order=sort_order,
-            limit=limit
+            limit=limit,
+            force_refresh=force_refresh
         )
         
         if not auctions:

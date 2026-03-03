@@ -1579,7 +1579,8 @@ class DatabaseService:
         filters: Optional[Dict[str, Any]] = None,
         sort_by: str = 'expiration_date',
         sort_order: str = 'asc',
-        limit: int = 1000
+        limit: int = 1000,
+        force_refresh: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Get auctions matching filters that are missing ANY of the four DataForSEO metrics
@@ -1658,25 +1659,29 @@ class DatabaseService:
             result = query.limit(fetch_limit).execute()
             candidates = result.data if result.data else []
             
-            # Filter in-memory for missing metrics
+            # Filter in-memory for missing metrics (unless force_refresh is True)
             # We look for MISSING traffic, rank, backlinks, OR spam_score in page_statistics
             missing_metrics_auctions = []
             
-            for auction in candidates:
-                stats = auction.get('page_statistics') or {}
-                
-                # Check metrics
-                # Note: keys depend on how they are stored. Assuming standard keys.
-                has_traffic = 'traffic' in stats and stats['traffic'] is not None
-                has_rank = 'rank' in stats and stats['rank'] is not None
-                has_backlinks = 'backlinks' in stats and stats['backlinks'] is not None
-                has_spam_score = 'spam_score' in stats and stats['spam_score'] is not None
-                
-                # If ANY is missing, include this auction
-                if not (has_traffic and has_rank and has_backlinks and has_spam_score):
-                    missing_metrics_auctions.append(auction)
-                    if len(missing_metrics_auctions) >= limit:
-                        break
+            if force_refresh:
+                # If forcing refresh, just take the first candidates up to limit
+                missing_metrics_auctions = candidates[:limit]
+            else:
+                for auction in candidates:
+                    stats = auction.get('page_statistics') or {}
+                    
+                    # Check metrics
+                    # Note: keys depend on how they are stored. Assuming standard keys.
+                    has_traffic = 'traffic' in stats and stats['traffic'] is not None
+                    has_rank = 'rank' in stats and stats['rank'] is not None
+                    has_backlinks = 'backlinks' in stats and stats['backlinks'] is not None
+                    has_spam_score = 'spam_score' in stats and stats['spam_score'] is not None
+                    
+                    # If ANY is missing, include this auction
+                    if not (has_traffic and has_rank and has_backlinks and has_spam_score):
+                        missing_metrics_auctions.append(auction)
+                        if len(missing_metrics_auctions) >= limit:
+                            break
             
             logger.info("Fetched auctions missing metrics", found=len(missing_metrics_auctions), examined=len(candidates))
             return missing_metrics_auctions

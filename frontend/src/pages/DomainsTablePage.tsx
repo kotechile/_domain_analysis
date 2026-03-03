@@ -176,6 +176,7 @@ const DomainsTablePage: React.FC = () => {
 
   const [filterPopupOpen, setFilterPopupOpen] = useState(false);
   const [confirmBulkAnalysisOpen, setConfirmBulkAnalysisOpen] = useState(false);
+  const [forceRefresh, setForceRefresh] = useState(false);
   const [dontAskAgain, setDontAskAgain] = useState(false);
   const autoTriggerRef = useRef(false);
   const [waybackLoading, setWaybackLoading] = useState<Set<string>>(new Set());
@@ -371,6 +372,7 @@ const DomainsTablePage: React.FC = () => {
         sortBy: filters.sortBy || 'expiration_date',
         sortOrder: filters.sortOrder || 'asc',
         limit: 1000,
+        forceRefresh: forceRefresh
       });
     },
     onSuccess: (data: any) => {
@@ -811,7 +813,23 @@ const DomainsTablePage: React.FC = () => {
             <Typography sx={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', mt: 2 }}>
               This will deduct **1.0 credit** from your balance to extract statistics for up to 1000 domains.
             </Typography>
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: 1 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={forceRefresh}
+                    onChange={(e) => setForceRefresh(e.target.checked)}
+                    sx={{ color: 'rgba(255, 255, 255, 0.5)', '&.Mui-checked': { color: '#9C27B0' } }}
+                  />
+                }
+                label={
+                  <Typography sx={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                    Force refresh existing statistics (re-analyze domains that already have data)
+                  </Typography>
+                }
+              />
+            </Box>
+            <Box sx={{ mt: 1 }}>
               <FormControlLabel
                 control={
                   <Checkbox
@@ -1404,7 +1422,7 @@ const DomainsTablePage: React.FC = () => {
           </Alert>
         </Snackbar>
       </Container>
-    </Box>
+    </Box >
   );
 };
 

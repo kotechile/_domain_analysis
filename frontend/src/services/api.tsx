@@ -1046,6 +1046,7 @@ class ApiService {
     sortBy?: string;
     sortOrder?: string;
     limit?: number;
+    forceRefresh?: boolean;
   }): Promise<{
     success: boolean;
     message: string;
@@ -1107,6 +1108,9 @@ class ApiService {
     }
     if (filters.limit !== undefined) {
       params.append('limit', filters.limit.toString());
+    }
+    if (filters.forceRefresh !== undefined) {
+      params.append('force_refresh', filters.forceRefresh.toString());
     }
 
     const response: AxiosResponse = await this.client.post(
