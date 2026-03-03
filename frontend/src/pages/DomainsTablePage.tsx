@@ -29,7 +29,9 @@ import {
   Snackbar,
   Alert,
   Tooltip,
+  Checkbox,
 } from '@mui/material';
+import { useRef } from 'react';
 import {
   FilterList as FilterListIcon,
   CloudUpload as CloudUploadIcon,
@@ -174,6 +176,8 @@ const DomainsTablePage: React.FC = () => {
 
   const [filterPopupOpen, setFilterPopupOpen] = useState(false);
   const [confirmBulkAnalysisOpen, setConfirmBulkAnalysisOpen] = useState(false);
+  const [dontAskAgain, setDontAskAgain] = useState(false);
+  const autoTriggerRef = useRef(false);
   const [waybackLoading, setWaybackLoading] = useState<Set<string>>(new Set());
   const [domainsWithAnalysis, setDomainsWithAnalysis] = useState<Set<string>>(new Set());
 
@@ -309,13 +313,32 @@ const DomainsTablePage: React.FC = () => {
   useEffect(() => {
     if (auctionsData) {
       console.log('Auctions query success:', {
-        count: auctionsData?.count,
-        total_count: auctionsData?.total_count,
-        auctions_length: auctionsData?.auctions?.length,
-        filters_applied: filters,
+        total: auctionsData.total_count,
+        count: auctionsData.auctions?.length,
+        missingStats: auctionsData.auctions?.filter(i => !i.has_statistics).length
       });
     }
-  }, [auctionsData, filters]);
+  }, [auctionsData]);
+
+  // Automatic Trigger Logic
+  useEffect(() => {
+    // Only run if we have data, we haven't triggered this session, and data isn't loading
+    if (auctionsData?.success && auctionsData.auctions && auctionsData.auctions.length > 0 && !autoTriggerRef.current && !isLoadingAuctions) {
+      const domainsMissingStats = auctionsData.auctions.filter(item => !item.has_statistics);
+
+      if (domainsMissingStats.length > 0) {
+        autoTriggerRef.current = true; // Mark as processed for this component lifecycle
+
+        if (dontAskAgain) {
+          // If user previously said "Don't ask again", trigger directly
+          handleConfirmBulkAnalysis();
+        } else {
+          // Otherwise show the dialog
+          setConfirmBulkAnalysisOpen(true);
+        }
+      }
+    }
+  }, [auctionsData, dontAskAgain, isLoadingAuctions]);
 
   useEffect(() => {
     if (auctionsError) {
@@ -750,27 +773,6 @@ const DomainsTablePage: React.FC = () => {
               >
                 <FilterListIcon />
               </IconButton>
-              <Button
-                variant="contained"
-                startIcon={<AnalyticsIcon />}
-                onClick={handleBulkAllMetricsClick}
-                disabled={bulkAllMetricsMutation.isPending}
-                sx={{
-                  bgcolor: '#9C27B0',
-                  color: '#FFFFFF',
-                  textTransform: 'none',
-                  fontWeight: 500,
-                  '&:hover': {
-                    bgcolor: '#7B1FA2',
-                  },
-                  '&:disabled': {
-                    bgcolor: 'rgba(156, 39, 176, 0.3)',
-                    color: 'rgba(255, 255, 255, 0.5)',
-                  },
-                }}
-              >
-                {bulkAllMetricsMutation.isPending ? 'Processing...' : 'DataForSEO (1000)'}
-              </Button>
             </Box>
           </Box>
         </Box>
@@ -807,6 +809,25 @@ const DomainsTablePage: React.FC = () => {
               </Typography>
             </Box>
             <Typography sx={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', mt: 2 }}>
+              This will deduct **1.0 credit** from your balance to extract statistics for up to 1000 domains.
+            </Typography>
+            <Box sx={{ mt: 2 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={dontAskAgain}
+                    onChange={(e) => setDontAskAgain(e.target.checked)}
+                    sx={{ color: 'rgba(255, 255, 255, 0.5)', '&.Mui-checked': { color: '#9C27B0' } }}
+                  />
+                }
+                label={
+                  <Typography sx={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
+                    Don't ask me again for this session
+                  </Typography>
+                }
+              />
+            </Box>
+            <Typography sx={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem', mt: 1 }}>
               Continue?
             </Typography>
           </DialogContent>

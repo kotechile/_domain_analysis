@@ -424,11 +424,6 @@ const AuctionsPage: React.FC = () => {
               label="Filter & Search"
             />
             <Tab
-              icon={<AnalyticsIcon />}
-              iconPosition="start"
-              label="Data For SEO"
-            />
-            <Tab
               icon={<TableChartIcon />}
               iconPosition="start"
               label="Table View"
@@ -757,54 +752,9 @@ const AuctionsPage: React.FC = () => {
             </Card>
           </TabPanel>
 
-          {/* Data For SEO Tab */}
-          <TabPanel value={tabValue} index={2}>
-            <Card variant="outlined">
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <AnalyticsIcon sx={{ mr: 1, color: 'primary.main' }} />
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    DataForSEO Analysis
-                  </Typography>
-                </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                  Select up to 100 most recent scored domains without page_statistics and trigger DataForSEO bulk page summary analysis.
-                  Note: DataForSEO API allows up to 100 unique domains per request. Results will be stored in the page_statistics field.
-                </Typography>
-
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  size="large"
-                  onClick={handleTrigger}
-                  disabled={triggerMutation.isPending}
-                  startIcon={triggerMutation.isPending ? <CircularProgress size={20} /> : <AssessmentIcon />}
-                >
-                  {triggerMutation.isPending ? 'Triggering Analysis...' : 'Trigger DataForSEO Analysis'}
-                </Button>
-
-                {triggerMutation.isSuccess && (
-                  <Alert severity="success" sx={{ mt: 2, borderRadius: 2 }}>
-                    <Typography variant="body1" fontWeight={600}>
-                      {triggerMutation.data.message}
-                    </Typography>
-                    <Typography variant="body2" sx={{ mt: 0.5 }}>
-                      Triggered: {triggerMutation.data.triggered_count}, Skipped: {triggerMutation.data.skipped_count}
-                    </Typography>
-                  </Alert>
-                )}
-
-                {triggerMutation.isError && (
-                  <Alert severity="error" sx={{ mt: 2, borderRadius: 2 }}>
-                    Trigger failed: {triggerMutation.error instanceof Error ? triggerMutation.error.message : 'Unknown error'}
-                  </Alert>
-                )}
-              </CardContent>
-            </Card>
-          </TabPanel>
 
           {/* Table View Tab */}
-          <TabPanel value={tabValue} index={3}>
+          <TabPanel value={tabValue} index={2}>
             <Card variant="outlined">
               <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>

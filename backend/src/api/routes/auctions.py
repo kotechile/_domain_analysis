@@ -16,6 +16,9 @@ from services.n8n_service import N8NService
 from services.auction_scoring_service import AuctionScoringService
 from services.domain_scoring_service import DomainScoringService
 from services.external_apis import WaybackMachineService, DataForSEOService
+from services.credits_service import CreditsService
+from services.pricing_service import PricingService
+from middleware.auth_middleware import get_current_user
 from models.auctions import AuctionReportItem
 from models.domain_analysis import NamecheapDomain
 
@@ -1396,7 +1399,8 @@ async def mark_job_as_failed(
 
 @router.post("/auctions/trigger-analysis")
 async def trigger_auctions_analysis(
-    limit: int = Query(100, description="Maximum number of unique domains to trigger (DataForSEO limit: 100 unique domains per request)", ge=1, le=100)
+    limit: int = Query(100, description="Maximum number of unique domains to trigger (DataForSEO limit: 100 unique domains per request)", ge=1, le=100),
+    current_user = Depends(get_current_user)
 ):
     """
     Trigger DataForSEO analysis for scored domains without page_statistics
@@ -1426,6 +1430,37 @@ async def trigger_auctions_analysis(
             }
         
         domain_names = [a['domain'] for a in auctions]
+        
+        # --- Credit Deduction Logic ---
+        db = get_database()
+        pricing_service = PricingService()
+        credits_service = CreditsService(db)
+        
+        # Calculate cost for syncing these domains
+        total_cost = await pricing_service.calculate_action_cost('stats_sync', len(domain_names))
+        
+        logger.info("Deducting credits for auctions analysis", 
+                   user_id=str(current_user.id), 
+                   domain_count=len(domain_names), 
+                   cost=total_cost)
+        
+        # Deduct credits
+        success = await credits_service.deduct_credits(
+            user_id=current_user.id,
+            amount=total_cost,
+            description=f"DataForSEO extraction for {len(domain_names)} domains",
+            reference_id=f"sync_{int(datetime.now(timezone.utc).timestamp())}"
+        )
+        
+        if not success:
+            logger.warning("Insufficient credits for auctions analysis", 
+                          user_id=str(current_user.id), 
+                          cost=total_cost)
+            raise HTTPException(
+                status_code=402, 
+                detail=f"Insufficient credits. This action requires {total_cost} credits."
+            )
+        # ------------------------------
         
         # Trigger DataForSEO analysis via N8N webhook
         n8n_service = N8NService()
@@ -1833,7 +1868,8 @@ async def trigger_bulk_all_metrics_analysis(
     sort_by: str = Query("expiration_date", description="Field to sort by"),
     sort_order: str = Query("asc", description="Sort order (asc, desc)"),
     limit: int = Query(1000, description="Maximum number of domains to trigger (1000 per analysis type)", ge=1, le=1000),
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user = Depends(get_current_user)
 ):
     """
     Trigger all four DataForSEO analyses (traffic, rank, backlinks, spam_score) for domains matching current filters
@@ -1909,6 +1945,37 @@ async def trigger_bulk_all_metrics_analysis(
             }
         
         domain_names = [a['domain'] for a in auctions]
+        
+        # --- Credit Deduction Logic ---
+        db = get_database()
+        pricing_service = PricingService()
+        credits_service = CreditsService(db)
+        
+        # Calculate cost for syncing these domains
+        total_cost = await pricing_service.calculate_action_cost('stats_sync', len(domain_names))
+        
+        logger.info("Deducting credits for bulk analysis", 
+                   user_id=str(current_user.id), 
+                   domain_count=len(domain_names), 
+                   cost=total_cost)
+        
+        # Deduct credits
+        success = await credits_service.deduct_credits(
+            user_id=current_user.id,
+            amount=total_cost,
+            description=f"Bulk DataForSEO extraction for {len(domain_names)} domains",
+            reference_id=f"bulk_sync_{int(datetime.now(timezone.utc).timestamp())}"
+        )
+        
+        if not success:
+            logger.warning("Insufficient credits for bulk analysis", 
+                          user_id=str(current_user.id), 
+                          cost=total_cost)
+            raise HTTPException(
+                status_code=402, 
+                detail=f"Insufficient credits. This action requires {total_cost} credits."
+            )
+        # ------------------------------
         
         # Trigger all four analyses sequentially
         n8n_service = N8NService()
