@@ -1492,10 +1492,10 @@ class DatabaseService:
                     query = query.gte('expiration_date', filters['expiration_from_date'])
                 if filters.get('expiration_to_date'):
                     # Filter by expiration date to (less than or equal)
-                    # If date is provided without time (YYYY-MM-DD), append time to include the full day
+                    # If date is provided without time (YYYY-MM-DD), append time to include the full day in UTC
                     exp_to = filters['expiration_to_date']
                     if isinstance(exp_to, str) and len(exp_to) == 10:  # Simple check for YYYY-MM-DD
-                        exp_to = f"{exp_to}T23:59:59"
+                        exp_to = f"{exp_to}T23:59:59Z"
                     query = query.lte('expiration_date', exp_to)
                 
                 if filters.get('has_statistics') is not None:

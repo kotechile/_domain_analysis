@@ -2095,7 +2095,6 @@ async def get_auctions_report(
         if max_score is not None:
             filters['max_score'] = max_score
         
-        # Defensive date parsing for expiration_from_date
         if expiration_from_date:
             try:
                 # Try simple format first
@@ -2105,10 +2104,9 @@ async def get_auctions_report(
                     datetime.fromisoformat(expiration_from_date.replace('Z', '+00:00'))
                     filters['expiration_from_date'] = expiration_from_date
                 else:
-                    # Assume YYYY-MM-DD, convert to ISO start of day
-                    dt = datetime.strptime(expiration_from_date, "%Y-%m-%d")
-                    # Make it UTC aware if possible, or just ISO string
-                    filters['expiration_from_date'] = dt.isoformat()
+                    # Assume YYYY-MM-DD, convert to ISO start of day in UTC
+                    dt = datetime.strptime(expiration_from_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    filters['expiration_from_date'] = dt.isoformat().replace('+00:00', 'Z')
             except ValueError:
                 logger.warning("Invalid expiration_from_date format, defaulting to NOW", date=expiration_from_date)
                 filters['expiration_from_date'] = datetime.now(timezone.utc).isoformat()
