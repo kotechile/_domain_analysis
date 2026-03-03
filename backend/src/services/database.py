@@ -1720,33 +1720,42 @@ class DatabaseService:
                 'updated_at': datetime.now(timezone.utc).isoformat()
             }
             
+            # Helper to get first non-None value from a list of keys
+            def get_metric(data, keys):
+                for k in keys:
+                    val = data.get(k)
+                    if val is not None:
+                        return val
+                return None
+
             # Extract metrics to top-level columns if present
             # Rank
-            if 'rank' in updated_stats and updated_stats['rank'] is not None:
-                update_data['ranking'] = updated_stats['rank']
+            ranking = get_metric(updated_stats, ['rank', 'ranking'])
+            if ranking is not None:
+                update_data['ranking'] = ranking
                 
             # Backlinks
-            if 'backlinks' in updated_stats and updated_stats['backlinks'] is not None:
-                update_data['backlinks'] = updated_stats['backlinks']
+            backlinks = get_metric(updated_stats, ['backlinks', 'total_backlinks'])
+            if backlinks is not None:
+                update_data['backlinks'] = backlinks
                 
             # Referring Domains
-            if 'referring_domains' in updated_stats and updated_stats['referring_domains'] is not None:
-                update_data['referring_domains'] = updated_stats['referring_domains']
+            referring_domains = get_metric(updated_stats, ['referring_domains', 'total_referring_domains'])
+            if referring_domains is not None:
+                update_data['referring_domains'] = referring_domains
                 
-            # Spam Score (map spam_score or backlinks_spam_score)
-            spam_score = updated_stats.get('backlinks_spam_score') or updated_stats.get('spam_score')
+            # Spam Score
+            spam_score = get_metric(updated_stats, ['backlinks_spam_score', 'spam_score'])
             if spam_score is not None:
                 update_data['backlinks_spam_score'] = spam_score
             
             # Domain Rating (DR)
-            # Check for various common keys for DR, fallback to 'rank' as proxy for DR/Authority
-            domain_rating = updated_stats.get('domain_rating') or updated_stats.get('dr') or updated_stats.get('rank')
+            domain_rating = get_metric(updated_stats, ['domain_rating', 'dr', 'rank'])
             if domain_rating is not None:
                 update_data['domain_rating'] = domain_rating
                 
             # Organic Traffic
-            # Check for various common keys for Traffic
-            organic_traffic = updated_stats.get('organic_traffic') or updated_stats.get('etv') or updated_stats.get('traffic')
+            organic_traffic = get_metric(updated_stats, ['organic_traffic', 'etv', 'traffic', 'organic_traffic_est'])
             if organic_traffic is not None:
                 update_data['organic_traffic'] = organic_traffic
 
