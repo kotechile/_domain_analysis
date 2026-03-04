@@ -488,6 +488,7 @@ export interface Auction {
   score?: number;
   preferred: boolean;
   has_statistics: boolean;
+  has_analysis?: boolean;
   current_bid?: number;
   offer_type?: string; // Type of domain offering: 'auction', 'backorder', 'buy_now'
   link?: string; // Direct link to auction listing (e.g., GoDaddy auction URL)
@@ -623,13 +624,19 @@ class ApiService {
         return response;
       },
       (error) => {
-        console.error('API Response Error:', {
-          url: error.config?.url,
-          method: error.config?.method,
-          status: error.response?.status,
-          data: error.response?.data,
-          message: error.message
-        });
+        // Skip logging for 404s on report existence checks as they are expected
+        const isReportCheck = error.config?.url?.includes('/reports/') && error.config?.method === 'get';
+        const is404 = error.response?.status === 404;
+
+        if (!isReportCheck || !is404) {
+          console.error('API Response Error:', {
+            url: error.config?.url,
+            method: error.config?.method,
+            status: error.response?.status,
+            data: error.response?.data,
+            message: error.message
+          });
+        }
         return Promise.reject(error);
       }
     );

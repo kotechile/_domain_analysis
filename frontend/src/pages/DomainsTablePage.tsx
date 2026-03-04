@@ -57,29 +57,8 @@ import FilterPopup, { FilterValues } from '../components/FilterPopup';
 const DomainAnalyzeButton: React.FC<{
   domain: string;
   hasAnalysis: boolean;
-  onCheckAnalysis: (domain: string, hasAnalysis: boolean) => void;
   onClick: (domain: string, mode?: string) => void;
-}> = ({ domain, hasAnalysis, onCheckAnalysis, onClick }) => {
-  const api = useApi();
-
-  // Check if domain has analysis (only check once)
-  useQuery({
-    queryKey: ['domain-analysis-check', domain],
-    queryFn: async () => {
-      try {
-        const report = await api.getReport(domain);
-        const hasReport = report.success && report.report !== undefined;
-        onCheckAnalysis(domain, hasReport);
-        return hasReport;
-      } catch (error) {
-        // 404 means no analysis, which is fine
-        onCheckAnalysis(domain, false);
-        return false;
-      }
-    },
-    enabled: !hasAnalysis, // Only check if we don't already know
-    retry: false,
-  });
+}> = ({ domain, hasAnalysis, onClick }) => {
 
   if (hasAnalysis) {
     return (
@@ -1360,12 +1339,7 @@ const DomainsTablePage: React.FC = () => {
                           <TableCell>
                             <DomainAnalyzeButton
                               domain={auction.domain}
-                              hasAnalysis={domainsWithAnalysis.has(auction.domain)}
-                              onCheckAnalysis={(domain, hasAnalysis) => {
-                                if (hasAnalysis) {
-                                  setDomainsWithAnalysis(prev => new Set(prev).add(domain));
-                                }
-                              }}
+                              hasAnalysis={auction.has_analysis || domainsWithAnalysis.has(auction.domain)}
                               onClick={handleAnalysisAction}
                             />
                           </TableCell>

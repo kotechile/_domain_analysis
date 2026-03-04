@@ -1538,6 +1538,21 @@ class DatabaseService:
             result = query.range(offset, offset + limit - 1).execute()
             auctions = result.data if result.data else []
             
+            # Fetch domains from result
+            domains = [a.get('domain') for a in auctions if a.get('domain')]
+            
+            # Check which domains have a full report in the reports table
+            has_analysis_domains = set()
+            if domains:
+                # Use in_ filter to find reports for these domains
+                reports_result = self.client.table('reports').select('domain_name').in_('domain_name', domains).execute()
+                if reports_result.data:
+                    has_analysis_domains = {r['domain_name'] for r in reports_result.data}
+            
+            # Add has_analysis flag to results
+            for a in auctions:
+                a['has_analysis'] = a.get('domain') in has_analysis_domains
+            
             # Estimate total count - if we got a full page, there might be more
             # This is an approximation, but for large datasets it's acceptable
             if len(auctions) == limit:
