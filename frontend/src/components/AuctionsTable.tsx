@@ -552,8 +552,8 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
               <TableCell>Preferred</TableCell>
               <TableCell>Has Statistics</TableCell>
               <TableCell>Rank</TableCell>
-              <TableCell>Traffic</TableCell>
-              <TableCell>Keywords</TableCell>
+              <SortableHeader field="organic_traffic" label="Traffic" />
+              <SortableHeader field="keywords_count" label="Keywords" />
               <TableCell>Backlinks</TableCell>
               <TableCell>Referring Domains</TableCell>
               <TableCell>Main Domains</TableCell>
