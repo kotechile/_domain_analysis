@@ -62,7 +62,7 @@ async def analyze_domain(
                 )
         
         # Initialize pricing and credits services
-        pricing_service = PricingService(db)
+        pricing_service = PricingService()
         credits_service = CreditsService(db)
         
         # Determine action and cost
