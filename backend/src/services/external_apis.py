@@ -72,7 +72,7 @@ class DataForSEOService:
             logger.warning("DataForSEO health check failed", error=str(e))
             return False
     
-    async def get_domain_analytics(self, domain: str, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
+    async def get_domain_analytics(self, domain: str, user_id: Optional[UUID] = None, use_n8n_summary_override: Optional[bool] = None) -> Optional[Dict[str, Any]]:
         """Get domain analytics data from DataForSEO"""
         try:
             # Get credentials
@@ -92,7 +92,7 @@ class DataForSEOService:
                 # Check if N8N is enabled for summary - if so, skip direct backlinks summary call
                 from services.n8n_service import N8NService
                 n8n_service = N8NService()
-                use_n8n_summary = n8n_service.is_enabled_for_summary()
+                use_n8n_summary = use_n8n_summary_override if use_n8n_summary_override is not None else n8n_service.is_enabled_for_summary()
                 
                 backlinks_summary_data = None
                 if not use_n8n_summary:

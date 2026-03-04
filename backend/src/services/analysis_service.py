@@ -239,13 +239,16 @@ class AnalysisService:
                     
                     if not backlinks_summary_data:
                         logger.error("N8N summary workflow did not return data in time", domain=domain, max_wait_time=max_wait_time)
-                        raise Exception(f"N8N summary workflow did not return data within {max_wait_time} seconds")
+                        # Fallback: Treat as if N8N was not used for summary
+                        use_n8n_summary = False
+                        logger.warning("Falling back to direct API for domain analytics due to N8N summary timeout.", domain=domain)
                 else:
-                    logger.error("N8N summary workflow trigger failed", domain=domain)
-                    raise Exception("Failed to trigger N8N summary workflow")
+                    logger.warning("N8N summary workflow trigger failed, falling back to direct API", domain=domain)
+                    use_n8n_summary = False
             
             # Get domain analytics data (includes backlinks summary if not using N8N)
-            domain_rank_data = await self.dataforseo_service.get_domain_analytics(domain, user_id)
+            # Pass use_n8n_summary_override=use_n8n_summary to ensure it falls back if N8N failed or is disabled
+            domain_rank_data = await self.dataforseo_service.get_domain_analytics(domain, user_id, use_n8n_summary_override=use_n8n_summary)
             
             # If we got summary from N8N, merge it into domain_rank_data
             if use_n8n_summary and backlinks_summary_data:
