@@ -7206,44 +7206,7 @@
         2832
       ],
       "id": "5532238c-a617-4489-a2bf-956c56de4678",
-      "name": "Step 1: POST Task",
-      "credentials": {
-        "dataForSeoApi": {
-          "id": "HQQq3xHbsyZjX7My",
-          "name": "DataForSEO account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "amount": 2,
-        "unit": "minutes"
-      },
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1,
-      "position": [
-        240,
-        2832
-      ],
-      "id": "80c64ba8-fb67-4682-8cdd-617a5aa83be0",
-      "name": "Wait for Processing",
-      "webhookId": "282b7719-680d-4d81-a856-0c641ccb73ec"
-    },
-    {
-      "parameters": {
-        "url": "=https://api.dataforseo.com/v3/dataforseo_labs/google/bulk_traffic_estimation/task_get/{{ $node[\"Step 1: POST Task\"].json.tasks[0].id }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "dataForSeoApi",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [
-        432,
-        2832
-      ],
-      "id": "54035339-b611-4404-8548-025984c9fd31",
-      "name": "Step 2: GET Results",
+      "name": "Live Bulk Traffic Estimation",
       "credentials": {
         "dataForSeoApi": {
           "id": "HQQq3xHbsyZjX7My",
@@ -7655,14 +7618,14 @@
       "main": [
         [
           {
-            "node": "Step 1: POST Task",
+            "node": "Live Bulk Traffic Estimation",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Step 1: POST Task": {
+    "Live Bulk Traffic Estimation": {
       "main": [
         [
           {
