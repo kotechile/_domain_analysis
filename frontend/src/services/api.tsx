@@ -497,6 +497,7 @@ export interface Auction {
   referring_domains?: number;
   backlinks_spam_score?: number;
   organic_traffic?: number;
+  keywords_count?: number;
   domain_rating?: number;
   first_seen?: string;
   source_data?: Record<string, any>;

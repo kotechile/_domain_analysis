@@ -1783,17 +1783,35 @@ class DatabaseService:
                     pass
                 
             # Organic Traffic
-            organic_traffic = get_metric(updated_stats, ['organic_traffic', 'etv', 'traffic', 'organic_traffic_est'])
-            if organic_traffic is not None:
-                update_data['organic_traffic'] = organic_traffic
+            organic_traffic_raw = get_metric(updated_stats, ['organic_traffic', 'etv', 'traffic', 'organic_traffic_est'])
+            if organic_traffic_raw is not None:
+                try:
+                    update_data['organic_traffic'] = int(float(organic_traffic_raw))
+                except (ValueError, TypeError):
+                    update_data['organic_traffic'] = 0
                 
             # Keywords Count
-            keywords_count = get_metric(updated_stats, ['keywords_count', 'keywords', 'organic_keywords'])
-            if keywords_count is not None:
-                update_data['keywords_count'] = keywords_count
+            keywords_count_raw = get_metric(updated_stats, ['keywords_count', 'keywords', 'organic_keywords'])
+            if keywords_count_raw is not None:
+                try:
+                    update_data['keywords_count'] = int(float(keywords_count_raw))
+                except (ValueError, TypeError):
+                    update_data['keywords_count'] = 0
 
             # Update the record
-            update_response = self.client.table('auctions').update(update_data).eq('domain', domain).execute()
+            try:
+                update_response = self.client.table('auctions').update(update_data).eq('domain', domain).execute()
+            except Exception as e:
+                # Handle missing column gracefully (especially keywords_count which might be new)
+                error_str = str(e)
+                if 'keywords_count' in error_str or 'PGRST204' in error_str:
+                    logger.warning("keywords_count column missing or update failed, retrying without it", 
+                                 domain=domain, error=error_str)
+                    update_data.pop('keywords_count', None)
+                    update_response = self.client.table('auctions').update(update_data).eq('domain', domain).execute()
+                else:
+                    logger.error("Error updating auction record", domain=domain, error=error_str)
+                    return False
             
             if update_response.data and len(update_response.data) > 0:
                 return True

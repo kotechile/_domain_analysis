@@ -138,7 +138,7 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
     scored?: boolean | undefined;
   } = {}) => {
     if (!onFilterChange) return;
-    
+
     const filterObj: {
       preferred?: boolean;
       auctionSite?: string;
@@ -150,44 +150,44 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
       minScore?: number;
       maxScore?: number;
     } = {};
-    
+
     const preferred = overrides.preferred !== undefined ? overrides.preferred : preferredFilter;
     if (preferred !== undefined) {
       filterObj.preferred = preferred;
     }
-    
+
     const auctionSite = overrides.auctionSite !== undefined ? overrides.auctionSite : auctionSiteFilter;
     if (auctionSite && auctionSite !== '') {
       filterObj.auctionSite = auctionSite;
     }
-    
+
     const tld = overrides.tld !== undefined ? overrides.tld : tldFilter;
     if (tld && tld !== '') {
       filterObj.tld = tld;
     }
-    
+
     const hasStatistics = overrides.hasStatistics !== undefined ? overrides.hasStatistics : hasStatisticsFilter;
     if (hasStatistics !== undefined) {
       filterObj.hasStatistics = hasStatistics;
     }
-    
+
     const scored = overrides.scored !== undefined ? overrides.scored : scoredFilter;
     if (scored !== undefined) {
       filterObj.scored = scored;
     }
-    
+
     const minRank = minRankFilter ? parseInt(minRankFilter) : undefined;
     if (minRank !== undefined && !isNaN(minRank)) filterObj.minRank = minRank;
-    
+
     const maxRank = maxRankFilter ? parseInt(maxRankFilter) : undefined;
     if (maxRank !== undefined && !isNaN(maxRank)) filterObj.maxRank = maxRank;
-    
+
     const minScore = minScoreFilter ? parseFloat(minScoreFilter) : undefined;
     if (minScore !== undefined && !isNaN(minScore)) filterObj.minScore = minScore;
-    
+
     const maxScore = maxScoreFilter ? parseFloat(maxScoreFilter) : undefined;
     if (maxScore !== undefined && !isNaN(maxScore)) filterObj.maxScore = maxScore;
-    
+
     onFilterChange(filterObj);
   };
 
@@ -240,7 +240,7 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
     return (statistics as any)[field];
   };
 
-  const hasActiveFilters = 
+  const hasActiveFilters =
     preferredFilter !== undefined ||
     auctionSiteFilter !== '' ||
     tldFilter !== '' ||
@@ -252,19 +252,19 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
     maxScoreFilter !== '';
 
   const auctionSites = Array.from(new Set(auctions.map(a => a.auction_site))).sort();
-  
-  const tlds = availableTlds.length > 0 
-    ? availableTlds 
+
+  const tlds = availableTlds.length > 0
+    ? availableTlds
     : (() => {
-        const extractTld = (domain: string): string => {
-          const parts = domain.split('.');
-          if (parts.length > 1) {
-            return '.' + parts[parts.length - 1];
-          }
-          return '';
-        };
-        return Array.from(new Set(auctions.map(a => extractTld(a.domain)))).filter(tld => tld).sort();
-      })();
+      const extractTld = (domain: string): string => {
+        const parts = domain.split('.');
+        if (parts.length > 1) {
+          return '.' + parts[parts.length - 1];
+        }
+        return '';
+      };
+      return Array.from(new Set(auctions.map(a => extractTld(a.domain)))).filter(tld => tld).sort();
+    })();
 
   const SortableHeader: React.FC<{ field: string; label: string }> = ({ field, label }) => (
     <TableCell>
@@ -532,11 +532,11 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
       </Box>
 
       {/* Table */}
-      <TableContainer 
-        component={Paper} 
+      <TableContainer
+        component={Paper}
         variant="outlined"
-        sx={{ 
-          maxHeight: '70vh', 
+        sx={{
+          maxHeight: '70vh',
           overflowX: 'auto',
           borderRadius: 2,
         }}
@@ -552,6 +552,8 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
               <TableCell>Preferred</TableCell>
               <TableCell>Has Statistics</TableCell>
               <TableCell>Rank</TableCell>
+              <TableCell>Traffic</TableCell>
+              <TableCell>Keywords</TableCell>
               <TableCell>Backlinks</TableCell>
               <TableCell>Referring Domains</TableCell>
               <TableCell>Main Domains</TableCell>
@@ -564,13 +566,13 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
               const hasStats = !!stats;
 
               return (
-                <TableRow 
-                  key={auction.id} 
+                <TableRow
+                  key={auction.id}
                   hover
                   sx={{
                     '&:hover': {
-                      backgroundColor: theme.palette.mode === 'light' 
-                        ? 'rgba(0, 0, 0, 0.04)' 
+                      backgroundColor: theme.palette.mode === 'light'
+                        ? 'rgba(0, 0, 0, 0.04)'
                         : 'rgba(255, 255, 255, 0.08)',
                     },
                   }}
@@ -586,9 +588,9 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Chip 
-                      label={auction.auction_site} 
-                      size="small" 
+                    <Chip
+                      label={auction.auction_site}
+                      size="small"
                       variant="outlined"
                       sx={{ borderRadius: 1 }}
                     />
@@ -631,9 +633,9 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
                     )}
                   </TableCell>
                   <TableCell>
-                    <Chip 
-                      label={hasStats ? "Yes" : "No"} 
-                      color={hasStats ? "success" : "default"} 
+                    <Chip
+                      label={hasStats ? "Yes" : "No"}
+                      color={hasStats ? "success" : "default"}
                       size="small"
                       sx={{ borderRadius: 1 }}
                     />
@@ -641,6 +643,20 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
                   <TableCell>
                     <Typography variant="body2">
                       {formatNumber(getStatisticsValue(stats, 'rank'))}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    {auction.organic_traffic !== undefined && auction.organic_traffic !== null ? (
+                      <Typography variant="body2" sx={{ fontWeight: auction.organic_traffic > 1000 ? 600 : 400 }}>
+                        {formatNumber(auction.organic_traffic)}
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">-</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">
+                      {formatNumber((auction as any).keywords_count || getStatisticsValue(stats, 'keywords') || getStatisticsValue(stats, 'organic_keywords'))}
                     </Typography>
                   </TableCell>
                   <TableCell>
