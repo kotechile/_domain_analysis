@@ -260,11 +260,47 @@ class AnalysisService:
             # Get wayback machine data
             wayback_data = await self.wayback_service.get_domain_history(domain)
             
+            # Check for existing auction data to use as fallback for metrics (e.g. traffic)
+            auction_data = None
+            try:
+                db = get_database()
+                # Query auctions table for this domain
+                auction_res = await db.client.table('auctions').select('*').eq('domain', domain).execute()
+                if auction_res.data:
+                    auction_data = auction_res.data[0]
+                    logger.info("Found existing auction data for fallback", 
+                               domain=domain, 
+                               traffic=auction_data.get('organic_traffic'),
+                               dr=auction_data.get('domain_rating'))
+            except Exception as e:
+                logger.warning("Failed to fetch auction data for metric fallback", domain=domain, error=str(e))
+            
             # Update report with essential data
             if domain_rank_data:
                 logger.info("Parsing DataForSEO data in essential data collection", 
                            dataforseo_keys=list(domain_rank_data.keys()) if domain_rank_data else [])
                 report.data_for_seo_metrics = self.dataforseo_service.parse_domain_metrics(domain_rank_data)
+                
+                # Fallback: If DataForSEO detailed report returns 0 traffic/keywords but we have data from Marketplace (bulk), use it
+                if auction_data:
+                    metrics = report.data_for_seo_metrics
+                    
+                    # Fallback for Traffic
+                    if (metrics.organic_traffic_est is None or metrics.organic_traffic_est == 0) and auction_data.get('organic_traffic'):
+                        metrics.organic_traffic_est = float(auction_data['organic_traffic'])
+                        logger.info("Applied traffic fallback from auctions table", domain=domain, traffic=metrics.organic_traffic_est)
+                    
+                    # Fallback for Keywords (some auctions might have this in source_data or ranking)
+                    if (metrics.total_keywords is None or metrics.total_keywords == 0) and auction_data.get('ranking'):
+                        # If rankings exists but is 0-100 (DR-like), don't use it for keywords. 
+                        # But some systems use 'ranking' for keyword count.
+                        pass 
+
+                    # Fallback for Domain Rating if 0
+                    if (metrics.domain_rating_dr is None or metrics.domain_rating_dr == 0) and auction_data.get('domain_rating'):
+                        metrics.domain_rating_dr = float(auction_data['domain_rating'])
+                        logger.info("Applied DR fallback from auctions table", domain=domain, dr=metrics.domain_rating_dr)
+
                 logger.info("Parsed DataForSEO metrics in essential data collection", 
                            total_backlinks=report.data_for_seo_metrics.total_backlinks,
                            total_referring_domains=report.data_for_seo_metrics.total_referring_domains,
