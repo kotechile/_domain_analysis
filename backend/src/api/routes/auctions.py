@@ -2354,7 +2354,7 @@ async def fetch_wayback_first_seen(domain: str):
         try:
             wayback_data = await asyncio.wait_for(
                 wayback_service.get_domain_history(domain),
-                timeout=15.0  # 15 second timeout
+                timeout=30.0  # 30 second timeout
             )
         except asyncio.TimeoutError:
             logger.warning("Wayback Machine request timed out", domain=domain)
