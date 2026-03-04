@@ -222,16 +222,25 @@ class DatabaseService:
             raise
     
     async def save_raw_data(self, domain_name: str, api_source: DataSource, data: Dict[str, Any]) -> str:
-        """Save raw API data to cache"""
+        """Save raw API data to cache, merging with existing data if present"""
         try:
-            expires_at = datetime.utcnow() + timedelta(seconds=get_settings().CACHE_TTL_SECONDS)
+            settings = get_settings()
+            expires_at = datetime.utcnow() + timedelta(seconds=settings.CACHE_TTL_SECONDS)
+            
+            # Try to get existing data for merging
+            existing = await self.get_raw_data(domain_name, api_source)
+            if existing:
+                # Merge new data into existing
+                logger.debug("Merging new raw data into existing cache", domain=domain_name, source=api_source.value)
+                existing.update(data)
+                data = existing
             
             result = self.client.table('raw_data_cache').upsert({
                 'domain_name': domain_name,
                 'api_source': api_source.value,
                 'json_data': data,
                 'expires_at': expires_at.isoformat()
-            }).execute()
+            }, on_conflict='domain_name,api_source').execute()
             
             cache_id = result.data[0]['id'] if result.data else None
             logger.info("Raw data cached successfully", domain=domain_name, source=api_source.value)
