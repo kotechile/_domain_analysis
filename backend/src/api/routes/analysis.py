@@ -199,7 +199,8 @@ async def cancel_analysis(domain: str):
 @router.post("/analyze/{domain}/retry")
 async def retry_analysis(
     domain: str,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    current_user = Depends(get_current_user)
 ):
     """
     Retry failed analysis
@@ -228,7 +229,9 @@ async def retry_analysis(
         background_tasks.add_task(
             analysis_service.analyze_domain,
             domain,
-            report_id
+            report_id,
+            "dual",
+            current_user.id
         )
         
         logger.info("Analysis retry started", domain=domain, report_id=report_id)

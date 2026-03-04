@@ -110,14 +110,14 @@ class AnalysisService:
             # Phase 1: Essential Data Collection
             progress_tracker.start_operation("essential_data")
             await self._update_progress_data(report, "Collecting essential domain metrics", [], progress_tracker)
-            await self._collect_essential_data(domain, report, operation_logger)
+            await self._collect_essential_data(domain, report, operation_logger, user_id=user_id)
             progress_tracker.complete_operation("essential_data")
             await self._update_progress_data(report, "Essential data collection completed", [], progress_tracker)
             
             # Phase 2: Detailed Data Collection (Mandatory)
             progress_tracker.start_operation("detailed_data")
             await self._update_progress_data(report, "Collecting detailed backlink and keyword data", [], progress_tracker)
-            await self._collect_detailed_data(domain, report, analysis_mode, operation_logger, progress_tracker)
+            await self._collect_detailed_data(domain, report, analysis_mode, operation_logger, progress_tracker, user_id=user_id)
             progress_tracker.complete_operation("detailed_data")
             await self._update_progress_data(report, "Detailed data collection completed", [], progress_tracker)
             
@@ -134,7 +134,7 @@ class AnalysisService:
             # Phase 3: AI Analysis with Quality Assessment
             progress_tracker.start_operation("ai_analysis")
             await self._update_progress_data(report, "Generating AI-powered analysis and insights", [], progress_tracker)
-            await self._perform_ai_analysis(domain, report, operation_logger, progress_tracker)
+            await self._perform_ai_analysis(domain, report, operation_logger, progress_tracker, user_id=user_id)
             progress_tracker.complete_operation("ai_analysis")
             await self._update_progress_data(report, "AI analysis completed", [], progress_tracker)
             
@@ -197,7 +197,7 @@ class AnalysisService:
             logger.warning("Failed to determine analysis mode, using dual", domain=domain, error=str(e))
             return AnalysisMode.DUAL
     
-    async def _collect_essential_data(self, domain: str, report: DomainAnalysisReport, operation_logger: AsyncOperationLogger):
+    async def _collect_essential_data(self, domain: str, report: DomainAnalysisReport, operation_logger: AsyncOperationLogger, user_id: Optional[UUID] = None):
         """Collect essential data (domain rank overview, wayback)"""
         try:
             operation_logger.log_data_collection("essential_data")
@@ -596,7 +596,7 @@ class AnalysisService:
             logger.error("Detailed data collection failed", domain=domain, error=str(e))
             raise
     
-    async def _perform_ai_analysis(self, domain: str, report: DomainAnalysisReport, operation_logger: AsyncOperationLogger, progress_tracker=None):
+    async def _perform_ai_analysis(self, domain: str, report: DomainAnalysisReport, operation_logger: AsyncOperationLogger, progress_tracker=None, user_id: Optional[UUID] = None):
         """Perform AI analysis with backlink quality assessment"""
         try:
             operation_logger.log_data_collection("ai_analysis")
