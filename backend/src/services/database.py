@@ -1769,10 +1769,18 @@ class DatabaseService:
             if spam_score is not None:
                 update_data['backlinks_spam_score'] = spam_score
             
-            # Domain Rating (DR)
-            domain_rating = get_metric(updated_stats, ['domain_rating', 'dr', 'rank'])
-            if domain_rating is not None:
-                update_data['domain_rating'] = domain_rating
+            # Domain Rating - handle normalization (DataForSEO rank is 0-1000, we want 0-100)
+            dr_raw = get_metric(updated_stats, ['domain_rating_dr', 'domain_rating', 'calculated_dr', 'rank'])
+            if dr_raw is not None:
+                try:
+                    # If it's clearly on a 0-1000 scale, normalize it
+                    if dr_raw > 100:
+                        domain_rating = round(dr_raw / 10.0, 1)
+                    else:
+                        domain_rating = round(float(dr_raw), 1)
+                    update_data['domain_rating'] = domain_rating
+                except (ValueError, TypeError):
+                    pass
                 
             # Organic Traffic
             organic_traffic = get_metric(updated_stats, ['organic_traffic', 'etv', 'traffic', 'organic_traffic_est'])

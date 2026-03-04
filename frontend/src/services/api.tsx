@@ -496,6 +496,8 @@ export interface Auction {
   backlinks?: number;
   referring_domains?: number;
   backlinks_spam_score?: number;
+  organic_traffic?: number;
+  domain_rating?: number;
   first_seen?: string;
   source_data?: Record<string, any>;
   page_statistics?: Record<string, any>; // DataForSEO page statistics from auctions table (full JSONB)

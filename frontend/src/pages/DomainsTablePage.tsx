@@ -1057,15 +1057,17 @@ const DomainsTablePage: React.FC = () => {
 
                       // Extract traffic - check various potential keys
                       // Support: organic_traffic, traffic, etv, or nested metrics.organic.etv
-                      const traffic = (pageStats.traffic !== undefined && pageStats.traffic !== null)
-                        ? pageStats.traffic
-                        : ((pageStats.organic_traffic !== undefined && pageStats.organic_traffic !== null)
-                          ? pageStats.organic_traffic
-                          : ((pageStats.etv !== undefined && pageStats.etv !== null)
-                            ? pageStats.etv
-                            : ((pageStats.metrics?.organic?.etv !== undefined)
-                              ? pageStats.metrics.organic.etv
-                              : null)));
+                      const traffic = (auction.organic_traffic !== undefined && auction.organic_traffic !== null)
+                        ? auction.organic_traffic
+                        : ((pageStats.traffic !== undefined && pageStats.traffic !== null)
+                          ? pageStats.traffic
+                          : ((pageStats.organic_traffic !== undefined && pageStats.organic_traffic !== null)
+                            ? pageStats.organic_traffic
+                            : ((pageStats.etv !== undefined && pageStats.etv !== null)
+                              ? pageStats.etv
+                              : ((pageStats.metrics?.organic?.etv !== undefined)
+                                ? pageStats.metrics.organic.etv
+                                : null))));
 
                       // Extract spam score - check extracted column first, then page_statistics
                       // Also check for "spam_score" (DataForSEO format) as fallback
@@ -1081,8 +1083,10 @@ const DomainsTablePage: React.FC = () => {
                         : ((pageStats.referring_domains !== undefined && pageStats.referring_domains !== null) ? pageStats.referring_domains : null);
 
                       // Calculate DR from available data
-                      // DR (Domain Rating) - convert rank from 0-1000 scale to 0-100 scale
-                      const dr = rank !== null && rank !== undefined ? Math.round(rank / 10) : null; // Convert 0-1000 to 0-100
+                      // Priority: extracted column > calculated from rank
+                      const dr = (auction.domain_rating !== undefined && auction.domain_rating !== null)
+                        ? auction.domain_rating
+                        : (rank !== null && rank !== undefined ? Math.round(rank / 10) : null);
 
                       // Format backlinks for display (e.g., 12400 -> "12.4k")
                       const formatMetric = (count: number | null): string => {

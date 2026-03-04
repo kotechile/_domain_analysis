@@ -1990,19 +1990,24 @@ async def trigger_bulk_all_metrics_analysis(
         
         # 1. Traffic data
         try:
-            logger.info("Triggering traffic data analysis (Direct API)", domains=len(domain_names))
+            logger.info("Triggering traffic data analysis", domains=len(domain_names))
             
-            # Use Direct DataForSEO API (Background Processing)
-            # Add background task to fetch and process data
-            background_tasks.add_task(process_traffic_metrics_background_task, domain_names)
+            # Use N8N Workflow for traffic batch
+            n8n_result = await n8n_service.trigger_bulk_traffic_batch_workflow(domain_names)
             
-            results["traffic_data"] = {
-                "triggered": len(domain_names),
-                "success": True,
-                "message": "Background processing started"
-            }
-            
-            logger.info("Triggered traffic data background task", triggered=len(domain_names))
+            if n8n_result:
+                results["traffic_data"] = {
+                    "triggered": len(domain_names),
+                    "success": True,
+                    "request_id": n8n_result.get('request_id'),
+                    "message": "N8N workflow triggered"
+                }
+                logger.info("Triggered traffic data analysis via N8N", 
+                           triggered=len(domain_names),
+                           request_id=n8n_result.get('request_id'))
+            else:
+                results["traffic_data"]["error"] = "Failed to trigger N8N workflow"
+                logger.error("Failed to trigger traffic data analysis via N8N", domains=len(domain_names))
             
         except Exception as e:
             error_msg = str(e)

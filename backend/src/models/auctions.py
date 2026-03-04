@@ -20,6 +20,8 @@ class Auction(BaseModel):
     preferred: bool = False
     has_statistics: bool = False
     has_analysis: bool = False
+    organic_traffic: Optional[float] = None
+    domain_rating: Optional[float] = None
     processed: bool = False  # Track if record has been scored
     source_data: Optional[Dict[str, Any]] = None
     link: Optional[str] = None  # Direct link to auction listing (e.g., GoDaddy auction URL)
@@ -98,6 +100,8 @@ class AuctionReportItem(BaseModel):
     preferred: bool
     has_statistics: bool
     has_analysis: bool = False
+    organic_traffic: Optional[float] = None
+    domain_rating: Optional[float] = None
     # Extracted columns from page_statistics for better query performance
     backlinks: Optional[int] = None
     referring_domains: Optional[int] = None
