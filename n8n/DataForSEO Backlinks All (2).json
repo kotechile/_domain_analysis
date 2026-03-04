@@ -7191,7 +7191,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.dataforseo.com/v3/dataforseo_labs/google/bulk_traffic_estimation/task_post",
+        "url": "https://api.dataforseo.com/v3/dataforseo_labs/google/bulk_traffic_estimation/live",
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "dataForSeoApi",
         "sendBody": true,
@@ -7663,28 +7663,6 @@
       ]
     },
     "Step 1: POST Task": {
-      "main": [
-        [
-          {
-            "node": "Wait for Processing",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Wait for Processing": {
-      "main": [
-        [
-          {
-            "node": "Step 2: GET Results",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Step 2: GET Results": {
       "main": [
         [
           {
