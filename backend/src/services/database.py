@@ -1786,6 +1786,11 @@ class DatabaseService:
             organic_traffic = get_metric(updated_stats, ['organic_traffic', 'etv', 'traffic', 'organic_traffic_est'])
             if organic_traffic is not None:
                 update_data['organic_traffic'] = organic_traffic
+                
+            # Keywords Count
+            keywords_count = get_metric(updated_stats, ['keywords_count', 'keywords', 'organic_keywords'])
+            if keywords_count is not None:
+                update_data['keywords_count'] = keywords_count
 
             # Update the record
             update_response = self.client.table('auctions').update(update_data).eq('domain', domain).execute()
