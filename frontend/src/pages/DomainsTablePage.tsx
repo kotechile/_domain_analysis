@@ -764,6 +764,28 @@ const DomainsTablePage: React.FC = () => {
                 }}
               />
 
+              <Tooltip title="Bulk Analyze Metrics (Uses DataForSEO)">
+                <IconButton
+                  onClick={handleBulkAllMetricsClick}
+                  disabled={bulkAllMetricsMutation.isPending}
+                  sx={{
+                    color: '#FFD700', // Gold color for importance
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 215, 0, 0.1)',
+                    },
+                    '&:disabled': {
+                      color: 'rgba(255, 215, 0, 0.3)',
+                    },
+                  }}
+                >
+                  {bulkAllMetricsMutation.isPending ? (
+                    <CircularProgress size={24} color="inherit" />
+                  ) : (
+                    <BoltIcon />
+                  )}
+                </IconButton>
+              </Tooltip>
+
               <IconButton
                 onClick={handleSetFilters}
                 sx={{
