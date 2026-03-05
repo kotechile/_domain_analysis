@@ -1002,6 +1002,20 @@ const DomainsTablePage: React.FC = () => {
                           >
                             Traffic
                           </TableSortLabel>
+                          <TableSortLabel
+                            active={filters.sortBy === 'keywords_count'}
+                            direction={filters.sortBy === 'keywords_count' ? (filters.sortOrder as 'asc' | 'desc') : 'desc'}
+                            onClick={() => handleSort('keywords_count')}
+                            sx={{
+                              color: '#FFFFFF !important',
+                              '&:hover': { color: '#FFFFFF !important' },
+                              '&.Mui-active': { color: '#FFFFFF !important' },
+                              '& .MuiTableSortLabel-icon': { color: '#FFFFFF !important' },
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            Keywords
+                          </TableSortLabel>
                         </Box>
                       </TableCell>
                       <TableCell sx={{ backgroundColor: '#0C152B', color: '#FFFFFF', fontWeight: 600, borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
@@ -1082,6 +1096,11 @@ const DomainsTablePage: React.FC = () => {
                         ? auction.referring_domains
                         : ((pageStats.referring_domains !== undefined && pageStats.referring_domains !== null) ? pageStats.referring_domains : null);
 
+                      // Extract keywords - check extracted column first, then page_statistics
+                      const keywords = (auction.keywords_count !== undefined && auction.keywords_count !== null)
+                        ? auction.keywords_count
+                        : ((pageStats.keywords !== undefined && pageStats.keywords !== null) ? pageStats.keywords : null);
+
                       // Calculate DR from available data
                       // Priority: extracted column > calculated from rank
                       const dr = (auction.domain_rating !== undefined && auction.domain_rating !== null)
@@ -1106,6 +1125,8 @@ const DomainsTablePage: React.FC = () => {
                       const formatReferringDomains = formatMetric;
                       // Format traffic alias
                       const formatTraffic = formatMetric;
+                      // Format keywords alias
+                      const formatKeywords = formatMetric;
 
                       // Format auction site name for display
                       const formatAuctionSite = (site: string | null | undefined): { label: string; color: string } => {
@@ -1266,6 +1287,9 @@ const DomainsTablePage: React.FC = () => {
                               }
                               if (traffic !== null && traffic !== undefined) {
                                 metricsToShow.push(<MetricItem key="traffic" label="TRAFFIC" value={formatTraffic(typeof traffic === 'number' ? traffic : parseFloat(traffic))} />);
+                              }
+                              if (keywords !== null && keywords !== undefined) {
+                                metricsToShow.push(<MetricItem key="keywords" label="KEYWORDS" value={formatKeywords(keywords)} />);
                               }
                               if (rank !== null && rank !== undefined) {
                                 metricsToShow.push(<MetricItem key="rank" label="RANK" value={rank} />);

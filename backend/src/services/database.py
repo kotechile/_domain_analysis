@@ -1696,7 +1696,7 @@ class DatabaseService:
                     
                     # Check metrics
                     # Note: keys depend on how they are stored. Assuming standard keys.
-                    has_traffic = 'traffic' in stats and stats['traffic'] is not None
+                    has_traffic = ('traffic' in stats and stats['traffic'] is not None) or ('etv' in stats and stats['etv'] is not None)
                     has_rank = 'rank' in stats and stats['rank'] is not None
                     has_backlinks = 'backlinks' in stats and stats['backlinks'] is not None
                     has_spam_score = 'spam_score' in stats and stats['spam_score'] is not None
