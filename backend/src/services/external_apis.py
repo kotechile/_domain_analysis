@@ -217,7 +217,8 @@ class DataForSEOService:
                     "language_name": "English",
                     "location_code": 2840,
                     "date_from": start_date.strftime("%Y-%m-%d"),
-                    "date_to": end_date.strftime("%Y-%m-%d")
+                    "date_to": end_date.strftime("%Y-%m-%d"),
+                    "include_clickstream_data": True
                 }]
                 
                 logger.info("Making DataForSEO historical rank overview request", url=url, domain=domain)
