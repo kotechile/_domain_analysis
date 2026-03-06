@@ -67,7 +67,7 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ report }) => {
       setLoadingPageStats(false);
       return;
     }
-    
+
     console.log('No backlinks_page_summary in report, fetching from cache...');
 
     // Otherwise, try to fetch from cache (for backward compatibility with old reports)
@@ -75,7 +75,7 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ report }) => {
       try {
         setLoadingPageStats(true);
         const response = await api.getPageSummary(report.domain_name);
-        
+
         if (response.success && response.data) {
           setPageStatistics(response.data as BulkPageSummaryResult);
         }
@@ -108,20 +108,20 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ report }) => {
     // Only show charts if the data structure matches BulkPageSummaryResult
     const tldData = (pageStatistics as any).referring_links_tld
       ? Object.entries((pageStatistics as any).referring_links_tld).map(([name, value]) => ({
-          name: name || 'unknown',
-          value: Number(value) || 0,
-        }))
+        name: name || 'unknown',
+        value: Number(value) || 0,
+      }))
       : [];
 
     const countryData = (pageStatistics as any).referring_links_countries
       ? Object.entries((pageStatistics as any).referring_links_countries)
-          .map(([name, value]) => ({
-            name: name && name.trim() ? name : 'Unknown',
-            value: Number(value) || 0,
-          }))
-          .filter((item) => item.value > 0) // Filter out zero values
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 10) // Top 10 countries
+        .map(([name, value]) => ({
+          name: name && name.trim() ? name : 'Unknown',
+          value: Number(value) || 0,
+        }))
+        .filter((item) => item.value > 0) // Filter out zero values
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10) // Top 10 countries
       : [];
 
     return { tldData, countryData };
@@ -141,318 +141,318 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ report }) => {
     '#6366f1', // indigo
   ];
 
-  const MetricItem: React.FC<{
+  const BigMetricCard: React.FC<{
     icon: React.ReactNode;
     label: string;
     value: string | number;
-    color?: string;
-  }> = ({ icon, label, value, color }) => (
-    <Paper 
-      variant="outlined" 
-      sx={{ 
-        p: 2, 
+    color: string;
+    unit?: string;
+  }> = ({ icon, label, value, color, unit }) => (
+    <Paper
+      sx={{
+        p: 3,
+        bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
         borderRadius: 2,
+        borderLeft: `4px solid ${color}`,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
         transition: 'all 0.2s',
         '&:hover': {
-          transform: 'translateY(-2px)',
+          transform: 'translateY(-4px)',
           boxShadow: theme.palette.mode === 'light'
-            ? '0 4px 12px rgba(0, 0, 0, 0.1)'
-            : '0 4px 12px rgba(0, 0, 0, 0.3)',
+            ? '0 8px 16px rgba(0, 0, 0, 0.1)'
+            : '0 8px 16px rgba(0, 0, 0, 0.4)',
         },
       }}
     >
-      <Stack direction="row" spacing={2} alignItems="center">
-        <Box
-          sx={{
-            width: 48,
-            height: 48,
-            borderRadius: 2,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            bgcolor: color || 'primary.main',
-            color: 'white',
-          }}
-        >
-          {icon}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+        <Box sx={{ color, display: 'flex', alignItems: 'center' }}>
+          {React.cloneElement(icon as React.ReactElement, { sx: { fontSize: 24, color } })}
         </Box>
-        <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-            {label}
-          </Typography>
-          <Typography variant="h6" fontWeight={700} color={color || 'primary.main'}>
-            {value}
-          </Typography>
-        </Box>
-      </Stack>
+        <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase', lineHeight: 1.2, letterSpacing: 1 }}>
+          {label}
+        </Typography>
+      </Box>
+      <Typography variant="h3" sx={{ fontWeight: 800, fontFamily: 'monospace', color: theme.palette.text.primary, display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
+        {value}
+        {unit && <Typography variant="h6" component="span" sx={{ color: 'text.secondary', fontWeight: 600 }}>{unit}</Typography>}
+      </Typography>
     </Paper>
   );
 
   return (
     <Box>
-      <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, mb: 3 }}>
+      <Typography variant="h5" gutterBottom sx={{ fontWeight: 800, mb: 4, letterSpacing: -0.5 }}>
         Analysis Summary
       </Typography>
 
       <Grid container spacing={3}>
-        {/* Key Metrics */}
-        <Grid item xs={12} md={6}>
-          <Card variant="outlined" sx={{ borderRadius: 2 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-                Key SEO Metrics
-              </Typography>
-              <Stack spacing={2}>
-                <MetricItem
-                  icon={<DomainIcon />}
-                  label="Domain Authority (DataForSEO)"
-                  value={formatNumber(metrics?.domain_rating_dr)}
-                  color="primary.main"
-                />
-                <MetricItem
-                  icon={<TrendingUpIcon />}
-                  label="Organic Traffic"
-                  value={formatNumber(metrics?.organic_traffic_est)}
-                  color="success.main"
-                />
-                {/* Only show these if not in Backlinks Page Summary to avoid duplication */}
-                {!pageStatistics && (
-                  <>
-                    <MetricItem
-                      icon={<LinkIcon />}
-                      label="Referring Domains"
-                      value={formatNumber(metrics?.total_referring_domains)}
-                      color="info.main"
-                    />
-                    <MetricItem
-                      icon={<SearchIcon />}
-                      label="Total Backlinks"
-                      value={formatNumber(metrics?.total_backlinks)}
-                      color="secondary.main"
-                    />
-                  </>
-                )}
-                <MetricItem
-                  icon={<SearchIcon />}
-                  label="Total Keywords"
-                  value={formatNumber(metrics?.total_keywords)}
-                  color="primary.main"
-                />
-              </Stack>
-            </CardContent>
-          </Card>
+        {/* Top-level Key Metrics Row */}
+        <Grid item xs={12}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.secondary', mb: 2, textTransform: 'uppercase', letterSpacing: 1 }}>
+            Key Performance Indicators
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6} md={2.4}>
+              <BigMetricCard
+                icon={<DomainIcon />}
+                label="Domain Rating"
+                value={formatNumber(metrics?.domain_rating_dr)}
+                color="#8b5cf6"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={2.4}>
+              <BigMetricCard
+                icon={<TrendingUpIcon />}
+                label="Organic Traffic"
+                value={formatNumber(metrics?.organic_traffic_est)}
+                color="#10b981"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={2.4}>
+              <BigMetricCard
+                icon={<SearchIcon />}
+                label="Organic Keywords"
+                value={formatNumber(metrics?.total_keywords)}
+                color="#3b82f6"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={2.4}>
+              <BigMetricCard
+                icon={<LinkIcon />}
+                label="Backlinks"
+                value={formatNumber(pageStatistics?.backlinks ?? (pageStatistics as any)?.backlinks ?? metrics?.total_backlinks)}
+                color="#6366f1"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6} md={2.4}>
+              <BigMetricCard
+                icon={<LanguageIcon />}
+                label="Ref. Domains"
+                value={formatNumber(pageStatistics?.referring_domains ?? (pageStatistics as any)?.referring_domains ?? metrics?.total_referring_domains)}
+                color="#06b6d4"
+              />
+            </Grid>
+          </Grid>
         </Grid>
 
-        {/* Keyword Trends */}
-        {metrics?.organic_metrics && (
-          <Grid item xs={12} md={6}>
+        {/* Keyword Trends or Historical Data - Two Column Layout */}
+        {metrics?.organic_metrics ? (
+          <>
+            <Grid item xs={12} md={7}>
+              <Card variant="outlined" sx={{ borderRadius: 2, height: '100%' }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, mb: 3 }}>
+                    Keyword Movement (24h)
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={6} sm={3}>
+                      <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2, borderBottom: '3px solid #10b981' }}>
+                        <Typography variant="overline" color="text.secondary" fontWeight={600}>UP</Typography>
+                        <Typography variant="h5" fontWeight={800} color="success.main">{formatNumber(metrics.organic_metrics.is_up)}</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2, borderBottom: '3px solid #f59e0b' }}>
+                        <Typography variant="overline" color="text.secondary" fontWeight={600}>DOWN</Typography>
+                        <Typography variant="h5" fontWeight={800} color="warning.main">{formatNumber(metrics.organic_metrics.is_down)}</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2, borderBottom: '3px solid #3b82f6' }}>
+                        <Typography variant="overline" color="text.secondary" fontWeight={600}>NEW</Typography>
+                        <Typography variant="h5" fontWeight={800} color="info.main">{formatNumber(metrics.organic_metrics.is_new)}</Typography>
+                      </Paper>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', borderRadius: 2, borderBottom: '3px solid #ef4444' }}>
+                        <Typography variant="overline" color="text.secondary" fontWeight={600}>LOST</Typography>
+                        <Typography variant="h5" fontWeight={800} color="error.main">{formatNumber(metrics.organic_metrics.is_lost)}</Typography>
+                      </Paper>
+                    </Grid>
+                  </Grid>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} md={5}>
+              <Card variant="outlined" sx={{ borderRadius: 2, height: '100%' }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, mb: 3 }}>
+                    Domain History
+                  </Typography>
+                  <Stack direction="row" spacing={3}>
+                    <Box>
+                      <Typography variant="overline" color="text.secondary" fontWeight={600}>Total Captures</Typography>
+                      <Typography variant="h4" fontWeight={800}>{formatNumber(wayback?.total_captures)}</Typography>
+                    </Box>
+                    <Box sx={{ borderLeft: '1px solid', borderColor: 'divider', pl: 3 }}>
+                      <Typography variant="overline" color="text.secondary" fontWeight={600}>Est. Age</Typography>
+                      <Typography variant="h4" fontWeight={800}>{wayback?.first_capture_year || 'N/A'}</Typography>
+                    </Box>
+                  </Stack>
+                  <Button
+                    variant="contained"
+                    disableElevation
+                    startIcon={<OpenInNewIcon />}
+                    onClick={() => window.open(`https://web.archive.org/web/*/${report.domain_name}`, '_blank')}
+                    fullWidth
+                    sx={{ mt: 3, borderRadius: 1.5, py: 1.2, bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', color: 'text.primary', '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' } }}
+                  >
+                    Wayback Machine
+                  </Button>
+                </CardContent>
+              </Card>
+            </Grid>
+          </>
+        ) : (
+          <Grid item xs={12}>
             <Card variant="outlined" sx={{ borderRadius: 2 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-                  Keyword Trends
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, mb: 3 }}>
+                  Historical Data
                 </Typography>
-                <Stack spacing={2}>
-                  <MetricItem
-                    icon={<TrendingUpIcon />}
-                    label="Keywords Moved Up"
-                    value={formatNumber(metrics.organic_metrics.is_up)}
-                    color="success.main"
-                  />
-                  <MetricItem
-                    icon={<TrendingDownIcon />}
-                    label="Keywords Moved Down"
-                    value={formatNumber(metrics.organic_metrics.is_down)}
-                    color="warning.main"
-                  />
-                  <MetricItem
-                    icon={<NewReleasesIcon />}
-                    label="New Keywords"
-                    value={formatNumber(metrics.organic_metrics.is_new)}
-                    color="info.main"
-                  />
-                  <MetricItem
-                    icon={<RemoveIcon />}
-                    label="Lost Keywords"
-                    value={formatNumber(metrics.organic_metrics.is_lost)}
-                    color="error.main"
-                  />
-                </Stack>
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={4}>
+                    <Box>
+                      <Typography variant="overline" color="text.secondary" fontWeight={600}>Total Captures</Typography>
+                      <Typography variant="h4" fontWeight={800}>{formatNumber(wayback?.total_captures)}</Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Box sx={{ borderLeft: { sm: '1px solid' }, borderColor: 'divider', pl: { sm: 3 } }}>
+                      <Typography variant="overline" color="text.secondary" fontWeight={600}>First Seen</Typography>
+                      <Typography variant="h4" fontWeight={800}>{wayback?.first_capture_year || 'N/A'}</Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Button
+                      variant="contained"
+                      disableElevation
+                      startIcon={<OpenInNewIcon />}
+                      onClick={() => window.open(`https://web.archive.org/web/*/${report.domain_name}`, '_blank')}
+                      fullWidth
+                      sx={{ mt: { xs: 1, sm: 0 }, borderRadius: 1.5, py: 1.2, height: '100%', bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', color: 'text.primary', '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' } }}
+                    >
+                      View on Wayback Machine
+                    </Button>
+                  </Grid>
+                </Grid>
               </CardContent>
             </Card>
           </Grid>
         )}
 
-        {/* Historical Data */}
-        <Grid item xs={12} md={6}>
-          <Card variant="outlined" sx={{ borderRadius: 2 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-                Historical Data
-              </Typography>
-              <Stack spacing={2}>
-                <MetricItem
-                  icon={<ScheduleIcon />}
-                  label="Total Captures"
-                  value={formatNumber(wayback?.total_captures)}
-                  color="primary.main"
-                />
-                <MetricItem
-                  icon={<ScheduleIcon />}
-                  label="First Capture Year"
-                  value={wayback?.first_capture_year || 'N/A'}
-                  color="primary.main"
-                />
-                {wayback?.historical_risk_assessment && (
-                  <Alert severity="info" sx={{ mt: 2, borderRadius: 2 }}>
-                    <Typography variant="body2" fontWeight={600} gutterBottom>
-                      Risk Assessment
-                    </Typography>
-                    <Typography variant="body2">
-                      {wayback.historical_risk_assessment}
-                    </Typography>
-                  </Alert>
-                )}
-                <Button
-                  variant="outlined"
-                  size="medium"
-                  startIcon={<OpenInNewIcon />}
-                  onClick={() => window.open(`https://web.archive.org/web/*/${report.domain_name}`, '_blank')}
-                  fullWidth
-                  sx={{ mt: 1, borderRadius: 2 }}
-                >
-                  View on Wayback Machine
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Backlinks Page Summary */}
+        {/* Backlinks Detailed Breakdown */}
         {pageStatistics && (
           <Grid item xs={12}>
-            <Card variant="outlined" sx={{ borderRadius: 2 }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-                  <AnalyticsIcon sx={{ color: 'primary.main' }} />
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Backlinks Page Summary
+            <Card variant="outlined" sx={{ borderRadius: 2, borderTop: '4px solid #3b82f6' }}>
+              <CardContent sx={{ p: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 4 }}>
+                  <Box sx={{ p: 1, bgcolor: 'primary.main', borderRadius: 1, display: 'flex' }}>
+                    <AnalyticsIcon sx={{ color: 'white', fontSize: 20 }} />
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                    Backlink Profile Analysis
                   </Typography>
                 </Box>
 
-                {/* Summary Cards - Similar to DataForSEOPopup layout */}
-                <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid container spacing={2}>
+                  {/* Internal Metrics Row */}
                   <Grid item xs={12} sm={6} md={3}>
                     <Paper
                       sx={{
                         p: 3,
-                        bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+                        bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.01)',
                         borderRadius: 2,
-                        borderLeft: '4px solid #3b82f6',
+                        border: '1px solid',
+                        borderColor: 'divider',
                         height: '100%',
                       }}
                     >
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <LinkIcon sx={{ color: '#3b82f6', fontSize: 24 }} />
-                        <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase' }}>
-                          Total Backlinks
+                        <LanguageIcon sx={{ color: '#f59e0b', fontSize: 20 }} />
+                        <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                          Referring Pages
                         </Typography>
                       </Box>
-                      <Typography variant="h3" sx={{ fontWeight: 700, fontFamily: 'monospace', color: theme.palette.text.primary }}>
-                        {formatNumber(pageStatistics.backlinks ?? (pageStatistics as any).backlinks ?? 0)}
+                      <Typography variant="h4" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>
+                        {formatNumber((pageStatistics as any).referring_pages)}
                       </Typography>
                     </Paper>
                   </Grid>
-
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Paper
-                      sx={{
-                        p: 3,
-                        bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
-                        borderRadius: 2,
-                        borderLeft: '4px solid #10b981',
-                        height: '100%',
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <DomainIcon sx={{ color: '#10b981', fontSize: 24 }} />
-                        <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase' }}>
-                          Referring Domains
-                        </Typography>
-                      </Box>
-                      <Typography variant="h3" sx={{ fontWeight: 700, fontFamily: 'monospace', color: theme.palette.text.primary }}>
-                        {formatNumber(pageStatistics.referring_domains ?? (pageStatistics as any).referring_domains ?? 0)}
-                      </Typography>
-                    </Paper>
-                  </Grid>
-
-                  {(pageStatistics as any).referring_pages !== undefined && (
-                    <Grid item xs={12} sm={6} md={3}>
-                      <Paper
-                        sx={{
-                          p: 3,
-                          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
-                          borderRadius: 2,
-                          borderLeft: '4px solid #f59e0b',
-                          height: '100%',
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <LanguageIcon sx={{ color: '#f59e0b', fontSize: 24 }} />
-                          <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase' }}>
-                            Referring Pages
-                          </Typography>
-                        </Box>
-                        <Typography variant="h3" sx={{ fontWeight: 700, fontFamily: 'monospace', color: '#FFFFFF' }}>
-                          {formatNumber((pageStatistics as any).referring_pages)}
-                        </Typography>
-                      </Paper>
-                    </Grid>
-                  )}
 
                   {((pageStatistics as any).backlinks_spam_score !== null && (pageStatistics as any).backlinks_spam_score !== undefined) && (
                     <Grid item xs={12} sm={6} md={3}>
                       <Paper
                         sx={{
                           p: 3,
-                          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+                          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.01)',
                           borderRadius: 2,
-                          borderLeft: '4px solid #ef4444',
+                          border: '1px solid',
+                          borderColor: (pageStatistics as any).backlinks_spam_score > 30 ? 'error.light' : 'divider',
                           height: '100%',
                         }}
                       >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <WarningIcon sx={{ color: '#ef4444', fontSize: 24 }} />
-                          <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase' }}>
+                          <WarningIcon sx={{ color: '#ef4444', fontSize: 20 }} />
+                          <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 700 }}>
                             Spam Score
                           </Typography>
                         </Box>
-                        <Typography variant="h3" sx={{ fontWeight: 700, fontFamily: 'monospace', color: '#FFFFFF' }}>
+                        <Typography variant="h4" sx={{ fontWeight: 800, fontFamily: 'monospace', color: (pageStatistics as any).backlinks_spam_score > 30 ? 'error.main' : 'text.primary' }}>
                           {`${(pageStatistics as any).backlinks_spam_score}%`}
                         </Typography>
                       </Paper>
                     </Grid>
                   )}
 
-                  {/* Domain Rating if available */}
-                  {metrics?.domain_rating_dr !== undefined && metrics?.domain_rating_dr !== null && (
+                  {(pageStatistics as any).referring_ips !== undefined && (
                     <Grid item xs={12} sm={6} md={3}>
                       <Paper
                         sx={{
                           p: 3,
-                          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+                          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.01)',
                           borderRadius: 2,
-                          borderLeft: '4px solid #8b5cf6',
+                          border: '1px solid',
+                          borderColor: 'divider',
                           height: '100%',
                         }}
                       >
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <TrendingUpIcon sx={{ color: '#8b5cf6', fontSize: 24 }} />
-                          <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase' }}>
-                            Domain Rating
+                          <PublicIcon sx={{ color: '#ec4899', fontSize: 20 }} />
+                          <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                            Referring IPs
                           </Typography>
                         </Box>
-                        <Typography variant="h3" sx={{ fontWeight: 700, fontFamily: 'monospace', color: '#FFFFFF' }}>
-                          {metrics.domain_rating_dr}
+                        <Typography variant="h4" sx={{ fontWeight: 800, fontFamily: 'monospace' }}>
+                          {formatNumber((pageStatistics as any).referring_ips)}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                  )}
+
+                  {(pageStatistics as any).broken_backlinks !== undefined && (
+                    <Grid item xs={12} sm={6} md={3}>
+                      <Paper
+                        sx={{
+                          p: 3,
+                          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.01)',
+                          borderRadius: 2,
+                          border: '1px solid',
+                          borderColor: (pageStatistics as any).broken_backlinks > 0 ? 'warning.light' : 'divider',
+                          height: '100%',
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <TrendingDownIcon sx={{ color: '#ef4444', fontSize: 20 }} />
+                          <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 700 }}>
+                            Broken Links
+                          </Typography>
+                        </Box>
+                        <Typography variant="h4" sx={{ fontWeight: 800, fontFamily: 'monospace', color: (pageStatistics as any).broken_backlinks > 0 ? 'error.main' : 'text.primary' }}>
+                          {formatNumber((pageStatistics as any).broken_backlinks)}
                         </Typography>
                       </Paper>
                     </Grid>
@@ -804,8 +804,8 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ report }) => {
                             color="success"
                             variant="outlined"
                             size="small"
-                            sx={{ 
-                              justifyContent: 'flex-start', 
+                            sx={{
+                              justifyContent: 'flex-start',
                               textAlign: 'left',
                               borderRadius: 1,
                               height: 'auto',
@@ -836,8 +836,8 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ report }) => {
                             color="error"
                             variant="outlined"
                             size="small"
-                            sx={{ 
-                              justifyContent: 'flex-start', 
+                            sx={{
+                              justifyContent: 'flex-start',
                               textAlign: 'left',
                               borderRadius: 1,
                               height: 'auto',
@@ -889,8 +889,8 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ report }) => {
                     <LinearProgress
                       variant="determinate"
                       value={llmAnalysis.confidence_score * 100}
-                      sx={{ 
-                        height: 8, 
+                      sx={{
+                        height: 8,
                         borderRadius: 4,
                         bgcolor: theme.palette.mode === 'light' ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.12)',
                       }}
