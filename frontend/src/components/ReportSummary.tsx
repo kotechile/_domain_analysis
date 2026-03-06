@@ -49,7 +49,32 @@ interface ReportSummaryProps {
 const ReportSummary: React.FC<ReportSummaryProps> = ({ report }) => {
   const theme = useTheme();
   const api = useApi();
-  const metrics = report.data_for_seo_metrics;
+  const metrics = useMemo(() => {
+    const base = report.data_for_seo_metrics;
+    if (!base) return base;
+
+    let updated = { ...base };
+
+    // Fallback for Organic Traffic if 0
+    if (!updated.organic_traffic_est || updated.organic_traffic_est === 0) {
+      const histTraffic = report.historical_data?.rank_overview?.organic_traffic;
+      if (histTraffic && histTraffic.length > 0) {
+        const latest = [...histTraffic].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        if (latest && latest.value > 0) updated.organic_traffic_est = latest.value;
+      }
+    }
+
+    // Fallback for Total Keywords if 0
+    if (!updated.total_keywords || updated.total_keywords === 0) {
+      const histKeywords = report.historical_data?.rank_overview?.organic_keywords_count;
+      if (histKeywords && histKeywords.length > 0) {
+        const latest = [...histKeywords].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        if (latest && latest.value > 0) updated.total_keywords = Math.round(latest.value);
+      }
+    }
+
+    return updated;
+  }, [report.data_for_seo_metrics, report.historical_data]);
   const wayback = report.wayback_machine_summary;
   const [pageStatistics, setPageStatistics] = useState<BulkPageSummaryResult | null>(null);
 
