@@ -1679,27 +1679,12 @@ class DatabaseService:
             # Use stable sort by adding a tie-breaker (domain or id)
             # This helps ensure that the same domains are picked across calls if they have same expiry
             if sort_order == 'desc':
-                query = query.order(sort_by, desc=True).order('domain', desc=True)
+                query = query.order(sort_by, desc=True)
             else:
-                query = query.order(sort_by, desc=False).order('domain', desc=False)
+                query = query.order(sort_by, desc=False)
             
-            # IMPROVEMENT: Filter for missing metrics at SQL level if possible
-            # Unless forcing refresh, prioritize domains where has_statistics is false OR columns are null
-            if not force_refresh:
-                # Postgrest .or() syntax for NULL checks
-                # NOTE: We use .or() to find anything missing ANY of the major metrics
-                missing_any_filter = (
-                    "has_statistics.eq.false,"
-                    "ranking.is.null,"
-                    "backlinks.is.null,"
-                    "backlinks_spam_score.is.null,"
-                    "organic_traffic.is.null"
-                )
-                query = query.or_(missing_any_filter)
-            
-            # Fetch candidates
-            # Since we are already filtering for missing ones, we can just use the limit
-            fetch_limit = limit if not force_refresh else limit * 2
+            # Fetch candidates - fetch more than limit to allow regarding in-memory filtering
+            fetch_limit = limit * 2
             result = query.limit(fetch_limit).execute()
             candidates = result.data if result.data else []
             
@@ -1906,7 +1891,7 @@ class DatabaseService:
             result = (
                 self.client.table('auctions')
                 .select('domain')
-                .limit(50000)  # Large enough to get variety, small enough to fit in memory
+                .limit(10000)  # Moderate sample for performance
                 .execute()
             )
             
