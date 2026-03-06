@@ -1758,12 +1758,15 @@ class DatabaseService:
                 self._initialize_client()
                 
             # First fetch existing statistics to merge
-            response = self.client.table('auctions').select('page_statistics').eq('domain', domain).execute()
+            # Using ilike for case-insensitivity to find the domain
+            response = self.client.table('auctions').select('domain', 'page_statistics').ilike('domain', domain).execute()
             
             if not response.data or len(response.data) == 0:
                 # logger.warning("Domain not found for statistics update", domain=domain)
                 return False
                 
+            # Use the actual domain as stored in DB for the subsequent update
+            actual_domain = response.data[0].get('domain')
             current_stats = response.data[0].get('page_statistics') or {}
             
             # Merge new stats into existing
@@ -1853,7 +1856,7 @@ class DatabaseService:
                 return True
 
             try:
-                update_response = self.client.table('auctions').update(update_data).eq('domain', domain).execute()
+                update_response = self.client.table('auctions').update(update_data).eq('domain', actual_domain).execute()
             except Exception as e:
                 # Handle missing column gracefully (especially keywords_count which might be new)
                 error_str = str(e)

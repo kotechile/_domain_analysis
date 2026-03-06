@@ -271,43 +271,50 @@ class AnalysisService:
             auction_data = None
             try:
                 db = get_database()
-                # Query auctions table for this domain
-                auction_res = await db.client.table('auctions').select('*').eq('domain', domain).execute()
+                # Query auctions table for this domain (case-insensitive)
+                # Using ilike for case-insensitivity in domain matching
+                auction_res = await db.client.table('auctions').select('*').ilike('domain', domain).execute()
                 if auction_res.data:
+                    # Sort by processed status or just take the first one
                     auction_data = auction_res.data[0]
                     logger.info("Found existing auction data for fallback", 
                                domain=domain, 
                                traffic=auction_data.get('organic_traffic'),
+                               keywords=auction_data.get('organic_keywords'),
                                dr=auction_data.get('domain_rating'))
             except Exception as e:
                 logger.warning("Failed to fetch auction data for metric fallback", domain=domain, error=str(e))
             
-            # Update report with essential data
+            # Update report with metrics from DataForSEO if available
             if domain_rank_data:
                 logger.info("Parsing DataForSEO data in essential data collection", 
                            dataforseo_keys=list(domain_rank_data.keys()) if domain_rank_data else [])
                 report.data_for_seo_metrics = self.dataforseo_service.parse_domain_metrics(domain_rank_data)
+            
+            # Ensure we have a metrics object to apply fallbacks to
+            if not report.data_for_seo_metrics:
+                report.data_for_seo_metrics = DataForSEOMetrics()
                 
-                # Fallback: If DataForSEO detailed report returns 0 traffic/keywords but we have data from Marketplace (bulk), use it
-                if auction_data:
-                    metrics = report.data_for_seo_metrics
-                    
-                    # Fallback for Traffic
-                    if (metrics.organic_traffic_est is None or metrics.organic_traffic_est == 0) and auction_data.get('organic_traffic'):
-                        metrics.organic_traffic_est = float(auction_data['organic_traffic'])
-                        logger.info("Applied traffic fallback from auctions table", domain=domain, traffic=metrics.organic_traffic_est)
-                    
-                    # Fallback for Keywords (some auctions might have this in source_data or ranking)
-                    if (metrics.total_keywords is None or metrics.total_keywords == 0) and auction_data.get('ranking'):
-                        # If rankings exists but is 0-100 (DR-like), don't use it for keywords. 
-                        # But some systems use 'ranking' for keyword count.
-                        pass 
+            # Fallback: If DataForSEO detailed report returns 0 traffic/keywords but we have data from Marketplace (bulk), use it
+            if auction_data:
+                metrics = report.data_for_seo_metrics
+                
+                # Fallback for Traffic
+                if (metrics.organic_traffic_est is None or metrics.organic_traffic_est == 0) and auction_data.get('organic_traffic'):
+                    metrics.organic_traffic_est = float(auction_data['organic_traffic'])
+                    logger.info("Applied traffic fallback from auctions table", domain=domain, traffic=metrics.organic_traffic_est)
+                
+                # Fallback for Keywords
+                if (metrics.total_keywords is None or metrics.total_keywords == 0) and auction_data.get('organic_keywords'):
+                    metrics.total_keywords = int(auction_data['organic_keywords'])
+                    logger.info("Applied keywords fallback from auctions table", domain=domain, keywords=metrics.total_keywords)
 
-                    # Fallback for Domain Rating if 0
-                    if (metrics.domain_rating_dr is None or metrics.domain_rating_dr == 0) and auction_data.get('domain_rating'):
-                        metrics.domain_rating_dr = float(auction_data['domain_rating'])
-                        logger.info("Applied DR fallback from auctions table", domain=domain, dr=metrics.domain_rating_dr)
+                # Fallback for Domain Rating if 0
+                if (metrics.domain_rating_dr is None or metrics.domain_rating_dr == 0) and auction_data.get('domain_rating'):
+                    metrics.domain_rating_dr = float(auction_data['domain_rating'])
+                    logger.info("Applied DR fallback from auctions table", domain=domain, dr=metrics.domain_rating_dr)
 
+            if domain_rank_data:
                 logger.info("Parsed DataForSEO metrics in essential data collection", 
                            total_backlinks=report.data_for_seo_metrics.total_backlinks,
                            total_referring_domains=report.data_for_seo_metrics.total_referring_domains,
@@ -774,9 +781,11 @@ class AnalysisService:
                 # IMPORTANT: Safety check - Don't overwrite existing positive marketplace metrics with 0 from report 
                 # if the report metrics seem failed or incomplete
                 try:
-                    auction_res = await self.db.client.table('auctions').select('organic_traffic', 'keywords_count').eq('domain', report.domain_name).execute()
+                    # Use ilike for case-insensitive lookup to find the domain in the auctions table
+                    auction_res = await self.db.client.table('auctions').select('domain', 'organic_traffic', 'keywords_count').ilike('domain', report.domain_name).execute()
                     if auction_res.data:
                         current_auction = auction_res.data[0]
+                        # We found a match, now we check if we should preserve existing metrics
                         if sync_data.get('organic_traffic_est', 0) == 0 and current_auction.get('organic_traffic', 0) > 0:
                             sync_data['organic_traffic_est'] = current_auction['organic_traffic']
                             logger.info("Preserved existing marketplace traffic during sync", domain=report.domain_name, traffic=sync_data['organic_traffic_est'])

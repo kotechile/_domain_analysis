@@ -48,6 +48,9 @@ import {
   Link as LinkIcon,
   Search as SearchIcon,
   Assessment as AssessmentIcon,
+  Language as LanguageIcon,
+  Public as PublicIcon,
+  Bolt as BoltIcon,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
 
@@ -329,100 +332,113 @@ const ReportPage: React.FC = () => {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <Header />
-      <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
-        {/* Header */}
-        <Box sx={{ mb: 4 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <IconButton
-              onClick={() => navigate('/reports')}
-              sx={{
-                mr: 2,
-                '&:hover': {
-                  backgroundColor: theme.palette.mode === 'light'
-                    ? 'rgba(0, 0, 0, 0.04)'
-                    : 'rgba(255, 255, 255, 0.08)',
-                },
-              }}
-            >
-              <ArrowBackIcon />
-            </IconButton>
-            <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="h4" component="h1" sx={{ fontWeight: 700, mb: 1 }}>
+      <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 6 } }}>
+        {/* Header - Sleek Mockup Style */}
+        <Box sx={{ mb: 5, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: { xs: 'flex-start', md: 'center' }, gap: 3 }}>
+          <IconButton
+            onClick={() => navigate('/marketplace')}
+            sx={{
+              mr: { md: 1 },
+              bgcolor: 'background.paper',
+              boxShadow: 1,
+              '&:hover': { bgcolor: 'background.paper', transform: 'scale(1.1)' },
+              transition: 'all 0.2s'
+            }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+
+          <Box sx={{ flexGrow: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+              <Typography variant="h3" component="h1" sx={{ fontWeight: 800, letterSpacing: '-0.03em' }}>
                 {report.domain_name}
               </Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', sm: 'center' }}>
-                <Chip
-                  icon={getStatusIcon(report.status)}
-                  label={report.status.replace('_', ' ').toUpperCase()}
-                  color={getStatusColor(report.status) as any}
-                  variant="outlined"
-                  sx={{ borderRadius: 1 }}
-                />
-                {report.analysis_timestamp && (
-                  <Typography variant="body2" color="text.secondary">
+              <Chip
+                label={report.status === 'completed' ? 'COMPLETED' : report.status.toUpperCase()}
+                color={getStatusColor(report.status) as any}
+                size="small"
+                sx={{
+                  fontWeight: 700,
+                  borderRadius: '16px',
+                  px: 1,
+                  fontSize: '0.7rem',
+                  height: 24,
+                  bgcolor: report.status === 'completed' ? '#dcfce7' : undefined,
+                  color: report.status === 'completed' ? '#166534' : undefined,
+                  border: 'none'
+                }}
+              />
+            </Box>
+
+            <Stack direction="row" spacing={3} sx={{ color: 'text.secondary', opacity: 0.8 }}>
+              {report.analysis_timestamp && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <ScheduleIcon sx={{ fontSize: 16 }} />
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
                     Analyzed: {new Date(report.analysis_timestamp).toLocaleString()}
                   </Typography>
-                )}
-                {report.processing_time_seconds && (
-                  <Typography variant="body2" color="text.secondary">
+                </Box>
+              )}
+              {report.processing_time_seconds && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <TrendingUpIcon sx={{ fontSize: 16 }} />
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
                     Processing time: {report.processing_time_seconds.toFixed(1)}s
                   </Typography>
-                )}
-              </Stack>
-            </Box>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              <Tooltip title="Refresh">
-                <IconButton
-                  onClick={() => refetch()}
-                  sx={{
-                    '&:hover': {
-                      backgroundColor: theme.palette.mode === 'light'
-                        ? 'rgba(0, 0, 0, 0.04)'
-                        : 'rgba(255, 255, 255, 0.08)',
-                    },
-                  }}
-                >
-                  <RefreshIcon />
-                </IconButton>
-              </Tooltip>
-              <Button
-                variant="outlined"
-                startIcon={<DownloadIcon />}
-                onClick={handleExportPDF}
-                disabled={report.status !== 'completed'}
-                size="small"
-              >
-                Export PDF
-              </Button>
-              {report.status === 'failed' && (
-                <Button
-                  variant="outlined"
-                  color="warning"
-                  onClick={() => setRetryDialogOpen(true)}
-                  disabled={retryMutation.isPending}
-                  size="small"
-                >
-                  Retry
-                </Button>
+                </Box>
               )}
-              <Button
-                variant="outlined"
-                color="error"
-                onClick={handleDelete}
-                disabled={deleteMutation.isPending}
-                startIcon={<DeleteIcon />}
-                size="small"
-              >
-                Delete
-              </Button>
             </Stack>
           </Box>
+
+          <Stack direction="row" spacing={1.5}>
+            <Tooltip title="Refresh Data">
+              <IconButton
+                onClick={() => refetch()}
+                sx={{ bgcolor: 'background.paper', boxShadow: 1, '&:hover': { bgcolor: 'background.paper' } }}
+              >
+                <RefreshIcon />
+              </IconButton>
+            </Tooltip>
+
+            <Button
+              variant="contained"
+              startIcon={<DownloadIcon />}
+              onClick={handleExportPDF}
+              disabled={report.status !== 'completed'}
+              sx={{
+                bgcolor: 'white',
+                color: 'text.primary',
+                border: '1px solid #e2e8f0',
+                boxShadow: 'none',
+                fontWeight: 600,
+                '&:hover': { bgcolor: '#f8fafc', border: '1px solid #cbd5e1', boxShadow: 'none' }
+              }}
+            >
+              Export PDF
+            </Button>
+
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={handleDelete}
+              sx={{
+                bgcolor: '#fee2e2',
+                color: '#ef4444',
+                boxShadow: 'none',
+                fontWeight: 600,
+                '&:hover': { bgcolor: '#fecaca', boxShadow: 'none' }
+              }}
+            >
+              Delete
+            </Button>
+          </Stack>
         </Box>
 
         {/* Enhanced progress indicator for in-progress analysis */}
         {report.status === 'in_progress' && (
-          <Card sx={{ mb: 3 }}>
-            <CardContent>
+          <Card sx={{ mb: 4, borderRadius: 4, border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}>
+            <CardContent sx={{ p: 4 }}>
               <AnalysisProgress
                 domain={domain!}
                 onComplete={() => refetch()}
@@ -446,57 +462,40 @@ const ReportPage: React.FC = () => {
         {/* Report content */}
         {report.status === 'completed' && (
           <>
-            {/* Summary Card */}
-            <Card sx={{ mb: 3 }}>
-              <CardContent>
-                <ReportSummary report={report} />
-              </CardContent>
-            </Card>
+            {/* Summary Components - No outer card to allow for independent modular cards */}
+            <ReportSummary report={report} />
 
             {/* Tabs for detailed views */}
-            <Card>
-              <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
+            <Box sx={{ mt: 6 }}>
+              <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 1, mb: 4 }}>
                 <Tabs
                   value={tabValue}
                   onChange={handleTabChange}
                   variant="scrollable"
                   scrollButtons="auto"
+                  sx={{
+                    '& .MuiTab-root': {
+                      textTransform: 'none',
+                      fontWeight: 700,
+                      fontSize: '0.9rem',
+                      minHeight: 64,
+                      color: 'text.secondary',
+                      px: 3,
+                      '&.Mui-selected': { color: 'primary.main' },
+                      '& .MuiSvgIcon-root': { mr: 1 }
+                    },
+                    '& .MuiTabs-indicator': {
+                      height: 3,
+                      borderRadius: '3px 3px 0 0'
+                    }
+                  }}
                 >
-                  <Tab
-                    icon={<AnalyticsIcon />}
-                    iconPosition="start"
-                    label="Overview"
-                  />
-                  <Tab
-                    icon={<TrendingUpIcon />}
-                    iconPosition="start"
-                    label="Domain Rankings"
-                  />
-                  <Tab
-                    icon={<SearchIcon />}
-                    iconPosition="start"
-                    label="Keywords"
-                  />
-                  <Tab
-                    icon={<LinkIcon />}
-                    iconPosition="start"
-                    label="Backlinks"
-                  />
-                  <Tab
-                    icon={<LightbulbIcon />}
-                    iconPosition="start"
-                    label="AI Analysis"
-                  />
-                  <Tab
-                    icon={<HistoryIcon />}
-                    iconPosition="start"
-                    label="Historical Data"
-                  />
-                  <Tab
-                    icon={<AssessmentIcon />}
-                    iconPosition="start"
-                    label="Development Plan"
-                  />
+                  <Tab icon={<AnalyticsIcon />} iconPosition="start" label="Overview" />
+                  <Tab icon={<SearchIcon />} iconPosition="start" label="Keywords" />
+                  <Tab icon={<LinkIcon />} iconPosition="start" label="Backlinks Analysis" />
+                  <Tab icon={<LightbulbIcon />} iconPosition="start" label="AI Analysis" />
+                  <Tab icon={<HistoryIcon />} iconPosition="start" label="Historical Data" />
+                  <Tab icon={<AssessmentIcon />} iconPosition="start" label="Development" />
                 </Tabs>
               </Box>
 
@@ -616,29 +615,25 @@ const ReportPage: React.FC = () => {
               </TabPanel>
 
               <TabPanel value={tabValue} index={1}>
-                <DomainRankings metrics={report.data_for_seo_metrics} domain={report.domain_name} />
-              </TabPanel>
-
-              <TabPanel value={tabValue} index={2}>
                 <KeywordsTable domain={domain!} reportData={report} />
               </TabPanel>
 
-              <TabPanel value={tabValue} index={3}>
+              <TabPanel value={tabValue} index={2}>
                 <BacklinksTable domain={domain!} reportData={report} />
               </TabPanel>
 
-              <TabPanel value={tabValue} index={4}>
+              <TabPanel value={tabValue} index={3}>
                 <LLMAnalysis analysis={report.llm_analysis} domain={domain!} />
               </TabPanel>
 
-              <TabPanel value={tabValue} index={5}>
+              <TabPanel value={tabValue} index={4}>
                 <HistoricalDataChart domain={domain!} data={report.historical_data} />
               </TabPanel>
 
-              <TabPanel value={tabValue} index={6}>
+              <TabPanel value={tabValue} index={5}>
                 <DevelopmentPlan domain={domain!} reportData={report} />
               </TabPanel>
-            </Card>
+            </Box>
           </>
         )}
 
