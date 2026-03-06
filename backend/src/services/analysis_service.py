@@ -115,12 +115,18 @@ class AnalysisService:
             progress_tracker.complete_operation("essential_data")
             await self._update_progress_data(report, "Essential data collection completed", [], progress_tracker)
             
-            # Phase 2: Detailed Data Collection (Mandatory)
-            progress_tracker.start_operation("detailed_data")
-            await self._update_progress_data(report, "Collecting detailed backlink and keyword data", [], progress_tracker)
-            await self._collect_detailed_data(domain, report, analysis_mode, operation_logger, progress_tracker, user_id=user_id)
-            progress_tracker.complete_operation("detailed_data")
-            await self._update_progress_data(report, "Detailed data collection completed", [], progress_tracker)
+            # Phase 2: Detailed Data Collection (Mandatory for DUAL/ASYNC, skipped for LEGACY)
+            if analysis_mode != AnalysisMode.LEGACY:
+                progress_tracker.start_operation("detailed_data")
+                await self._update_progress_data(report, "Collecting detailed backlink and keyword data", [], progress_tracker)
+                await self._collect_detailed_data(domain, report, analysis_mode, operation_logger, progress_tracker, user_id=user_id)
+                progress_tracker.complete_operation("detailed_data")
+                await self._update_progress_data(report, "Detailed data collection completed", [], progress_tracker)
+            else:
+                logger.info("Skipping detailed data collection for legacy/summary mode", domain=domain)
+                progress_tracker.start_operation("detailed_data")
+                progress_tracker.complete_operation("detailed_data")
+                await self._update_progress_data(report, "Skipping detailed data for quick summary", [], progress_tracker)
             
             # Phase 3: Historical Data Collection
             progress_tracker.start_operation("historical_data")
@@ -709,7 +715,7 @@ class AnalysisService:
             raise
     
     async def _finalize_analysis(self, report: DomainAnalysisReport, start_time: datetime, progress_tracker: ProgressTracker):
-        """Finalize the analysis report"""
+        """Finalize the analysis report and sync metrics to auctions table"""
         try:
             end_time = datetime.utcnow()
             report.processing_time_seconds = (end_time - start_time).total_seconds()
@@ -723,6 +729,38 @@ class AnalysisService:
                 progress_percentage=100,
                 completed_operations=progress_tracker.get_completed_operations()
             )
+            
+            # Sync metrics to auctions table to keep marketplace consistent with detailed reports
+            if report.data_for_seo_metrics:
+                # Prepare sync data compatible with update_auction_page_statistics keys
+                sync_data = {
+                    'total_backlinks': report.data_for_seo_metrics.total_backlinks,
+                    'total_referring_domains': report.data_for_seo_metrics.total_referring_domains,
+                    'organic_traffic_est': report.data_for_seo_metrics.organic_traffic_est,
+                    'keywords_count': report.data_for_seo_metrics.total_keywords,
+                    'domain_rating_dr': report.data_for_seo_metrics.domain_rating_dr,
+                    'backlinks_spam_score': report.data_for_seo_metrics.backlinks_spam_score
+                }
+                
+                # If we have a page summary, merge it as well for more complete data
+                if report.backlinks_page_summary:
+                    try:
+                        # Convert model to dict for merging
+                        summary_dict = report.backlinks_page_summary.dict()
+                        # Only take fields relevant for metrics if they aren't Null
+                        for k, v in summary_dict.items():
+                            if v is not None and k not in sync_data:
+                                sync_data[k] = v
+                    except Exception as e:
+                        logger.warning("Failed to merge backlinks_page_summary in finalization", error=str(e))
+                
+                logger.info("Syncing detailed analysis metrics to auctions table", 
+                           domain=report.domain_name, 
+                           metrics=sync_data)
+                
+                # Use the existing database service method to update both JSONB and top-level columns
+                # This ensures the marketplace table and it's sorting reflect the latest analysis results
+                await self.db.update_auction_page_statistics(report.domain_name, sync_data)
             
         except Exception as e:
             logger.error("Analysis finalization failed", domain=report.domain_name, error=str(e))

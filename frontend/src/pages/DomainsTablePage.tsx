@@ -428,19 +428,19 @@ const DomainsTablePage: React.FC = () => {
   const handleAnalysisAction = async (domain: string, mode?: string) => {
     // Check if domain already has an analysis
     try {
-      const report = await api.getReport(domain);
-      if (report.success && report.report) {
+      const reportResponse = await api.getReport(domain);
+      if (reportResponse.success && reportResponse.report) {
         // Domain has analysis, navigate to the report page
         navigate(`/reports/${domain}`);
       } else {
-        // No analysis exists, navigate to main page with domain and mode pre-filled
+        // No analysis exists, navigate to main page with domain and mode pre-filled and auto-trigger
         const modeParam = mode ? `&mode=${mode}` : '';
-        navigate(`/?domain=${encodeURIComponent(domain)}${modeParam}`);
+        navigate(`/?domain=${encodeURIComponent(domain)}${modeParam}&auto=true`);
       }
     } catch (error) {
-      // If error (likely 404), navigate to main page with domain and mode pre-filled
+      // If error (likely 404), navigate to main page with domain and mode pre-filled and auto-trigger
       const modeParam = mode ? `&mode=${mode}` : '';
-      navigate(`/?domain=${encodeURIComponent(domain)}${modeParam}`);
+      navigate(`/?domain=${encodeURIComponent(domain)}${modeParam}&auto=true`);
     }
   };
 

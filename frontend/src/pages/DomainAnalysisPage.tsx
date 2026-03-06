@@ -30,24 +30,12 @@ const DomainAnalysisPage: React.FC = () => {
   const navigate = useNavigate();
   const api = useApi();
 
-  // Check for domain in URL params on mount
-  useEffect(() => {
-    const domainParam = searchParams.get('domain');
-    const modeParam = searchParams.get('mode');
-    if (domainParam) {
-      setDomain(domainParam);
-    }
-    if (modeParam) {
-      setMode(modeParam);
-    }
-  }, [searchParams]);
-
   // Analysis mutation
   const analysisMutation = useMutation({
     mutationFn: ({ domain, mode }: { domain: string; mode: string }) => api.analyzeDomain(domain, mode),
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       if (data.success) {
-        navigate(`/reports/${domain}`);
+        navigate(`/reports/${variables.domain}`);
       } else {
         setError(data.message);
       }
@@ -56,6 +44,28 @@ const DomainAnalysisPage: React.FC = () => {
       setError(error.response?.data?.detail || 'Failed to start analysis');
     },
   });
+
+  // Check for domain in URL params on mount - kept after mutation
+  useEffect(() => {
+    const domainParam = searchParams.get('domain');
+    const modeParam = searchParams.get('mode');
+    const autoParam = searchParams.get('auto');
+
+    if (domainParam) {
+      const formattedDomain = api.formatDomain(domainParam);
+      setDomain(formattedDomain);
+
+      if (modeParam) {
+        setMode(modeParam);
+      }
+
+      // Auto-trigger analysis if parameter is present
+      if (autoParam === 'true' && api.validateDomain(formattedDomain) && !analysisMutation.isPending && !analysisMutation.isSuccess) {
+        analysisMutation.mutate({ domain: formattedDomain, mode: modeParam || mode });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, api]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

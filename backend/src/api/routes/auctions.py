@@ -1845,6 +1845,49 @@ async def process_traffic_metrics_background_task(domains: list[str]):
         logger.error("Background traffic processing failed", error=str(e))
 
 
+async def trigger_full_analysis_background(
+    domain_names: List[str],
+    n8n_service: N8NService,
+    user_id: str
+):
+    """
+    Background task to trigger all four DataForSEO analyses sequentially.
+    Errors in one don't stop the others.
+    """
+    logger = structlog.get_logger().bind(user_id=user_id, operation="bulk_trigger_background")
+    logger.info("Starting background bulk analysis triggers", domain_count=len(domain_names))
+    
+    # 1. Traffic data (Batch workflow) - handles up to 1000 domains
+    try:
+        logger.info("Triggering bulk traffic analysis")
+        await n8n_service.trigger_bulk_traffic_batch_workflow(domain_names)
+    except Exception as e:
+        logger.error("Failed to trigger traffic data analysis", error=str(e))
+    
+    # 2. Rank analysis - handles up to 1000 domains
+    try:
+        logger.info("Triggering bulk rank analysis")
+        await n8n_service.trigger_bulk_rank_workflow(domain_names)
+    except Exception as e:
+        logger.error("Failed to trigger rank analysis", error=str(e))
+        
+    # 3. Backlinks analysis - handles up to 1000 domains
+    try:
+        logger.info("Triggering bulk backlinks analysis")
+        await n8n_service.trigger_bulk_backlinks_workflow(domain_names)
+    except Exception as e:
+        logger.error("Failed to trigger backlinks analysis", error=str(e))
+        
+    # 4. Spam score analysis - handles up to 1000 domains
+    try:
+        logger.info("Triggering bulk spam score analysis")
+        await n8n_service.trigger_bulk_spam_score_workflow(domain_names)
+    except Exception as e:
+        logger.error("Failed to trigger spam score analysis", error=str(e))
+        
+    logger.info("Background bulk analysis triggers completed", domain_count=len(domain_names))
+
+
 @router.post("/auctions/trigger-bulk-all-metrics")
 async def trigger_bulk_all_metrics_analysis(
     preferred: Optional[bool] = Query(None, description="Filter by preferred status"),
@@ -1975,112 +2018,21 @@ async def trigger_bulk_all_metrics_analysis(
         # ------------------------------
         
         # Trigger all four analyses sequentially
+        # Trigger all four analyses in background to avoid API timeout (503)
         n8n_service = N8NService()
-        results = {
-            "traffic_data": {"triggered": 0, "success": False, "request_id": None, "error": None},
-            "rank": {"triggered": 0, "success": False, "request_id": None, "error": None},
-            "backlinks": {"triggered": 0, "success": False, "request_id": None, "error": None},
-            "spam_score": {"triggered": 0, "success": False, "request_id": None, "error": None}
-        }
-        
-        # 1. Traffic data
-        try:
-            logger.info("Triggering traffic data analysis", domains=len(domain_names))
-            
-            # Use N8N Workflow for traffic batch
-            n8n_result = await n8n_service.trigger_bulk_traffic_batch_workflow(domain_names)
-            
-            if n8n_result:
-                results["traffic_data"] = {
-                    "triggered": len(domain_names),
-                    "success": True,
-                    "request_id": n8n_result.get('request_id'),
-                    "message": "N8N workflow triggered"
-                }
-                logger.info("Triggered traffic data analysis via N8N", 
-                           triggered=len(domain_names),
-                           request_id=n8n_result.get('request_id'))
-            else:
-                results["traffic_data"]["error"] = "Failed to trigger N8N workflow"
-                logger.error("Failed to trigger traffic data analysis via N8N", domains=len(domain_names))
-            
-        except Exception as e:
-            error_msg = str(e)
-            logger.error("Failed to trigger traffic data analysis", error=error_msg)
-            results["traffic_data"]["error"] = error_msg
-        
-        # 2. Rank analysis
-        try:
-            logger.info("Triggering rank analysis", domains=len(domain_names))
-            n8n_result = await n8n_service.trigger_bulk_rank_workflow(domain_names)
-            if n8n_result:
-                results["rank"] = {
-                    "triggered": len(domain_names),
-                    "success": True,
-                    "request_id": n8n_result.get('request_id')
-                }
-                logger.info("Triggered rank analysis", 
-                           triggered=len(domain_names),
-                           request_id=n8n_result.get('request_id'))
-            else:
-                results["rank"]["error"] = "Failed to trigger N8N workflow"
-        except Exception as e:
-            error_msg = str(e)
-            logger.error("Failed to trigger rank analysis", error=error_msg)
-            results["rank"]["error"] = error_msg
-        
-        # 3. Backlinks analysis
-        try:
-            logger.info("Triggering backlinks analysis", domains=len(domain_names))
-            n8n_result = await n8n_service.trigger_bulk_backlinks_workflow(domain_names)
-            if n8n_result:
-                results["backlinks"] = {
-                    "triggered": len(domain_names),
-                    "success": True,
-                    "request_id": n8n_result.get('request_id')
-                }
-                logger.info("Triggered backlinks analysis", 
-                           triggered=len(domain_names),
-                           request_id=n8n_result.get('request_id'))
-            else:
-                results["backlinks"]["error"] = "Failed to trigger N8N workflow"
-        except Exception as e:
-            error_msg = str(e)
-            logger.error("Failed to trigger backlinks analysis", error=error_msg)
-            results["backlinks"]["error"] = error_msg
-        
-        # 4. Spam score analysis
-        try:
-            logger.info("Triggering spam score analysis", domains=len(domain_names))
-            n8n_result = await n8n_service.trigger_bulk_spam_score_workflow(domain_names)
-            if n8n_result:
-                results["spam_score"] = {
-                    "triggered": len(domain_names),
-                    "success": True,
-                    "request_id": n8n_result.get('request_id')
-                }
-                logger.info("Triggered spam score analysis", 
-                           triggered=len(domain_names),
-                           request_id=n8n_result.get('request_id'))
-            else:
-                results["spam_score"]["error"] = "Failed to trigger N8N workflow"
-        except Exception as e:
-            error_msg = str(e)
-            logger.error("Failed to trigger spam score analysis", error=error_msg)
-            results["spam_score"]["error"] = error_msg
-        
-        # Calculate summary
-        total_triggered = sum(r["triggered"] for r in results.values())
-        success_count = sum(1 for r in results.values() if r["success"])
-        failed_count = 4 - success_count
+        background_tasks.add_task(
+            trigger_full_analysis_background, 
+            domain_names, 
+            n8n_service, 
+            str(current_user.id)
+        )
         
         return {
-            "success": success_count > 0,  # Success if at least one workflow succeeded
-            "message": f"Triggered analyses for {len(domain_names)} domains. {success_count} succeeded, {failed_count} failed.",
+            "success": True,
+            "message": f"Successfully queued DataForSEO extraction for {len(domain_names)} domains. Metrics will update as they complete in the background and might take several minutes.",
             "triggered_count": len(domain_names),
             "skipped_count": 0,
-            "triggered_domains": domain_names[:100],  # Return first 100 for display
-            "results": results
+            "triggered_domains": domain_names[:100]
         }
         
     except Exception as e:

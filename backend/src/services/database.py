@@ -1537,9 +1537,11 @@ class DatabaseService:
                 sort_by = 'expiration_date'
             
             if order == 'desc':
-                query = query.order(sort_by, desc=True, nullsfirst=False) # python client uses nullsfirst=False for NULLS LAST
+                # Use stable sort by adding domain as tie-breaker
+                query = query.order(sort_by, desc=True, nullsfirst=False).order('domain', desc=True)
             else:
-                query = query.order(sort_by, desc=False)
+                # Use stable sort by adding domain as tie-breaker
+                query = query.order(sort_by, desc=False).order('domain', desc=False)
             
             # Get total count - execute query with count header
             # Note: We'll estimate total count by getting a sample and extrapolating
@@ -1669,18 +1671,35 @@ class DatabaseService:
                 if filters.get('max_score') is not None:
                     query = query.lte('score', filters['max_score'])
             
-            # Apply sorting
+            # Apply sorting (with ID as tie-breaker for stability)
             valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score']
             if sort_by not in valid_sort_fields:
                 sort_by = 'expiration_date'
             
+            # Use stable sort by adding a tie-breaker (domain or id)
+            # This helps ensure that the same domains are picked across calls if they have same expiry
             if sort_order == 'desc':
-                query = query.order(sort_by, desc=True)
+                query = query.order(sort_by, desc=True).order('domain', desc=True)
             else:
-                query = query.order(sort_by, desc=False)
+                query = query.order(sort_by, desc=False).order('domain', desc=False)
             
-            # Fetch candidates - fetch more than limit to allow regarding in-memory filtering
-            fetch_limit = limit * 2
+            # IMPROVEMENT: Filter for missing metrics at SQL level if possible
+            # Unless forcing refresh, prioritize domains where has_statistics is false OR columns are null
+            if not force_refresh:
+                # Postgrest .or() syntax for NULL checks
+                # NOTE: We use .or() to find anything missing ANY of the major metrics
+                missing_any_filter = (
+                    "has_statistics.eq.false,"
+                    "ranking.is.null,"
+                    "backlinks.is.null,"
+                    "backlinks_spam_score.is.null,"
+                    "organic_traffic.is.null"
+                )
+                query = query.or_(missing_any_filter)
+            
+            # Fetch candidates
+            # Since we are already filtering for missing ones, we can just use the limit
+            fetch_limit = limit if not force_refresh else limit * 2
             result = query.limit(fetch_limit).execute()
             candidates = result.data if result.data else []
             
@@ -1695,14 +1714,37 @@ class DatabaseService:
                 for auction in candidates:
                     stats = auction.get('page_statistics') or {}
                     
-                    # Check metrics
-                    # Note: keys depend on how they are stored. Assuming standard keys.
-                    has_traffic = ('traffic' in stats and stats['traffic'] is not None) or ('etv' in stats and stats['etv'] is not None)
-                    has_rank = 'rank' in stats and stats['rank'] is not None
-                    has_backlinks = 'backlinks' in stats and stats['backlinks'] is not None
-                    has_spam_score = 'spam_score' in stats and stats['spam_score'] is not None
+                    # Check metrics in both JSONB 'page_statistics' and top-level columns
+                    # Traffic
+                    has_traffic = (
+                        (auction.get('organic_traffic') is not None) or 
+                        ('traffic' in stats and stats['traffic'] is not None) or 
+                        ('etv' in stats and stats['etv'] is not None) or
+                        ('organic_traffic' in stats and stats['organic_traffic'] is not None)
+                    )
                     
-                    # If ANY is missing, include this auction
+                    # Rank
+                    has_rank = (
+                        (auction.get('ranking') is not None) or 
+                        ('rank' in stats and stats['rank'] is not None) or
+                        ('ranking' in stats and stats['ranking'] is not None)
+                    )
+                    
+                    # Backlinks
+                    has_backlinks = (
+                        (auction.get('backlinks') is not None) or 
+                        ('backlinks' in stats and stats['backlinks'] is not None) or
+                        ('total_backlinks' in stats and stats['total_backlinks'] is not None)
+                    )
+                    
+                    # Spam Score - check both keys
+                    has_spam_score = (
+                        (auction.get('backlinks_spam_score') is not None) or
+                        ('backlinks_spam_score' in stats and stats['backlinks_spam_score'] is not None) or
+                        ('spam_score' in stats and stats['spam_score'] is not None)
+                    )
+                    
+                    # If ANY essential metric is missing, include this auction
                     if not (has_traffic and has_rank and has_backlinks and has_spam_score):
                         missing_metrics_auctions.append(auction)
                         if len(missing_metrics_auctions) >= limit:
@@ -1793,7 +1835,13 @@ class DatabaseService:
                     pass
                 
             # Organic Traffic
-            organic_traffic_raw = get_metric(updated_stats, ['organic_traffic', 'etv', 'traffic', 'organic_traffic_est'])
+            organic_traffic_raw = get_metric(updated_stats, ['organic_traffic', 'etv', 'traffic', 'organic_traffic_est', 'organic_etv'])
+            # Support nested DataForSEO Labs format: metrics.organic.etv
+            if organic_traffic_raw is None and 'metrics' in updated_stats:
+                m = updated_stats['metrics']
+                if isinstance(m, dict) and 'organic' in m and isinstance(m['organic'], dict):
+                    organic_traffic_raw = m['organic'].get('etv')
+            
             if organic_traffic_raw is not None:
                 try:
                     update_data['organic_traffic'] = int(float(organic_traffic_raw))
@@ -1801,7 +1849,13 @@ class DatabaseService:
                     update_data['organic_traffic'] = 0
                 
             # Keywords Count
-            keywords_count_raw = get_metric(updated_stats, ['keywords_count', 'keywords', 'organic_keywords'])
+            keywords_count_raw = get_metric(updated_stats, ['keywords_count', 'keywords', 'organic_keywords', 'organic_count'])
+            # Support nested DataForSEO Labs format: metrics.organic.count
+            if keywords_count_raw is None and 'metrics' in updated_stats:
+                m = updated_stats['metrics']
+                if isinstance(m, dict) and 'organic' in m and isinstance(m['organic'], dict):
+                    keywords_count_raw = m['organic'].get('count')
+
             if keywords_count_raw is not None:
                 try:
                     update_data['keywords_count'] = int(float(keywords_count_raw))
@@ -1846,10 +1900,13 @@ class DatabaseService:
             List of unique TLDs (e.g., ['.com', '.ai', '.net'])
         """
         try:
-            # Fetch all domains and extract TLDs
+            # Fetch domains and extract TLDs
+            # Note: With 1.6M+ rows, fetching all domains is a performance disaster (OOM risk)
+            # We'll limit to a large enough sample of recent auctions to get the current TLDs
             result = (
                 self.client.table('auctions')
                 .select('domain')
+                .limit(50000)  # Large enough to get variety, small enough to fit in memory
                 .execute()
             )
             
@@ -2396,21 +2453,25 @@ class DatabaseService:
             if not self.client:
                 raise Exception("Supabase client not available")
             
+            # Use execute() instead of single() to avoid PGRST116 error if not found
             result = (
                 self.client.table('csv_upload_progress')
                 .select('*')
                 .eq('job_id', job_id)
-                .single()
                 .execute()
             )
             
-            if result.data:
-                return result.data
+            if result.data and len(result.data) > 0:
+                return result.data[0]
             else:
+                # No record found is common when job finishes
                 return None
                 
         except Exception as e:
-            logger.error("Failed to get CSV upload progress", job_id=job_id, error=str(e))
+            # Only log as error if it's not a "not found" case
+            error_str = str(e)
+            if 'PGRST116' not in error_str:
+                logger.error("Failed to get CSV upload progress", job_id=job_id, error=error_str)
             return None
     
     async def get_latest_active_upload_job(self) -> Optional[Dict[str, Any]]:
