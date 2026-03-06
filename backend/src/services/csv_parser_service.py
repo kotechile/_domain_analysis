@@ -10,6 +10,7 @@ from datetime import datetime
 import structlog
 
 from models.auctions import AuctionInput
+from utils.date_utils import parse_iso_datetime
 
 logger = structlog.get_logger()
 
@@ -521,15 +522,10 @@ class CSVParserService:
             return None
         
         try:
-            # Handle ISO format with Z
-            if date_str.endswith('Z'):
-                date_str = date_str[:-1] + '+00:00'
-            
             # Try ISO format first
-            try:
-                return datetime.fromisoformat(date_str)
-            except ValueError:
-                pass
+            parsed = parse_iso_datetime(date_str)
+            if parsed:
+                return parsed
             
             # Try common date formats
             formats = [

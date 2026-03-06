@@ -18,6 +18,7 @@ except ImportError:
 
 from models.domain_analysis import NamecheapDomain, ScoredDomain
 from utils.config import get_settings
+from utils.date_utils import parse_iso_datetime
 
 logger = structlog.get_logger()
 
@@ -165,7 +166,7 @@ class DomainScoringService:
         
         try:
             if isinstance(domain.registered_date, str):
-                reg_date = datetime.fromisoformat(domain.registered_date.replace('Z', '+00:00'))
+                reg_date = parse_iso_datetime(domain.registered_date)
             else:
                 reg_date = domain.registered_date
             

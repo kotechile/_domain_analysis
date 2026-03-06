@@ -9,6 +9,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 from utils.config import get_settings
+from utils.date_utils import parse_iso_datetime
 from models.domain_analysis import (
     DomainAnalysisReport, RawDataCache, DataSource, 
     DetailedAnalysisData, AsyncTask, AsyncTaskStatus, 
@@ -200,7 +201,7 @@ class DatabaseService:
             # Convert back to DomainAnalysisReport object
             report = DomainAnalysisReport(
                 domain_name=report_data['domain_name'],
-                analysis_timestamp=datetime.fromisoformat(report_data['analysis_timestamp'].replace('Z', '+00:00')),
+                analysis_timestamp=parse_iso_datetime(report_data['analysis_timestamp']),
                 status=report_data['status'],
                 data_for_seo_metrics=report_data.get('data_for_seo_metrics'),
                 wayback_machine_summary=report_data.get('wayback_machine_summary'),
@@ -262,7 +263,7 @@ class DatabaseService:
             
             # Check if data is expired
             if cache_data.get('expires_at'):
-                expires_at = datetime.fromisoformat(cache_data['expires_at'].replace('Z', '+00:00'))
+                expires_at = parse_iso_datetime(cache_data['expires_at'])
                 # Make utcnow timezone-aware for comparison
                 now_utc = datetime.utcnow().replace(tzinfo=expires_at.tzinfo)
                 if now_utc > expires_at:
@@ -338,7 +339,7 @@ class DatabaseService:
             
             # Check if data is expired
             if data.get('expires_at'):
-                expires_at = datetime.fromisoformat(data['expires_at'].replace('Z', '+00:00'))
+                expires_at = parse_iso_datetime(data['expires_at'])
                 now_utc = datetime.utcnow().replace(tzinfo=expires_at.tzinfo)
                 if now_utc > expires_at:
                     await self.delete_detailed_data(domain_name, data_type)
@@ -351,8 +352,8 @@ class DatabaseService:
                 json_data=data['json_data'],
                 task_id=data.get('task_id'),
                 data_source=data.get('data_source', 'dataforseo'),
-                created_at=datetime.fromisoformat(data['created_at'].replace('Z', '+00:00')) if data.get('created_at') else None,
-                expires_at=datetime.fromisoformat(data['expires_at'].replace('Z', '+00:00')) if data.get('expires_at') else None
+                created_at=parse_iso_datetime(data.get('created_at')),
+                expires_at=parse_iso_datetime(data.get('expires_at'))
             )
             
             logger.info("Detailed data retrieved successfully", domain=domain_name, data_type=data_type.value)
@@ -414,8 +415,8 @@ class DatabaseService:
                 task_id=task_data['task_id'],
                 task_type=DetailedDataType(task_data['task_type']),
                 status=AsyncTaskStatus(task_data['status']),
-                created_at=datetime.fromisoformat(task_data['created_at'].replace('Z', '+00:00')) if task_data.get('created_at') else None,
-                completed_at=datetime.fromisoformat(task_data['completed_at'].replace('Z', '+00:00')) if task_data.get('completed_at') else None,
+                created_at=parse_iso_datetime(task_data.get('created_at')),
+                completed_at=parse_iso_datetime(task_data.get('completed_at')),
                 error_message=task_data.get('error_message'),
                 retry_count=task_data.get('retry_count', 0)
             )
@@ -443,8 +444,8 @@ class DatabaseService:
                 task_id=task_data['task_id'],
                 task_type=DetailedDataType(task_data['task_type']),
                 status=AsyncTaskStatus(task_data['status']),
-                created_at=datetime.fromisoformat(task_data['created_at'].replace('Z', '+00:00')) if task_data.get('created_at') else None,
-                completed_at=datetime.fromisoformat(task_data['completed_at'].replace('Z', '+00:00')) if task_data.get('completed_at') else None,
+                created_at=parse_iso_datetime(task_data.get('created_at')),
+                completed_at=parse_iso_datetime(task_data.get('completed_at')),
                 error_message=task_data.get('error_message'),
                 retry_count=task_data.get('retry_count', 0)
             )
@@ -503,8 +504,8 @@ class DatabaseService:
                 cache_ttl_hours=config_data['cache_ttl_hours'],
                 manual_refresh_enabled=config_data['manual_refresh_enabled'],
                 progress_indicators_enabled=config_data['progress_indicators_enabled'],
-                created_at=datetime.fromisoformat(config_data['created_at'].replace('Z', '+00:00')) if config_data.get('created_at') else None,
-                updated_at=datetime.fromisoformat(config_data['updated_at'].replace('Z', '+00:00')) if config_data.get('updated_at') else None
+                created_at=parse_iso_datetime(config_data.get('created_at')),
+                updated_at=parse_iso_datetime(config_data.get('updated_at'))
             )
             
             logger.info("Mode config retrieved", domain=domain_name)
@@ -718,8 +719,8 @@ class DatabaseService:
                             domain_name=row['domain_name'],
                             provider=row.get('provider'),
                             backlinks_bulk_page_summary=summary,
-                            created_at=datetime.fromisoformat(row['created_at'].replace('Z', '+00:00')) if row.get('created_at') else None,
-                            updated_at=datetime.fromisoformat(row['updated_at'].replace('Z', '+00:00')) if row.get('updated_at') else None
+                            created_at=parse_iso_datetime(row.get('created_at')),
+                            updated_at=parse_iso_datetime(row.get('updated_at'))
                         )
                         all_records.append(record)
             
@@ -796,8 +797,8 @@ class DatabaseService:
                         domain_name=row['domain_name'],
                         provider=row.get('provider'),
                         backlinks_bulk_page_summary=summary,
-                        created_at=datetime.fromisoformat(row['created_at'].replace('Z', '+00:00')) if row.get('created_at') else None,
-                        updated_at=datetime.fromisoformat(row['updated_at'].replace('Z', '+00:00')) if row.get('updated_at') else None
+                        created_at=parse_iso_datetime(row.get('created_at')),
+                        updated_at=parse_iso_datetime(row.get('updated_at'))
                     )
                     records.append(record)
             

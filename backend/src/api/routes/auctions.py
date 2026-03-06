@@ -21,6 +21,7 @@ from services.pricing_service import PricingService
 from middleware.auth_middleware import get_current_user
 from models.auctions import AuctionReportItem
 from models.domain_analysis import NamecheapDomain
+from utils.date_utils import parse_iso_datetime
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -522,13 +523,7 @@ async def process_json_upload_async(
                                source_data.get('registered date'))
                     if reg_date:
                         if isinstance(reg_date, str) and reg_date.strip():
-                            try:
-                                date_str = reg_date.strip()
-                                if date_str.endswith('Z'):
-                                    date_str = date_str[:-1] + '+00:00'
-                                registered_date = datetime.fromisoformat(date_str)
-                            except:
-                                registered_date = None
+                                registered_date = parse_iso_datetime(date_str)
                         elif isinstance(reg_date, datetime):
                             registered_date = reg_date
                 

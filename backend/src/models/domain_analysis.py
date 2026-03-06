@@ -3,9 +3,9 @@ Domain analysis data models
 """
 
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
+from typing import List, Optional, Dict, Any, Union
 
 
 class AnalysisStatus(str, Enum):
@@ -159,9 +159,22 @@ class LLMAnalysis(BaseModel):
 
 
 class HistoricalMetricPoint(BaseModel):
-    """Data point for historical metrics"""
-    date: str  # YYYY-MM-DD
+    """Single data point for historical metrics"""
+    date: Union[str, datetime]  # Can be YYYY-MM-DD string or datetime
     value: float
+    
+    @validator('date', pre=True)
+    def parse_date(cls, v):
+        from utils.date_utils import parse_iso_datetime
+        if isinstance(v, str):
+            if len(v) == 10 and v.count('-') == 2: # Simple YYYY-MM-DD
+                try:
+                    return datetime.strptime(v, "%Y-%m-%d")
+                except ValueError:
+                    pass
+            parsed = parse_iso_datetime(v)
+            return parsed if parsed else v
+        return v
 
 
 class HistoricalRankOverview(BaseModel):
@@ -185,7 +198,7 @@ class HistoricalData(BaseModel):
     rank_overview: Optional[HistoricalRankOverview] = None
     traffic_analytics: Optional[TrafficAnalyticsHistory] = None
     backlinks_history: Optional[Dict[str, List[HistoricalMetricPoint]]] = None
-    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
 class DetailedAnalysisData(BaseModel):
@@ -457,50 +470,5 @@ class ScoredDomain(BaseModel):
     rank: Optional[int] = None  # Position in ranked list
 
 
-class HistoricalMetricPoint(BaseModel):
-    """Single data point for historical metrics"""
-    date: datetime
-    value: float
-    
-    @validator('date', pre=True)
-    def parse_date(cls, v):
-        if isinstance(v, str):
-            try:
-                # Handle YYYY-MM-DD format
-                return datetime.strptime(v, "%Y-%m-%d")
-            except ValueError:
-                try:
-                    # Handle YYYY-MM-DDTHH:MM:SS format
-                    return datetime.fromisoformat(v.replace('Z', '+00:00'))
-                except ValueError:
-                    return v
-        return v
-
-
-class HistoricalRankOverview(BaseModel):
-    """Historical rank overview data"""
-    organic_keywords_count: List[HistoricalMetricPoint] = Field(default_factory=list)
-    organic_traffic: List[HistoricalMetricPoint] = Field(default_factory=list)
-    organic_traffic_value: List[HistoricalMetricPoint] = Field(default_factory=list)
-    
-    # Store raw items for flexible charting if needed
-    raw_items: Optional[List[Dict[str, Any]]] = None
-
-
-class TrafficAnalyticsHistory(BaseModel):
-    """Traffic analytics history data"""
-    visits_history: List[HistoricalMetricPoint] = Field(default_factory=list)
-    bounce_rate_history: List[HistoricalMetricPoint] = Field(default_factory=list)
-    unique_visitors_history: List[HistoricalMetricPoint] = Field(default_factory=list)
-    
-    # Store raw items
-    raw_items: Optional[List[Dict[str, Any]]] = None
-
-
-class HistoricalData(BaseModel):
-    """Container for all historical data"""
-    rank_overview: Optional[HistoricalRankOverview] = None
-    traffic_analytics: Optional[TrafficAnalyticsHistory] = None
-    backlinks_history: Optional[Dict[str, List[HistoricalMetricPoint]]] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+# Removed duplicate HistoricalMetricPoint, HistoricalRankOverview, TrafficAnalyticsHistory, and HistoricalData definitions
 

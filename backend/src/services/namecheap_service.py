@@ -11,6 +11,7 @@ import structlog
 from models.domain_analysis import NamecheapDomain, ScoredDomain
 from services.database import get_database
 from services.domain_scoring_service import DomainScoringService
+from utils.date_utils import parse_iso_datetime
 
 logger = structlog.get_logger()
 
@@ -48,10 +49,7 @@ class NamecheapService:
                         if not date_str or date_str.strip() == '':
                             return None
                         try:
-                            # Handle ISO format with Z
-                            if date_str.endswith('Z'):
-                                date_str = date_str[:-1] + '+00:00'
-                            return datetime.fromisoformat(date_str)
+                            return parse_iso_datetime(date_str)
                         except Exception as e:
                             logger.warning("Failed to parse date", row=row_num, date=date_str, error=str(e))
                             return None

@@ -14,6 +14,7 @@ from services.database import get_database, DataSource
 from services.external_apis import DataForSEOService
 from services.pdf_service import PDFService
 from services.analysis_service import AnalysisService
+from utils.date_utils import parse_iso_datetime
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -159,17 +160,8 @@ async def list_reports(
                                    domain=report_data.get('domain_name'), error=str(e))
                 
                 # Parse analysis_timestamp
-                analysis_timestamp = report_data.get('analysis_timestamp')
-                if isinstance(analysis_timestamp, str):
-                    try:
-                        analysis_timestamp = datetime.fromisoformat(analysis_timestamp.replace('Z', '+00:00'))
-                    except Exception as e:
-                        logger.debug("Failed to parse analysis_timestamp", 
-                                   domain=report_data.get('domain_name'), 
-                                   timestamp=analysis_timestamp, 
-                                   error=str(e))
-                        analysis_timestamp = datetime.utcnow()
-                elif not analysis_timestamp:
+                analysis_timestamp = parse_iso_datetime(report_data.get('analysis_timestamp'))
+                if not analysis_timestamp:
                     analysis_timestamp = datetime.utcnow()
                 
                 # Parse status - handle old reports that might have different status values

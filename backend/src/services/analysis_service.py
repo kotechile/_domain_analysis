@@ -26,6 +26,7 @@ from services.dataforseo_async import DataForSEOAsyncService
 from services.n8n_service import N8NService
 from services.logging_config import AsyncOperationLogger, ProgressTracker
 from utils.config import get_settings
+from utils.date_utils import parse_iso_datetime
 
 logger = structlog.get_logger()
 
@@ -1021,8 +1022,7 @@ class AnalysisService:
             # Convert string to datetime if present
             last_capture_date = None
             if last_capture_date_str:
-                from datetime import datetime
-                last_capture_date = datetime.fromisoformat(last_capture_date_str)
+                last_capture_date = parse_iso_datetime(last_capture_date_str)
             
             # Generate historical risk assessment
             historical_risk = self._assess_historical_risk(wayback_data)
