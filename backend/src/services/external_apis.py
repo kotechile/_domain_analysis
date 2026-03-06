@@ -351,6 +351,58 @@ class DataForSEOService:
             logger.error("Failed to fetch DataForSEO bulk traffic", error=str(e))
             return None
 
+    async def get_historical_bulk_traffic_estimation(self, domain: str) -> Optional[Dict[str, Any]]:
+        """Get historical bulk traffic estimation from DataForSEO Labs"""
+        try:
+            credentials = await self._get_credentials()
+            if not credentials:
+                logger.error("DataForSEO credentials not available")
+                return None
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                url = f"{credentials['api_url']}/dataforseo_labs/google/historical_bulk_traffic_estimation/live"
+                
+                # Calculate dates (last 2 years approx to get enough history)
+                end_date = datetime.utcnow()
+                start_date = end_date - timedelta(days=365*2)
+                
+                payload = [{
+                    "targets": [domain],
+                    "location_code": 2840,
+                    "language_code": "en",
+                    "date_from": start_date.strftime("%Y-%m-%d"),
+                    "date_to": end_date.strftime("%Y-%m-%d"),
+                    "item_types": ["organic", "paid"]
+                }]
+                
+                logger.info("Making DataForSEO historical bulk traffic estimation request", url=url, domain=domain)
+                response = await client.post(
+                    url,
+                    auth=(credentials['login'], credentials['password']),
+                    json=payload
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("status_code") == 20000 and data.get("tasks"):
+                        result = data["tasks"][0].get("result", [])
+                        if result and result[0].get("items"):
+                            # Find the item for our target domain
+                            items = result[0]["items"]
+                            for item in items:
+                                if item.get("target") == domain:
+                                    logger.info("DataForSEO historical bulk traffic retrieved successfully", domain=domain)
+                                    return item
+                
+                logger.warning("DataForSEO historical bulk traffic request failed", 
+                             domain=domain, status=response.status_code)
+                return None
+                
+        except Exception as e:
+            logger.error("Failed to get DataForSEO historical bulk traffic", domain=domain, error=str(e))
+            return None
+
+
     def parse_domain_metrics(self, data: Dict[str, Any]) -> DataForSEOMetrics:
         """Parse DataForSEO data into domain metrics"""
         try:

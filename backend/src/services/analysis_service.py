@@ -835,8 +835,11 @@ class AnalysisService:
             # 2. Fetch from APIs (parallel execution)
             rank_task = asyncio.create_task(self.dataforseo_service.get_historical_rank_overview(domain))
             traffic_task = asyncio.create_task(self.dataforseo_service.get_traffic_analytics_history(domain))
+            bulk_traffic_task = asyncio.create_task(self.dataforseo_service.get_historical_bulk_traffic_estimation(domain))
             
-            rank_data, traffic_data = await asyncio.gather(rank_task, traffic_task, return_exceptions=True)
+            rank_data, traffic_data, bulk_traffic_data = await asyncio.gather(
+                rank_task, traffic_task, bulk_traffic_task, return_exceptions=True
+            )
             
             # Handle exceptions
             if isinstance(rank_data, Exception):
@@ -845,13 +848,16 @@ class AnalysisService:
             if isinstance(traffic_data, Exception):
                 logger.error("Traffic history fetch failed", domain=domain, error=str(traffic_data))
                 traffic_data = None
+            if isinstance(bulk_traffic_data, Exception):
+                logger.error("Historical bulk traffic fetch failed", domain=domain, error=str(bulk_traffic_data))
+                bulk_traffic_data = None
             
-            if not rank_data and not traffic_data:
+            if not rank_data and not traffic_data and not bulk_traffic_data:
                 logger.warning("No historical data available", domain=domain)
                 return None
                 
             # 3. Parse data
-            historical_data = self._parse_historical_data(rank_data, traffic_data)
+            historical_data = self._parse_historical_data(rank_data, traffic_data, bulk_traffic_data)
             
             # 4. Save to report
             if report and historical_data:
@@ -865,7 +871,7 @@ class AnalysisService:
             logger.error("Failed to get/fetch historical data", domain=domain, error=str(e))
             return None
 
-    def _parse_historical_data(self, rank_data: Optional[Dict], traffic_data: Optional[Dict]) -> 'HistoricalData':
+    def _parse_historical_data(self, rank_data: Optional[Dict], traffic_data: Optional[Dict], bulk_traffic_data: Optional[Dict] = None) -> 'HistoricalData':
         """Parse raw API data into HistoricalData model"""
         from models.domain_analysis import (
             HistoricalData, HistoricalRankOverview, TrafficAnalyticsHistory, 
@@ -915,6 +921,31 @@ class AnalysisService:
                 organic_traffic_value=[HistoricalMetricPoint(date=i.date, value=i.value) for i in organic_traffic], 
                 raw_items=items
             )
+
+        # Handle bulk traffic data (more granular historical volume)
+        if bulk_traffic_data and bulk_traffic_data.get("metrics"):
+            metrics = bulk_traffic_data.get("metrics", {})
+            organic_metrics = metrics.get("organic", [])
+            
+            if not rank_overview:
+                rank_overview = HistoricalRankOverview()
+            
+            organic_traffic_points = []
+            for m in organic_metrics:
+                year = m.get("year")
+                month = m.get("month")
+                if year and month:
+                    # Construct date as first of the month
+                    date_str = f"{year}-{month:02d}-01"
+                    organic_traffic_points.append(HistoricalMetricPoint(
+                        date=date_str, value=float(m.get("etv", 0))
+                    ))
+            
+            if organic_traffic_points:
+                # Sort points by date
+                organic_traffic_points.sort(key=lambda x: x.date if isinstance(x.date, datetime) else x.date)
+                rank_overview.organic_traffic = organic_traffic_points
+                logger.info("Added granular historical traffic volume to rank overview", count=len(organic_traffic_points))
 
         traffic_analytics = None
         if traffic_data and traffic_data.get("items"):
