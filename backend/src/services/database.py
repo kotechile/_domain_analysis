@@ -1848,6 +1848,10 @@ class DatabaseService:
                     update_data['keywords_count'] = 0
 
             # Update the record
+            if not update_data:
+                logger.debug("No updates for auction record", domain=domain)
+                return True
+
             try:
                 update_response = self.client.table('auctions').update(update_data).eq('domain', domain).execute()
             except Exception as e:
@@ -1857,12 +1861,14 @@ class DatabaseService:
                     logger.warning("keywords_count column missing or update failed, retrying without it", 
                                  domain=domain, error=error_str)
                     update_data.pop('keywords_count', None)
+                    if not update_data:
+                        return True
                     update_response = self.client.table('auctions').update(update_data).eq('domain', domain).execute()
                 else:
                     logger.error("Error updating auction record", domain=domain, error=error_str)
                     return False
             
-            if update_response.data and len(update_response.data) > 0:
+            if update_response and update_response.data and len(update_response.data) > 0:
                 return True
             return False
             
