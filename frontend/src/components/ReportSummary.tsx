@@ -76,6 +76,11 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ report }) => {
       }
     }
 
+    // Secondary fallback: Use the length of organic_keywords if total_keywords is still zero
+    if ((!updated.total_keywords || updated.total_keywords === 0) && updated.organic_keywords && updated.organic_keywords.length > 0) {
+      updated.total_keywords = updated.organic_keywords.length;
+    }
+
     return updated;
   }, [report.data_for_seo_metrics, report.historical_data]);
   const wayback = report.wayback_machine_summary;
