@@ -124,6 +124,7 @@ class DataForSEOMetrics(BaseModel):
     organic_keywords: Optional[List[Dict[str, Any]]] = None
     # Domain rank overview data
     total_keywords: Optional[int] = Field(None, ge=0)
+    backlinks_spam_score: Optional[int] = Field(None, ge=0, le=100)
     organic_metrics: Optional[OrganicMetrics] = None
     paid_metrics: Optional[PaidMetrics] = None
 

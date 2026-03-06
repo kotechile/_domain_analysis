@@ -739,7 +739,7 @@ class AnalysisService:
                     'organic_traffic_est': report.data_for_seo_metrics.organic_traffic_est,
                     'keywords_count': report.data_for_seo_metrics.total_keywords,
                     'domain_rating_dr': report.data_for_seo_metrics.domain_rating_dr,
-                    'backlinks_spam_score': report.data_for_seo_metrics.backlinks_spam_score
+                    'backlinks_spam_score': getattr(report.data_for_seo_metrics, 'backlinks_spam_score', None)
                 }
                 
                 # If we have a page summary, merge it as well for more complete data

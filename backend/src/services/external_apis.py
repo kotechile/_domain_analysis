@@ -441,6 +441,9 @@ class DataForSEOService:
                 calculated_dr = dataforseo_rank / 10.0
                 logger.info("Using DataForSEO rank", rank=dataforseo_rank, converted_dr=calculated_dr)
             
+            # Extract Spam Score (if available)
+            backlinks_spam_score = backlinks_summary.get("backlinks_spam_score", backlinks_summary.get("spam_score", 0))
+            
             # Create organic and paid metrics objects safely
             organic_metrics_obj = None
             if organic_metrics:
@@ -471,6 +474,7 @@ class DataForSEOService:
                 referring_domains_info=referring_domains_info,
                 organic_keywords=organic_keywords,
                 total_keywords=total_keywords,
+                backlinks_spam_score=backlinks_spam_score,
                 organic_metrics=organic_metrics_obj,
                 paid_metrics=paid_metrics_obj
             )
