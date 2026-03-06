@@ -55,21 +55,24 @@ const ReportSummary: React.FC<ReportSummaryProps> = ({ report }) => {
 
     let updated = { ...base };
 
-    // Fallback for Organic Traffic if 0
-    if (!updated.organic_traffic_est || updated.organic_traffic_est === 0) {
-      const histTraffic = report.historical_data?.rank_overview?.organic_traffic;
-      if (histTraffic && histTraffic.length > 0) {
-        const latest = [...histTraffic].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-        if (latest && latest.value > 0) updated.organic_traffic_est = latest.value;
+    // Check for historical traffic data
+    const histTraffic = report.historical_data?.rank_overview?.organic_traffic;
+    if ((!updated.organic_traffic_est || updated.organic_traffic_est === 0) && histTraffic && histTraffic.length > 0) {
+      // Get the latest non-zero point if possible, or just the latest
+      const sorted = [...histTraffic].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const latest = sorted.find(p => p.value > 0) || sorted[0];
+      if (latest) {
+        updated.organic_traffic_est = latest.value;
       }
     }
 
-    // Fallback for Total Keywords if 0
-    if (!updated.total_keywords || updated.total_keywords === 0) {
-      const histKeywords = report.historical_data?.rank_overview?.organic_keywords_count;
-      if (histKeywords && histKeywords.length > 0) {
-        const latest = [...histKeywords].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-        if (latest && latest.value > 0) updated.total_keywords = Math.round(latest.value);
+    // Check for historical keyword data
+    const histKeywords = report.historical_data?.rank_overview?.organic_keywords_count;
+    if ((!updated.total_keywords || updated.total_keywords === 0) && histKeywords && histKeywords.length > 0) {
+      const sorted = [...histKeywords].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const latest = sorted.find(p => p.value > 0) || sorted[0];
+      if (latest) {
+        updated.total_keywords = Math.round(latest.value);
       }
     }
 
