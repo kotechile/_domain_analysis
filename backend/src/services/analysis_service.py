@@ -474,6 +474,22 @@ class AnalysisService:
                             json_data=keywords_data
                         )
                         await self.db.save_detailed_data(detailed_data)
+                        
+                        # Update report metadata with real counts from detailed data
+                        if report.data_for_seo_metrics:
+                            items_count = len(keywords_data.get("items", []))
+                            total_count = keywords_data.get("total_count", items_count)
+                            if total_count > 0:
+                                report.data_for_seo_metrics.total_keywords = total_count
+                                logger.info("Updated total_keywords in report from detailed items", domain=domain, total=total_count)
+                                
+                            # If traffic is still 0, try to estimate from keywords ETV (Estimated Traffic Value)
+                            if report.data_for_seo_metrics.organic_traffic_est == 0:
+                                detailed_etv = sum(item.get('ranked_serp_element', {}).get('serp_item', {}).get('etv', 0.0) 
+                                                  for item in keywords_data.get("items", []))
+                                if detailed_etv > 0:
+                                    report.data_for_seo_metrics.organic_traffic_est = detailed_etv
+                                    logger.info("Estimated traffic from keywords ETV", domain=domain, etv=detailed_etv)
                     else:
                         logger.warning("Async keywords collection returned None, falling back to legacy", domain=domain)
                         # Fall back to legacy mode for keywords
@@ -485,13 +501,26 @@ class AnalysisService:
                             await self._update_progress_data(report, "Keywords analysis completed (legacy)", detailed_status_messages, progress_tracker)
                             progress_tracker.complete_sub_operation("detailed_data", "keywords_analysis")
                             
-                            # Save detailed data to database
-                            detailed_data = DetailedAnalysisData(
-                                domain_name=domain,
-                                data_type=DetailedDataType.KEYWORDS,
-                                json_data=keywords_data
-                            )
-                            await self.db.save_detailed_data(detailed_data)
+                        # Save detailed data to database
+                        detailed_data = DetailedAnalysisData(
+                            domain_name=domain,
+                            data_type=DetailedDataType.KEYWORDS,
+                            json_data=keywords_data
+                        )
+                        await self.db.save_detailed_data(detailed_data)
+                        
+                        # Update report metrics from legacy data
+                        if report.data_for_seo_metrics:
+                            items_count = len(keywords_data.get("items", []))
+                            total_count = keywords_data.get("total_count", items_count)
+                            if total_count > 0:
+                                report.data_for_seo_metrics.total_keywords = total_count
+                            
+                            if report.data_for_seo_metrics.organic_traffic_est == 0:
+                                # Legacy format might have etv directly in items or keywords_data
+                                detailed_etv = sum(item.get('etv', 0.0) for item in keywords_data.get("items", []))
+                                if detailed_etv > 0:
+                                    report.data_for_seo_metrics.organic_traffic_est = detailed_etv
                     
                     # Collect referring domains
                     progress_tracker.start_sub_operation("detailed_data", "referring_domains_analysis")
@@ -741,6 +770,21 @@ class AnalysisService:
                     'domain_rating_dr': report.data_for_seo_metrics.domain_rating_dr,
                     'backlinks_spam_score': getattr(report.data_for_seo_metrics, 'backlinks_spam_score', None)
                 }
+                
+                # IMPORTANT: Safety check - Don't overwrite existing positive marketplace metrics with 0 from report 
+                # if the report metrics seem failed or incomplete
+                try:
+                    auction_res = await self.db.client.table('auctions').select('organic_traffic', 'keywords_count').eq('domain', report.domain_name).execute()
+                    if auction_res.data:
+                        current_auction = auction_res.data[0]
+                        if sync_data.get('organic_traffic_est', 0) == 0 and current_auction.get('organic_traffic', 0) > 0:
+                            sync_data['organic_traffic_est'] = current_auction['organic_traffic']
+                            logger.info("Preserved existing marketplace traffic during sync", domain=report.domain_name, traffic=sync_data['organic_traffic_est'])
+                        if sync_data.get('keywords_count', 0) == 0 and current_auction.get('keywords_count', 0) > 0:
+                            sync_data['keywords_count'] = current_auction['keywords_count']
+                            logger.info("Preserved existing marketplace keywords_count during sync", domain=report.domain_name, keywords=sync_data['keywords_count'])
+                except Exception as e:
+                    logger.warning("Failed to check existing metrics for sync safety", domain=report.domain_name, error=str(e))
                 
                 # If we have a page summary, merge it as well for more complete data
                 if report.backlinks_page_summary:
