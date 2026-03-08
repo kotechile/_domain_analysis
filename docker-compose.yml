@@ -11,7 +11,7 @@ services:
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
     networks:
-      - default
+      - coolify
 
   # Backend API
   backend:
@@ -39,7 +39,7 @@ services:
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health" ]
     networks:
-      - default
+      - coolify
 
   # Frontend
   frontend:
@@ -55,18 +55,8 @@ services:
       - "80"
     labels:
       - "traefik.enable=true"
-      # Secure Router (HTTPS)
-      - "traefik.http.routers.frontend.rule=Host(`scout.buildomain.com`)"
-      - "traefik.http.routers.frontend.entrypoints=websecure"
-      - "traefik.http.routers.frontend.tls=true"
-      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.frontend.loadbalancer.server.port=80"
-      # Insecure Router (HTTP -> HTTPS Redirect)
-      - "traefik.http.routers.frontend-http.rule=Host(`scout.buildomain.com`)"
-      - "traefik.http.routers.frontend-http.entrypoints=web"
-      - "traefik.http.routers.frontend-http.middlewares=redirect-to-https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      # Network Hint
+      - "traefik.http.routers.scout-frontend.rule=Host(`scout.buildomain.com`)"
+      - "traefik.http.services.scout-frontend.loadbalancer.server.port=80"
       - "traefik.docker.network=coolify"
     environment:
       - REACT_APP_API_URL=/api/v1
@@ -74,13 +64,12 @@ services:
       - backend
     restart: unless-stopped
     networks:
-      - default
+      - coolify
 
 volumes:
   redis_data:
     driver: local
 
 networks:
-  default:
+  coolify:
     external: true
-    name: coolify
