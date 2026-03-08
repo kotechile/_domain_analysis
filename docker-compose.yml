@@ -8,10 +8,6 @@ services:
       - redis_data:/data
     command: redis-server --appendonly yes
     restart: unless-stopped
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-    networks:
-      - coolify
 
   # Backend API
   backend:
@@ -33,11 +29,8 @@ services:
       - ALLOWED_ORIGINS=["http://localhost:3000", "http://frontend:3000", "https://${COOLIFY_FQDN}", "https://n8n.giniloh.com", "https://scout.buildomain.com"]
       - ALLOWED_HOSTS=["*"]
     depends_on:
-      redis:
-        condition: service_healthy
+      - redis
     restart: unless-stopped
-    networks:
-      - coolify
 
   # Frontend
   frontend:
@@ -51,32 +44,12 @@ services:
         - REACT_APP_URL=https://scout.buildomain.com
     expose:
       - "80"
-    labels:
-      - "traefik.enable=true"
-      # Secure Router (HTTPS)
-      - "traefik.http.routers.scout-frontend.rule=Host(`scout.buildomain.com`)"
-      - "traefik.http.routers.scout-frontend.entrypoints=https"
-      - "traefik.http.routers.scout-frontend.tls=true"
-      - "traefik.http.routers.scout-frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.scout-frontend.loadbalancer.server.port=80"
-      # HTTP -> HTTPS Redirect
-      - "traefik.http.routers.scout-frontend-http.rule=Host(`scout.buildomain.com`)"
-      - "traefik.http.routers.scout-frontend-http.entrypoints=http"
-      - "traefik.http.routers.scout-frontend-http.middlewares=redirect-to-https"
-      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
-      - "traefik.docker.network=coolify"
     environment:
       - REACT_APP_API_URL=/api/v1
     depends_on:
       - backend
     restart: unless-stopped
-    networks:
-      - coolify
 
 volumes:
   redis_data:
     driver: local
-
-networks:
-  coolify:
-    external: true
