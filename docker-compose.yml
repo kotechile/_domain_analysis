@@ -59,13 +59,6 @@ services:
     container_name: domain-analysis-frontend
     expose:
       - "80"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`scout.buildomain.com`)"
-      - "traefik.http.routers.frontend.entrypoints=websecure"
-      - "traefik.http.routers.frontend.tls=true"
-      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.frontend.loadbalancer.server.port=80"
     environment:
       - REACT_APP_API_URL=/api/v1
     depends_on:
@@ -78,4 +71,5 @@ volumes:
 
 networks:
   default:
-    driver: bridge
+    external: true
+    name: coolify
