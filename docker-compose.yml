@@ -55,8 +55,17 @@ services:
       - "80"
     labels:
       - "traefik.enable=true"
+      # Secure Router (HTTPS)
       - "traefik.http.routers.scout-frontend.rule=Host(`scout.buildomain.com`)"
+      - "traefik.http.routers.scout-frontend.entrypoints=https"
+      - "traefik.http.routers.scout-frontend.tls=true"
+      - "traefik.http.routers.scout-frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.scout-frontend.loadbalancer.server.port=80"
+      # HTTP -> HTTPS Redirect
+      - "traefik.http.routers.scout-frontend-http.rule=Host(`scout.buildomain.com`)"
+      - "traefik.http.routers.scout-frontend-http.entrypoints=http"
+      - "traefik.http.routers.scout-frontend-http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.docker.network=coolify"
     environment:
       - REACT_APP_API_URL=/api/v1
