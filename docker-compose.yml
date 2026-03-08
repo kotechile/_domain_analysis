@@ -53,14 +53,6 @@ services:
         - REACT_APP_URL=https://scout.buildomain.com
     expose:
       - "80"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.frontend.rule=Host(`scout.buildomain.com`)"
-      - "traefik.http.routers.frontend.entrypoints=websecure"
-      - "traefik.http.routers.frontend.tls=true"
-      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.services.frontend.loadbalancer.server.port=80"
-      - "traefik.docker.network=coolify"
     environment:
       - REACT_APP_API_URL=/api/v1
     depends_on:
