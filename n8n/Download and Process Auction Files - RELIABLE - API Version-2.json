@@ -1,47 +1,37 @@
 {
-  "name": "Download and Process Auction Files - RELIABLE",
+  "name": "Download and Process Auction Files - RELIABLE - API Version",
   "nodes": [
     {
       "parameters": {
-        "rule": {
-          "interval": [
+        "method": "POST",
+        "url": "https://sbdomain.giniloh.com/rest/v1/rpc/delete_expired_auctions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "field": "cronExpression",
-              "expression": "0 6 * * *"
+              "name": "Authorization",
+              "value": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc2NDYzNjk2MCwiZXhwIjo0OTIwMzEwNTYwLCJyb2xlIjoic2VydmljZV9yb2xlIn0.hMqiDDJIp9xxZtHJtyfvxs6utizP9F-mHqonRw0EFVc"
+            },
+            {
+              "name": "apikey",
+              "value": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc2NDYzNjk2MCwiZXhwIjo0OTIwMzEwNTYwLCJyb2xlIjoic2VydmljZV9yb2xlIn0.hMqiDDJIp9xxZtHJtyfvxs6utizP9F-mHqonRw0EFVc"
             }
           ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
         }
       },
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
+      "id": "939be8a8-c79d-4241-ad60-a282c30c2f1d",
+      "name": "Delete Expired Auctions (API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
       "position": [
-        13216,
-        2832
+        13280,
+        2432
       ],
-      "id": "422ade93-e9d4-4969-b369-50dcfd35a158",
-      "name": "Daily Schedule (6 AM)"
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT delete_expired_auctions() as deleted_count;",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.6,
-      "position": [
-        13424,
-        2832
-      ],
-      "id": "f9cbe94f-b243-4f4b-b291-83c1560b4832",
-      "name": "Delete Expired Auctions",
       "retryOnFail": true,
-      "credentials": {
-        "postgres": {
-          "id": "DxQODs2W8TambApf",
-          "name": "Postgres account"
-        }
-      }
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -50,10 +40,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        13616,
-        2832
+        13472,
+        2432
       ],
-      "id": "acc34529-f738-43bc-804e-1851fa65e957",
+      "id": "a302edcf-63f3-4a99-8253-76fe5adf4ef0",
       "name": "Define Files"
     },
     {
@@ -64,10 +54,10 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 1,
       "position": [
-        13824,
-        2832
+        13696,
+        2432
       ],
-      "id": "3584ba51-95ed-4e8e-923e-8a619d90f7b3",
+      "id": "f06cf616-9ee7-4119-9986-90c3f6e7a465",
       "name": "Process One By One"
     },
     {
@@ -84,10 +74,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        14016,
-        2832
+        13888,
+        2432
       ],
-      "id": "3d4fd5c1-403e-4a89-bd3c-1367befd2677",
+      "id": "8b613eaa-3b20-4643-97b3-3fe2e28bc60a",
       "name": "Download File"
     },
     {
@@ -104,10 +94,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        14224,
-        2832
+        14096,
+        2432
       ],
-      "id": "ec2d0c64-6eb3-486f-a524-311e4df4f323",
+      "id": "ab344ef6-a067-4014-90e5-5813fd185561",
       "name": "Check Compression"
     },
     {
@@ -115,23 +105,23 @@
       "type": "n8n-nodes-base.compression",
       "typeVersion": 1.1,
       "position": [
-        14416,
-        2720
+        14288,
+        2304
       ],
-      "id": "12c6a59c-2910-44d4-ace0-e5252642c046",
+      "id": "c860108c-2a9d-494b-b38b-33a9fba00258",
       "name": "Decompress"
     },
     {
       "parameters": {
-        "jsCode": "// Ensure binary data is in 'data' field and filename/mime is synced\n// Process ALL items in valid input\nreturn $input.all().map(item => {\n\n    // Restore filename if missing (from upstream context)\n    let filename = item.json.filename;\n    if (!filename) {\n       try {\n          filename = $('Process One By One').first().json.filename;\n          item.json.filename = filename;\n       } catch (e) { \n           // Only update if we can recover it\n       }\n    }\n\n    if (item.binary) {\n        const keys = Object.keys(item.binary);\n        if (keys.length > 0) {\n            // If 'data' exists, good. If not, map first key to 'data'\n            if (!item.binary.data) {\n                item.binary.data = item.binary[keys[0]];\n            }\n            \n            // Sync binary metadata with JSON filename\n            if (filename) {\n                item.binary.data.fileName = filename;\n                // Simple extension extraction\n                const ext = filename.split('.').pop();\n                if (ext) {\n                    item.binary.data.fileExtension = ext;\n                }\n            }\n            \n            // Ensure valid mimeType\n            if (!item.binary.data.mimeType || item.binary.data.mimeType === 'application/json') {\n                 // If logic says it's a CSV but mime says JSON (common with some APIs), force it\n                 if (filename && filename.endsWith('.csv')) {\n                     item.binary.data.mimeType = 'text/csv';\n                 } else if (filename && filename.endsWith('.json')) {\n                     item.binary.data.mimeType = 'application/json';\n                 } else {\n                     item.binary.data.mimeType = 'application/octet-stream';\n                 }\n            }\n        }\n    }\n    return item;\n});"
+        "jsCode": "return $input.all().map(item => {\n    let filename = item.json.filename;\n    if (!filename) {\n        try {\n          filename = $('Process One By One').first().json.filename;\n          item.json.filename = filename;\n        } catch (e) { }\n    }\n    if (item.binary) {\n        const keys = Object.keys(item.binary);\n        if (keys.length > 0) {\n            if (!item.binary.data) {\n                item.binary.data = item.binary[keys[0]];\n            }\n            if (filename) {\n                item.binary.data.fileName = filename;\n                const ext = filename.split('.').pop();\n                if (ext) item.binary.data.fileExtension = ext;\n            }\n            if (!item.binary.data.mimeType || item.binary.data.mimeType === 'application/json') {\n                 if (filename && filename.endsWith('.csv')) {\n                     item.binary.data.mimeType = 'text/csv';\n                 } else if (filename && filename.endsWith('.json')) {\n                     item.binary.data.mimeType = 'application/json';\n                 } else {\n                     item.binary.data.mimeType = 'application/octet-stream';\n                 }\n            }\n        }\n    }\n    return item;\n});"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        14624,
-        2832
+        14496,
+        2432
       ],
-      "id": "e21d8aca-ba70-4a97-a2df-c45c1a9f196e",
+      "id": "c27c9b78-3699-4499-a171-5a2f39f433f1",
       "name": "Standardize Binary"
     },
     {
@@ -158,21 +148,23 @@
         "sendBody": true,
         "contentType": "binaryData",
         "inputDataFieldName": "data",
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        14816,
-        2832
+        14688,
+        2432
       ],
-      "id": "c379289f-7a62-4b4a-af4b-ed85c369a014",
+      "id": "cce1c08c-3f2c-403a-bbb7-53b4f55c2e84",
       "name": "Upload to Supabase"
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://getdomain.aichieve.net/api/v1/auctions/process-existing-upload",
+        "url": "https://scout.buildomain.com/api/v1/auctions/process-existing-upload",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -194,46 +186,60 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        15008,
-        2832
+        14896,
+        2432
       ],
-      "id": "8b1f0192-65a7-4a53-9a22-ff7f35826522",
-      "name": "Trigger Backend"
+      "id": "9667e235-b590-4f50-87d1-e0801b428a2d",
+      "name": "Trigger Backend",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
     },
     {
       "parameters": {
-        "amount": 15,
+        "amount": 5,
         "unit": "minutes"
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
       "position": [
-        15232,
-        2832
+        15088,
+        2432
       ],
-      "id": "d8e3518c-c603-4c9d-a34f-011270273295",
-      "name": "Wait 15 Minutes"
+      "id": "9e2a50ee-a408-41c2-9954-09ca3da489bf",
+      "name": "Wait 5 Minutes",
+      "webhookId": "2cf6de16-ec05-4b38-9ec9-c0d018a90b5f"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "50 16 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        13072,
+        2432
+      ],
+      "id": "c262ebb9-6248-4d79-ad35-f75170624a2e",
+      "name": "Daily Schedule (18:45 PM)"
     }
   ],
   "pinData": {},
   "connections": {
-    "Daily Schedule (6 AM)": {
-      "main": [
-        [
-          {
-            "node": "Delete Expired Auctions",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Delete Expired Auctions": {
+    "Delete Expired Auctions (API)": {
       "main": [
         [
           {
@@ -332,18 +338,29 @@
       "main": [
         [
           {
-            "node": "Wait 15 Minutes",
+            "node": "Wait 5 Minutes",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wait 15 Minutes": {
+    "Wait 5 Minutes": {
       "main": [
         [
           {
             "node": "Process One By One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Schedule (18:45 PM)": {
+      "main": [
+        [
+          {
+            "node": "Delete Expired Auctions (API)",
             "type": "main",
             "index": 0
           }
@@ -355,7 +372,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "06f1186f-4204-4f41-9a49-a8d69012254f",
+  "versionId": "66d731f4-d359-4f53-b0a4-c8b5ca64c1dc",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "8ed9ed81fad64d2f2e539654b7152113b5201cf79b5e9548649591c372302289"

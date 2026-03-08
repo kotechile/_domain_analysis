@@ -2,7 +2,7 @@
 ARG REACT_APP_API_URL=/api/v1
 ARG REACT_APP_SUPABASE_URL
 ARG REACT_APP_SUPABASE_ANON_KEY
-ARG REACT_APP_URL=https://getdomain.aichieve.net
+ARG REACT_APP_URL=https://scout.buildomain.com
 
 # Multi-stage build for React app
 FROM node:20-alpine as build

@@ -8,9 +8,14 @@ from pathlib import Path
 
 # Add src directory to Python path to ensure imports work
 # This allows running from backend directory with: python -m uvicorn src.main:app
-src_dir = Path(__file__).parent
-if str(src_dir) not in sys.path:
-    sys.path.insert(0, str(src_dir))
+current_file_path = Path(__file__).resolve()
+src_dir = current_file_path.parent
+root_dir = src_dir.parent
+
+# Add both src and root to path for maximum compatibility
+for p in [str(src_dir), str(root_dir)]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware

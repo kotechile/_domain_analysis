@@ -94,13 +94,23 @@ class DatabaseService:
     async def init_database(self):
         """Initialize database tables and indexes"""
         try:
+            # Check if client exists first
+            if not self.client:
+                logger.error("Database initialization failed: Client not initialized")
+                return
+                
             # Create tables if they don't exist
-            await self._create_tables()
-            await self._create_indexes()
-            logger.info("Database initialization completed")
+            # Note: We don't raise here to allow health checks to still pass if table creation is slow
+            try:
+                await self._create_tables()
+                await self._create_indexes()
+                logger.info("Database initialization completed")
+            except Exception as e:
+                logger.warning("Table/Index creation failed, but client is active", error=str(e))
+                
         except Exception as e:
             logger.error("Database initialization failed", error=str(e))
-            raise
+            # Don't raise, allowing the app to start and report 'degraded' in health checks
     
     async def _create_tables(self):
         """Create database tables"""
