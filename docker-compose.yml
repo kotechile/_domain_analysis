@@ -55,18 +55,25 @@ services:
       - "traefik.http.routers.scout-secure.entrypoints=https"
       - "traefik.http.routers.scout-secure.tls=true"
       - "traefik.http.routers.scout-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.services.scout-secure.loadbalancer.server.port=80"
+      - "traefik.http.routers.scout-secure.service=scout-svc"
+      - "traefik.http.services.scout-svc.loadbalancer.server.port=80"
       # Redirect Router (HTTP -> HTTPS)
-      - "traefik.http.routers.scout-http.rule=Host(`scout.buildomain.com`)"
-      - "traefik.http.routers.scout-http.entrypoints=http"
-      - "traefik.http.routers.scout-http.middlewares=scout-redirect"
+      - "traefik.http.routers.scout-insecure.rule=Host(`scout.buildomain.com`)"
+      - "traefik.http.routers.scout-insecure.entrypoints=http"
+      - "traefik.http.routers.scout-insecure.middlewares=scout-redirect"
       - "traefik.http.middlewares.scout-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.scout-redirect.redirectscheme.permanent=true"
       - "traefik.docker.network=coolify"
     environment:
       - REACT_APP_API_URL=/api/v1
     depends_on:
       - backend
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
       - coolify
 
