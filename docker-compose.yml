@@ -50,15 +50,16 @@ services:
       - "80"
     labels:
       - "traefik.enable=true"
-      # Combined Router for scouting
-      - "traefik.http.routers.scout-prod.rule=Host(`scout.buildomain.com`)"
-      - "traefik.http.routers.scout-prod.entrypoints=http,https"
-      - "traefik.http.routers.scout-prod.tls=true"
-      - "traefik.http.routers.scout-prod.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.scout-prod.service=scout-prod-svc"
-      - "traefik.http.services.scout-prod-svc.loadbalancer.server.port=80"
-      # Redirect only if coming from HTTP
-      - "traefik.http.routers.scout-prod.middlewares=scout-redirect@docker"
+      # Secure Router (HTTPS)
+      - "traefik.http.routers.scout-secure.rule=Host(`scout.buildomain.com`)"
+      - "traefik.http.routers.scout-secure.entrypoints=https"
+      - "traefik.http.routers.scout-secure.tls=true"
+      - "traefik.http.routers.scout-secure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.scout-secure.loadbalancer.server.port=80"
+      # Redirect Router (HTTP -> HTTPS)
+      - "traefik.http.routers.scout-http.rule=Host(`scout.buildomain.com`)"
+      - "traefik.http.routers.scout-http.entrypoints=http"
+      - "traefik.http.routers.scout-http.middlewares=scout-redirect"
       - "traefik.http.middlewares.scout-redirect.redirectscheme.scheme=https"
       - "traefik.docker.network=coolify"
     environment:
