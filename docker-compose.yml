@@ -50,11 +50,16 @@ services:
       - "80"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.scout-final.rule=Host(`scout.buildomain.com`)"
-      - "traefik.http.routers.scout-final.entrypoints=https"
-      - "traefik.http.routers.scout-final.tls=true"
-      - "traefik.http.routers.scout-final.tls.certresolver=letsencrypt"
-      - "traefik.http.services.scout-final.loadbalancer.server.port=80"
+      # Combined Router for scouting
+      - "traefik.http.routers.scout-prod.rule=Host(`scout.buildomain.com`)"
+      - "traefik.http.routers.scout-prod.entrypoints=http,https"
+      - "traefik.http.routers.scout-prod.tls=true"
+      - "traefik.http.routers.scout-prod.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.scout-prod.service=scout-prod-svc"
+      - "traefik.http.services.scout-prod-svc.loadbalancer.server.port=80"
+      # Redirect only if coming from HTTP
+      - "traefik.http.routers.scout-prod.middlewares=scout-redirect@docker"
+      - "traefik.http.middlewares.scout-redirect.redirectscheme.scheme=https"
       - "traefik.docker.network=coolify"
     environment:
       - REACT_APP_API_URL=/api/v1
