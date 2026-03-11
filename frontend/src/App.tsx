@@ -11,6 +11,7 @@ import ReportsListPage from './pages/ReportsListPage';
 import ReportPage from './pages/ReportPage';
 import AuctionsPage from './pages/AuctionsPage';
 import DomainsTablePage from './pages/DomainsTablePage';
+import BillingPage from './pages/BillingPage';
 import Auth from './pages/Auth';
 import AuthCallback from './pages/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -45,6 +46,7 @@ function App() {
                   <Route path="/reports/:domain" element={<ReportPage />} />
                   <Route path="/auctions" element={<AuctionsPage />} />
                   <Route path="/marketplace" element={<DomainsTablePage />} />
+                  <Route path="/billing" element={<BillingPage />} />
                 </Route>
               </Routes>
             </Router>

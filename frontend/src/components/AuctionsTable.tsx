@@ -30,8 +30,9 @@ import {
   CheckCircle as CheckCircleIcon,
   Clear as ClearIcon,
   FilterList as FilterListIcon,
+  ElectricBolt as ElectricBoltIcon,
 } from '@mui/icons-material';
-import { Auction, BulkPageSummaryResult } from '../services/api';
+import { Auction, BulkPageSummaryResult, useApi } from '../services/api';
 
 interface AuctionsTableProps {
   auctions: Auction[];
@@ -56,6 +57,7 @@ interface AuctionsTableProps {
   onPageChange?: (page: number) => void;
   pageSize?: number;
   availableTlds?: string[];
+  onRefreshDomain?: (domain: string) => void;
 }
 
 const AuctionsTable: React.FC<AuctionsTableProps> = ({
@@ -71,6 +73,7 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
   onPageChange,
   pageSize = 50,
   availableTlds = [],
+  onRefreshDomain
 }) => {
   const theme = useTheme();
   const [searchTerm, setSearchTerm] = useState('');
@@ -238,6 +241,17 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
   const getStatisticsValue = (statistics: BulkPageSummaryResult | undefined, field: string): number | undefined => {
     if (!statistics) return undefined;
     return (statistics as any)[field];
+  };
+
+  const isStale = (updatedAt?: string) => {
+    if (!updatedAt) return true;
+    try {
+      const lastUpdate = new Date(updatedAt);
+      const now = new Date();
+      return (now.getTime() - lastUpdate.getTime()) > 24 * 60 * 60 * 1000;
+    } catch {
+      return true;
+    }
   };
 
   const hasActiveFilters =
@@ -578,9 +592,25 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
                   }}
                 >
                   <TableCell>
-                    <Typography variant="body2" fontWeight={600}>
-                      {auction.domain}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {auction.domain}
+                      </Typography>
+                      <ElectricBoltIcon
+                        sx={{
+                          fontSize: 18,
+                          color: isStale(auction.updated_at) ? 'rgba(255, 193, 7, 0.3)' : 'warning.main',
+                          cursor: 'pointer',
+                          transition: 'transform 0.2s',
+                          '&:hover': { transform: 'scale(1.2)' }
+                        }}
+                        titleAccess={isStale(auction.updated_at) ? "Data is older than 24h. Click to refresh." : "Data is fresh."}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onRefreshDomain) onRefreshDomain(auction.domain);
+                        }}
+                      />
+                    </Box>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
@@ -592,7 +622,16 @@ const AuctionsTable: React.FC<AuctionsTableProps> = ({
                       label={auction.auction_site}
                       size="small"
                       variant="outlined"
-                      sx={{ borderRadius: 1 }}
+                      color="primary"
+                      sx={{
+                        borderRadius: 1,
+                        cursor: auction.link ? 'pointer' : 'default',
+                        fontWeight: 600
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (auction.link) window.open(auction.link, '_blank');
+                      }}
                     />
                   </TableCell>
                   <TableCell>

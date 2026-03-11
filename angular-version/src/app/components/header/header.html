@@ -1,0 +1,64 @@
+<header
+    class="flex items-center justify-between px-10 h-20 border-b border-opacity-10 backdrop-blur-md sticky top-0 z-40 transition-all"
+    style="background: var(--card-bg); border-color: var(--border-color); margin-left: 16rem;">
+
+    <!-- Top Search & Quick Actions -->
+    <div class="flex-grow max-w-xl relative group">
+        <i-lucide [name]="Search"
+            class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-30 group-focus-within:opacity-100 transition-all"></i-lucide>
+        <input type="text" placeholder="Quick search analysis..."
+            class="w-full bg-slate-50 dark:bg-black/20 border-none rounded-2xl h-11 pl-12 pr-4 text-xs font-bold transition-all focus:ring-2 focus:ring-accent-color focus:ring-opacity-20"
+            style="color: var(--text-color); border: 1px solid var(--border-color)">
+    </div>
+
+    <!-- User Profile & Settings Actions -->
+    <div class="flex items-center space-x-6 pl-8">
+        <!-- Theme Controls -->
+        <div class="flex items-center bg-slate-100/50 dark:bg-black/20 p-1.5 rounded-2xl border border-opacity-10"
+            style="border-color: var(--border-color)">
+            @for (t of themes; track t.mode) {
+            <button (click)="changeTheme(t.mode)" class="p-2.5 rounded-xl transition-all relative group"
+                [class.active-theme]="themeService.currentTheme() === t.mode">
+                <i-lucide [name]="t.icon" class="w-4.5 h-4.5 opacity-40 transition-opacity group-hover:opacity-100"
+                    [ngStyle]="{'opacity': themeService.currentTheme() === t.mode ? '1' : '0.4', 
+                                          'color': themeService.currentTheme() === t.mode ? 'var(--accent-color)' : 'var(--text-color)'}">
+                </i-lucide>
+                <!-- Tooltip label -->
+                <span
+                    class="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-black text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    {{ t.label }}
+                </span>
+                @if (themeService.currentTheme() === t.mode) {
+                <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full"
+                    [style.backgroundColor]="'var(--accent-color)'"></div>
+                }
+            </button>
+            }
+        </div>
+
+        <div class="w-px h-6 opacity-10" style="background: var(--text-color)"></div>
+
+        <!-- Notification Bubble -->
+        <button
+            class="relative p-2.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-xs font-black shadow-sm"
+            style="color: var(--text-color)">
+            <i-lucide [name]="Bell" class="w-5 h-5 opacity-40"></i-lucide>
+            <span
+                class="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-500 border-2 border-white dark:border-slate-900"></span>
+        </button>
+
+        <div class="flex items-center space-x-3 group cursor-pointer p-1.5 pr-4 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-all"
+            routerLink="/billing">
+            <div
+                class="user-avatar w-10 h-10 rounded-2xl flex items-center justify-center font-black text-lg group-hover:scale-110 transition-transform shadow-md">
+                JF
+            </div>
+            <div class="flex flex-col">
+                <span class="text-xs font-black" style="color: var(--text-color)">Jorge Fernandez</span>
+                <span class="text-[9px] font-black uppercase tracking-widest" [style.color]="'var(--accent-color)'">
+                    {{ creditService.balance() | number }} Credits
+                </span>
+            </div>
+        </div>
+    </div>
+</header>

@@ -212,6 +212,7 @@ const Header: React.FC = () => {
                   <MenuItem disabled sx={{ opacity: 1 }}>
                     <Typography variant="caption" color="textSecondary">{session.user.email}</Typography>
                   </MenuItem>
+                  <MenuItem onClick={() => { handleClose(); navigate('/billing'); }}>Billing & Credits</MenuItem>
                   <MenuItem onClick={handleLogout}>Logout</MenuItem>
                 </Menu>
               </>

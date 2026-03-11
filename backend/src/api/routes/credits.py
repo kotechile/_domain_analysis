@@ -25,6 +25,7 @@ class TransactionResponse(BaseModel):
     description: str
     reference_id: Optional[str]
     balance_after: float
+    dollar_amount: float = 0.0
     created_at: str
 
 class PurchaseRequest(BaseModel):
@@ -44,6 +45,9 @@ async def get_balance(current_user = Depends(get_current_user)):
     try:
         db = get_database()
         credits_service = CreditsService(db)
+        
+        # Check and handle monthly reset
+        await credits_service.check_and_reset_monthly_credits(current_user.id)
         
         balance = await credits_service.get_balance(current_user.id)
         
@@ -78,6 +82,7 @@ async def get_transactions(
                 description=t.get('description', ''),
                 reference_id=t.get('reference_id'),
                 balance_after=float(t['balance_after']),
+                dollar_amount=float(t.get('dollar_amount', 0.0)),
                 created_at=t['created_at']
             ))
             
@@ -85,6 +90,46 @@ async def get_transactions(
     except Exception as e:
         logger.error("Failed to get transactions", user_id=str(current_user.id), error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve transactions")
+
+@router.get("/credits/payments", response_model=List[TransactionResponse])
+async def get_payments(
+    limit: int = 20, 
+    offset: int = 0, 
+    current_user = Depends(get_current_user)
+):
+    """Get user's payment history (only positive additions)"""
+    try:
+        db = get_database()
+        credits_service = CreditsService(db)
+        
+        # We can reuse get_transactions but filter for 'purchase' or 'admin_add' type
+        # Or just get all and filter in python if the table is small
+        transactions = await credits_service.get_transactions(current_user.id, limit=100, offset=0)
+        
+        # Filter for top-ups/purchases (amount > 0)
+        payments = [t for t in transactions if t.get('transaction_type') in ['purchase', 'admin_add'] or t.get('amount', 0) > 0]
+        
+        # Apply limit/offset manually if we filtered
+        paged_payments = payments[offset:offset+limit]
+        
+        # Format response
+        result = []
+        for t in paged_payments:
+            result.append(TransactionResponse(
+                id=t['id'],
+                amount=float(t['amount']),
+                transaction_type=t['transaction_type'],
+                description=t.get('description', ''),
+                reference_id=t.get('reference_id'),
+                balance_after=float(t['balance_after']),
+                dollar_amount=float(t.get('dollar_amount', 0.0)),
+                created_at=t['created_at']
+            ))
+            
+        return result
+    except Exception as e:
+        logger.error("Failed to get payments", user_id=str(current_user.id), error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve payment history")
 
 # Internal/Admin endpoint for adding credits (Mocking purchase flow)
 # In production, this would be a webhook from Stripe/LemonSqueezy

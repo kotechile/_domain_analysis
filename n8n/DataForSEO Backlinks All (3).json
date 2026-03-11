@@ -22,9 +22,7 @@
         "httpMethod": "POST",
         "path": "backlinks-details-single-page",
         "responseMode": "lastNode",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -43,9 +41,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"request_id\": \"{{ $('Webhook').item.json.body.request_id }}\",\n  \"domain\": \"{{ $('Webhook').item.json.body.domain }}\",\n  \"success\": false,\n  \"data\": null,\n  \"error\": \"\"\n}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -63,9 +59,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -98,9 +92,7 @@
           ],
           "combinator": "and"
         },
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -129,9 +121,7 @@
         "httpMethod": "POST",
         "path": "backlinks-summary-single-page",
         "responseMode": "lastNode",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -150,9 +140,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"request_id\": \"{{ $('Webhook1').item.json.body.request_id }}\",\n  \"domain\": \"{{ $('Webhook1').item.json.body.domain }}\",\n  \"success\": false,\n  \"data\": null,\n  \"error\": \"\"\n}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -170,9 +158,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"request_id\": \"{{ $('Webhook1').item.json.body.request_id }}\",\n  \"domain\": \"{{ $('Webhook1').item.json.body.domain }}\",\n  \"success\": true,\n  \"data\": {\n    \"backlinks\": {{ $json.tasks[0].result[0].backlinks }},\n    \"referring_domains\": {{ $json.tasks[0].result[0].referring_domains }},\n    \"rank\": {{ $json.tasks[0].result[0].rank }}\n  },\n  \"error\": null\n}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -205,9 +191,7 @@
           ],
           "combinator": "and"
         },
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -265,9 +249,7 @@
         "httpMethod": "POST",
         "path": "backlinks-bulk-page-summary",
         "responseMode": "lastNode",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -286,9 +268,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"request_id\": \"{{ $('Webhook2').item.json.body.request_id }}\",\n  \"domain\": \"{{ $('Webhook2').item.json.body.domain }}\",\n  \"success\": false,\n  \"data\": null,\n  \"error\": \"\"\n}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -321,9 +301,7 @@
           ],
           "combinator": "and"
         },
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -354,9 +332,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -757,9 +733,7 @@
         "httpMethod": "POST",
         "path": "backlinks-bulk-rank",
         "responseMode": "lastNode",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -778,9 +752,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"request_id\": \"{{ $('Webhook3').item.json.body.request_id }}\",\n  \"domain\": \"{{ $('Webhook3').item.json.body.domain }}\",\n  \"success\": false,\n  \"data\": null,\n  \"error\": \"\"\n}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -813,9 +785,7 @@
           ],
           "combinator": "and"
         },
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -846,9 +816,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -3914,9 +3882,7 @@
         "httpMethod": "POST",
         "path": "backlinks-bulk-backlinks",
         "responseMode": "lastNode",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -3935,9 +3901,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"request_id\": \"{{ $('Webhook4').item.json.body.request_id }}\",\n  \"success\": false,\n  \"data\": null,\n  \"error\": \"\"\n}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -3970,9 +3934,7 @@
           ],
           "combinator": "and"
         },
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -4003,9 +3965,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -7070,9 +7030,7 @@
         "httpMethod": "POST",
         "path": "backlinks-bulk-spam-score",
         "responseMode": "lastNode",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -7091,9 +7049,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"request_id\": \"{{ $('Webhook5').item.json.body.request_id }}\",\n  \"success\": false,\n  \"data\": null,\n  \"error\": \"\"\n}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -7126,9 +7082,7 @@
           ],
           "combinator": "and"
         },
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
@@ -7159,9 +7113,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
@@ -7227,9 +7179,7 @@
         "httpMethod": "POST",
         "path": "bulk-traffic-batch",
         "responseMode": "lastNode",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
@@ -7263,9 +7213,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "=[{\n  \"targets\": {{ JSON.stringify($json.targets) }},\n  \"location_code\": 2840,\n  \"language_code\": \"en\"\n}]",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
@@ -7302,9 +7250,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",
-        "options": {
-          "allowUnauthorizedCerts": true
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,

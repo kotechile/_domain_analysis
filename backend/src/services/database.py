@@ -1474,6 +1474,8 @@ class DatabaseService:
             
             # Apply filters
             if filters:
+                if filters.get('search'):
+                    query = query.ilike('domain', f"%{filters['search']}%")
                 if filters.get('preferred') is not None:
                     query = query.eq('preferred', filters['preferred'])
                 if filters.get('auction_site'):
@@ -1620,25 +1622,30 @@ class DatabaseService:
         force_refresh: bool = False
     ) -> List[Dict[str, Any]]:
         """
-        Get auctions matching filters that are missing ANY of the four DataForSEO metrics
-        
-        Args:
-            filters: Dict with optional filters
-            sort_by: Field to sort by
-            sort_order: Sort order ('asc' or 'desc')
-            limit: Maximum number of records to return
-            
-        Returns:
-            List of auction dictionaries
+        "Find and Fill" — Get up to `limit` domains that:
+          1. Have a score > 0 (only domains we care about)
+          2. Are missing ANY of the four DataForSEO metrics (traffic, rank, backlinks, spam_score)
+          3. Have NOT been refreshed in the last 7 days (updated_at < now - 7 days)
+        Ordered by closest expiry date (ascending) so the most time-sensitive domains are filled first.
+
+        When force_refresh=True, skips the missing-metrics and staleness checks (force-fills all matched domains).
         """
+        from datetime import timedelta
+
         try:
             if not self.client:
                 raise Exception("Supabase client not available")
-            
-            # Build query
+
+            # 7-day staleness cutoff
+            cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
+            # --- Build base query ---
             query = self.client.table('auctions').select('*')
-            
-            # Apply filters (Reuse logic from get_auctions_with_statistics)
+
+            # Always require score > 0 so we only work on domains we've evaluated
+            query = query.gt('score', 0)
+
+            # Apply user-facing filters
             if filters:
                 if filters.get('preferred') is not None:
                     query = query.eq('preferred', filters['preferred'])
@@ -1652,8 +1659,7 @@ class DatabaseService:
                 if filters.get('tlds'):
                     tlds = filters['tlds']
                     if isinstance(tlds, list) and len(tlds) > 0:
-                        normalized_tlds = [tld if tld.startswith('.') else f'.{tld}' for tld in tlds if tld]
-                        # Use first TLD for now as simple filter
+                        normalized_tlds = [t if t.startswith('.') else f'.{t}' for t in tlds if t]
                         if normalized_tlds:
                             query = query.ilike('domain', f'%{normalized_tlds[0]}')
                 if filters.get('offering_type'):
@@ -1665,92 +1671,85 @@ class DatabaseService:
                     if isinstance(exp_to, str) and len(exp_to) == 10:
                         exp_to = f"{exp_to}T23:59:59"
                     query = query.lte('expiration_date', exp_to)
-                if filters.get('has_statistics') is not None:
-                    query = query.eq('has_statistics', filters['has_statistics'])
-                if filters.get('scored') is not None:
-                    if filters['scored']:
-                        query = query.not_.is_('score', 'null')
-                    else:
-                        query = query.is_('score', 'null')
-                if filters.get('min_rank') is not None:
-                    query = query.gte('ranking', filters['min_rank'])
-                if filters.get('max_rank') is not None:
-                    query = query.lte('ranking', filters['max_rank'])
                 if filters.get('min_score') is not None:
                     query = query.gte('score', filters['min_score'])
                 if filters.get('max_score') is not None:
                     query = query.lte('score', filters['max_score'])
-            
-            # Apply sorting (with ID as tie-breaker for stability)
-            valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score']
-            if sort_by not in valid_sort_fields:
-                sort_by = 'expiration_date'
-            
-            # Use stable sort by adding a tie-breaker (domain or id)
-            # This helps ensure that the same domains are picked across calls if they have same expiry
-            if sort_order == 'desc':
-                query = query.order(sort_by, desc=True)
-            else:
-                query = query.order(sort_by, desc=False)
-            
-            # Fetch candidates - fetch more than limit to allow regarding in-memory filtering
-            fetch_limit = limit * 2
+                if filters.get('auction_sites') and isinstance(filters['auction_sites'], list):
+                    query = query.in_('auction_site', filters['auction_sites'])
+
+            # Sort by closest expiry first (most time-sensitive)
+            query = query.order('expiration_date', desc=False)
+
+            # Fetch a larger candidate pool so we have enough after in-memory filtering
+            fetch_limit = min(limit * 4, 5000)
             result = query.limit(fetch_limit).execute()
             candidates = result.data if result.data else []
-            
-            # Filter in-memory for missing metrics (unless force_refresh is True)
-            # We look for MISSING traffic, rank, backlinks, OR spam_score in page_statistics
-            missing_metrics_auctions = []
-            
+
+            selected = []
+
             if force_refresh:
-                # If forcing refresh, just take the first candidates up to limit
-                missing_metrics_auctions = candidates[:limit]
+                # Force mode: skip staleness and missing-metrics checks — just take top N
+                selected = candidates[:limit]
             else:
                 for auction in candidates:
+                    # --- 7-day staleness skip ---
+                    # If the domain was refreshed within the last 7 days, skip it
+                    raw_updated = auction.get('updated_at')
+                    if raw_updated:
+                        try:
+                            from utils.date_utils import parse_iso_datetime
+                            last_update = parse_iso_datetime(raw_updated)
+                            if last_update and last_update.tzinfo is None:
+                                last_update = last_update.replace(tzinfo=timezone.utc)
+                            if last_update and last_update.isoformat() > cutoff_7d:
+                                continue  # Refreshed recently — skip
+                        except Exception:
+                            pass  # If we can't parse, don't skip
+
+                    # --- Missing metrics check ---
                     stats = auction.get('page_statistics') or {}
-                    
-                    # Check metrics in both JSONB 'page_statistics' and top-level columns
-                    # Traffic
+
                     has_traffic = (
-                        (auction.get('organic_traffic') is not None) or 
-                        ('traffic' in stats and stats['traffic'] is not None) or 
-                        ('etv' in stats and stats['etv'] is not None) or
-                        ('organic_traffic' in stats and stats['organic_traffic'] is not None)
+                        auction.get('organic_traffic') is not None or
+                        stats.get('traffic') is not None or
+                        stats.get('etv') is not None or
+                        stats.get('organic_traffic') is not None
                     )
-                    
-                    # Rank
                     has_rank = (
-                        (auction.get('ranking') is not None) or 
-                        ('rank' in stats and stats['rank'] is not None) or
-                        ('ranking' in stats and stats['ranking'] is not None)
+                        auction.get('ranking') is not None or
+                        stats.get('rank') is not None or
+                        stats.get('ranking') is not None
                     )
-                    
-                    # Backlinks
                     has_backlinks = (
-                        (auction.get('backlinks') is not None) or 
-                        ('backlinks' in stats and stats['backlinks'] is not None) or
-                        ('total_backlinks' in stats and stats['total_backlinks'] is not None)
+                        auction.get('backlinks') is not None or
+                        stats.get('backlinks') is not None or
+                        stats.get('total_backlinks') is not None
                     )
-                    
-                    # Spam Score - check both keys
                     has_spam_score = (
-                        (auction.get('backlinks_spam_score') is not None) or
-                        ('backlinks_spam_score' in stats and stats['backlinks_spam_score'] is not None) or
-                        ('spam_score' in stats and stats['spam_score'] is not None)
+                        auction.get('backlinks_spam_score') is not None or
+                        stats.get('backlinks_spam_score') is not None or
+                        stats.get('spam_score') is not None
                     )
-                    
-                    # If ANY essential metric is missing, include this auction
+
+                    # Include if ANY metric is missing (the "gap" to fill)
                     if not (has_traffic and has_rank and has_backlinks and has_spam_score):
-                        missing_metrics_auctions.append(auction)
-                        if len(missing_metrics_auctions) >= limit:
+                        selected.append(auction)
+                        if len(selected) >= limit:
                             break
-            
-            logger.info("Fetched auctions missing metrics", found=len(missing_metrics_auctions), examined=len(candidates))
-            return missing_metrics_auctions
+
+            logger.info(
+                "Find-and-Fill: selected domains for refresh",
+                selected=len(selected),
+                examined=len(candidates),
+                force=force_refresh
+            )
+            return selected
 
         except Exception as e:
             logger.error("Failed to get auctions missing metrics", error=str(e))
             raise
+
     
     async def update_auction_page_statistics(self, domain: str, page_statistics: Dict[str, Any]) -> bool:
         """

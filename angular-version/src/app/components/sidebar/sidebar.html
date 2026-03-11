@@ -1,0 +1,68 @@
+<div class="h-full flex flex-col pt-8 pb-32">
+    <!-- Premium Logo Section -->
+    <div class="logo-section flex items-center space-x-3 group cursor-pointer" routerLink="/">
+        <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform group-hover:rotate-12 duration-500"
+            style="background: linear-gradient(135deg, var(--accent-color) 0%, #4f46e5 100%)">
+            <i-lucide [name]="LayoutDashboard" class="w-6 h-6"></i-lucide>
+        </div>
+        <div class="flex flex-col">
+            <span class="text-xl font-black tracking-tighter" style="color: var(--text-color)">DOMAIN</span>
+            <span class="text-[10px] font-bold tracking-[0.3em] opacity-40 -mt-1" style="color: var(--text-color)">SCOUT
+                DNA</span>
+        </div>
+    </div>
+
+    <!-- Main Navigation Sections -->
+    <div class="space-y-10 px-2">
+        <div class="space-y-1">
+            <span class="px-7 text-[10px] font-black uppercase tracking-[0.2em] opacity-30 mb-4 block"
+                style="color: var(--text-color)">Main Platform</span>
+            @for (item of navItems; track item.path) {
+            <a [routerLink]="item.path" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}"
+                class="nav-item group">
+                <i-lucide [name]="item.icon"
+                    class="w-5 h-5 opacity-60 group-hover:scale-110 transition-transform"></i-lucide>
+                <span class="flex-grow">{{ item.label }}</span>
+                <i-lucide [name]="ChevronRight"
+                    class="w-3.5 h-3.5 opacity-0 group-[.active]:opacity-100 transition-all"></i-lucide>
+            </a>
+            }
+        </div>
+
+        <div class="space-y-1">
+            <span class="px-7 text-[10px] font-black uppercase tracking-[0.2em] opacity-30 mb-4 block"
+                style="color: var(--text-color)">Quick Assets</span>
+            <a class="nav-item opacity-20 cursor-not-allowed">
+                <i-lucide [name]="History" class="w-5 h-5"></i-lucide>
+                <span>Recent Scouts</span>
+            </a>
+            <a class="nav-item opacity-20 cursor-not-allowed">
+                <i-lucide [name]="CreditCard" class="w-5 h-5"></i-lucide>
+                <span>Balance Management</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Sidebar Bottom Section -->
+    <div class="sidebar-footer">
+        <div class="p-4 rounded-2xl space-y-3"
+            style="background: rgba(var(--accent-color-rgb, 13, 110, 253), 0.05); border: 1px solid rgba(var(--accent-color-rgb, 13, 110, 253), 0.1)">
+            <div class="flex items-center space-x-2">
+                <i-lucide [name]="CreditCard" class="w-4 h-4 text-accent-color"></i-lucide>
+                <span class="text-[10px] font-black uppercase tracking-widest text-accent-color opacity-80">Premium
+                    Shield</span>
+            </div>
+            <div class="flex items-baseline space-x-1">
+                <span class="text-xl font-black" style="color: var(--text-color)">
+                    {{ (creditService.balance() || 0) | number }}
+                </span>
+                <span class="text-[10px] font-bold opacity-30 uppercase">Credits</span>
+            </div>
+            <button
+                class="w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all hover:scale-105 active:scale-95"
+                style="background: var(--accent-color); color: var(--btn-text-color);" routerLink="/billing">
+                Recharge Now
+            </button>
+        </div>
+    </div>
+</div>

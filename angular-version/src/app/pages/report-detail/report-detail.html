@@ -1,0 +1,463 @@
+<div class="max-w-7xl mx-auto px-4 py-8 space-y-8 animate-in fade-in slide-in-from-top-4 duration-1000">
+
+    <!-- Sticky Header & Stats Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div class="flex items-center space-x-6">
+            <button routerLink="/marketplace"
+                class="p-3.5 rounded-2xl border border-opacity-10 hover:bg-slate-50 dark:hover:bg-white/5 active:scale-95 transition-all shadow-sm"
+                style="border-color: var(--border-color); color: var(--text-color); background: var(--card-bg)">
+                <i-lucide [name]="ArrowLeft" class="w-5 h-5 opacity-60"></i-lucide>
+            </button>
+            <div class="space-y-1">
+                <div class="flex items-center space-x-4">
+                    <h1 class="text-4xl font-black tracking-tighter" style="color: var(--text-color)">
+                        {{ domain() }}
+                    </h1>
+                    @if (report()?.status === 'completed') {
+                    <div class="status-badge bg-green-500/10 text-green-500 border border-green-500/20">
+                        <i-lucide [name]="CheckCircle" class="w-3.5 h-3.5 fill-current opacity-80"></i-lucide>
+                        <span>Ready to scout</span>
+                    </div>
+                    } @else if (report()?.status === 'in_progress') {
+                    <div class="status-badge bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                        <i-lucide [name]="RefreshCw" class="w-3.5 h-3.5 animate-spin"></i-lucide>
+                        <span>Analyzing DNA...</span>
+                    </div>
+                    } @else if (report()?.status === 'failed') {
+                    <div class="status-badge bg-red-500/10 text-red-500 border border-red-500/20">
+                        <i-lucide [name]="AlertTriangle" class="w-3.5 h-3.5"></i-lucide>
+                        <span>Failed to analysis</span>
+                    </div>
+                    }
+                </div>
+                <p class="text-[11px] font-bold opacity-30 uppercase tracking-[0.2em]" style="color: var(--text-color)">
+                    Report ID: {{ report()?.analysis_timestamp | date:'shortTime' }} •
+                    Processing: {{ (report()?.processing_time_seconds || 0) | number:'1.1-1' }}s
+                </p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button (click)="fetchReport(true)"
+                class="h-12 px-6 rounded-2xl text-sm font-black uppercase tracking-widest flex items-center space-x-2 border transition-all active:scale-95 opacity-80 hover:opacity-100"
+                style="border-color: var(--border-color); color: var(--text-color); background: var(--card-bg)">
+                <i-lucide [name]="RefreshCw" class="w-4 h-4"></i-lucide>
+                <span>Re-Scout</span>
+            </button>
+            <button
+                class="h-12 px-8 rounded-2xl text-sm font-black uppercase tracking-widest flex items-center space-x-2 text-white shadow-xl hover:shadow-accent-color/20 active:scale-95 transition-all"
+                style="background: var(--accent-color)">
+                <i-lucide [name]="Download" class="w-4 h-4"></i-lucide>
+                <span>Full PDF</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Metrics Hero Section -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="metric-bubble">
+            <span class="text-xs uppercase font-black opacity-30 tracking-widest">Domain Rating</span>
+            <div class="flex items-end space-x-1.5 pt-1">
+                <span class="text-4xl font-black" style="color: var(--text-color)">{{
+                    report()?.data_for_seo_metrics?.domain_rating_dr || 0 }}</span>
+                <span class="text-[10px] font-black opacity-40 mb-1.5 uppercase">Ahrefs DR</span>
+            </div>
+        </div>
+        <div class="metric-bubble">
+            <span class="text-xs uppercase font-black opacity-30 tracking-widest">Organic Traffic</span>
+            <div class="flex items-end space-x-1.5 pt-1">
+                <span class="text-4xl font-black"
+                    [class.text-accent-color]="(report()?.data_for_seo_metrics?.organic_traffic_est || 0) > 1000">
+                    {{ formatNumber(report()?.data_for_seo_metrics?.organic_traffic_est) }}
+                </span>
+                <span class="text-[10px] font-black opacity-40 mb-1.5 uppercase">Est. Monthly</span>
+            </div>
+        </div>
+        <div class="metric-bubble">
+            <span class="text-xs uppercase font-black opacity-30 tracking-widest">Backlinks</span>
+            <div class="flex items-end space-x-1.5 pt-1">
+                <span class="text-4xl font-black" style="color: var(--text-color)">
+                    {{ formatNumber(report()?.data_for_seo_metrics?.total_backlinks) }}
+                </span>
+                <span class="text-[10px] font-black opacity-40 mb-1.5 uppercase">Ref. Domains: {{
+                    report()?.data_for_seo_metrics?.total_referring_domains }}</span>
+            </div>
+        </div>
+        <div class="metric-bubble p-0 overflow-hidden relative group">
+            <!-- AI Verdict Badge -->
+            <div class="h-full w-full p-6 flex flex-col items-center justify-center space-y-2 border-none">
+                <span class="text-[10px] uppercase font-black opacity-30 tracking-[0.2em]">SaaS AI Consensus</span>
+                <div class="px-4 py-2 rounded-xl text-sm font-black border uppercase tracking-widest shadow-sm"
+                    [style.borderColor]="getBuyColor(report()?.llm_analysis?.buy_recommendation?.recommendation)"
+                    [style.color]="getBuyColor(report()?.llm_analysis?.buy_recommendation?.recommendation)">
+                    {{ report()?.llm_analysis?.buy_recommendation?.recommendation || 'PENDING' }}
+                </div>
+                <span class="text-[10px] font-bold opacity-30 uppercase italic text-center">
+                    {{ (report()?.llm_analysis?.confidence_score || 0) | number:'1.0-0' }}% Confidence Score
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content Navigator -->
+    <div class="report-card min-h-[600px] flex flex-col">
+        <!-- Tab Bar -->
+        <div class="flex overflow-x-auto border-b border-opacity-5 divide-x divide-opacity-5"
+            style="border-color: var(--border-color)">
+            <button (click)="setTab('overview')" [class.active]="activeTab() === 'overview'" class="tab-btn">
+                <i-lucide [name]="Globe" class="w-4 h-4"></i-lucide>
+                <span>Insights</span>
+            </button>
+            <button (click)="setTab('keywords')" [class.active]="activeTab() === 'keywords'" class="tab-btn">
+                <i-lucide [name]="Search" class="w-4 h-4"></i-lucide>
+                <span>Keywords</span>
+            </button>
+            <button (click)="setTab('backlinks')" [class.active]="activeTab() === 'backlinks'" class="tab-btn">
+                <i-lucide [name]="ShieldCheck" class="w-4 h-4"></i-lucide>
+                <span>Trust Flow</span>
+            </button>
+            <button (click)="setTab('ai')" [class.active]="activeTab() === 'ai'" class="tab-btn">
+                <i-lucide [name]="Sparkles" class="w-4 h-4"></i-lucide>
+                <span>AI Memo</span>
+            </button>
+            <button (click)="setTab('action')" [class.active]="activeTab() === 'action'" class="tab-btn">
+                <i-lucide [name]="Target" class="w-4 h-4"></i-lucide>
+                <span>Action Plan</span>
+            </button>
+        </div>
+
+        <!-- Tab Panels -->
+        <div class="p-8 flex-grow">
+            <!-- Loading Overlay for in-progress analysis -->
+            @if (report()?.status === 'in_progress' || report()?.status === 'pending') {
+            <div class="flex flex-col items-center justify-center py-20 space-y-6 animate-pulse">
+                <div class="relative">
+                    <i-lucide [name]="Sparkles" class="w-16 h-16 opacity-10 animate-spin-slow"
+                        style="color: var(--accent-color)"></i-lucide>
+                    <i-lucide [name]="Search"
+                        class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 opacity-40"></i-lucide>
+                </div>
+                <div class="text-center space-y-2">
+                    <h3 class="text-xl font-black uppercase tracking-widest" style="color: var(--text-color)">Analyzing
+                        Core DNA</h3>
+                    <p class="text-sm opacity-40 max-w-xs mx-auto" style="color: var(--text-color)">
+                        We are processing Wayback snapshots, Backlink health, and LLM market projections.
+                    </p>
+                </div>
+            </div>
+            } @else if (report()?.status === 'completed') {
+
+            @switch (activeTab()) {
+            @case ('overview') {
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                <!-- Wayback Section -->
+                <div class="space-y-6">
+                    <div class="flex items-center space-x-3">
+                        <div class="p-2.5 rounded-xl" [style.backgroundColor]="'rgba(var(--accent-color-rgb) / 0.1)'"
+                            [style.color]="'var(--accent-color)'">
+                            <i-lucide [name]="History" class="w-5 h-5"></i-lucide>
+                        </div>
+                        <h4 class="text-lg font-black uppercase tracking-widest" style="color: var(--text-color)">
+                            Wayback Pulse</h4>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="p-5 rounded-2xl border border-opacity-5" [style.borderColor]="'var(--border-color)'"
+                            [style.background]="'rgba(var(--accent-color-rgb) / 0.02)'">
+                            <span class="text-[10px] uppercase font-black opacity-30 block mb-1">First Snapshot</span>
+                            <span class="text-xl font-black" style="color: var(--text-color)">{{
+                                report()?.wayback_machine_summary?.first_capture_year || 'N/A' }}</span>
+                        </div>
+                        <div class="p-5 rounded-2xl border border-opacity-5" [style.borderColor]="'var(--border-color)'"
+                            [style.background]="'rgba(var(--accent-color-rgb) / 0.02)'">
+                            <span class="text-[10px] uppercase font-black opacity-30 block mb-1">Total Captures</span>
+                            <span class="text-xl font-black" style="color: var(--text-color)">{{
+                                report()?.wayback_machine_summary?.total_captures | number }}</span>
+                        </div>
+                    </div>
+
+                    <div class="p-6 rounded-2xl border border-orange-500/10 bg-orange-500/5 space-y-3">
+                        <div class="flex items-center space-x-2 text-orange-500">
+                            <i-lucide [name]="AlertTriangle" class="w-4 h-4"></i-lucide>
+                            <span class="text-xs font-black uppercase">Historical Risk Assessment</span>
+                        </div>
+                        <p class="text-sm opacity-60 leading-relaxed font-medium" style="color: var(--text-color)">
+                            {{ report()?.wayback_machine_summary?.historical_risk_assessment || 'No critical history
+                            risks detected.' }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Highlights Section -->
+                <div class="space-y-6">
+                    <div class="flex items-center space-x-3">
+                        <div class="p-2.5 rounded-xl bg-green-500/10 text-green-500">
+                            <i-lucide [name]="TrendingUp" class="w-5 h-5"></i-lucide>
+                        </div>
+                        <h4 class="text-lg font-black uppercase tracking-widest" style="color: var(--text-color)">
+                            Dominance Points</h4>
+                    </div>
+                    <div class="space-y-3">
+                        @for (point of report()?.llm_analysis?.good_highlights; track $index) {
+                        <div
+                            class="flex items-start space-x-3 p-3 rounded-xl hover:bg-green-500/5 transition-colors group">
+                            <i-lucide [name]="CheckCircle"
+                                class="w-4 h-4 text-green-500 mt-0.5 opacity-40 group-hover:opacity-100"></i-lucide>
+                            <span class="text-sm font-bold opacity-70" style="color: var(--text-color)">{{ point
+                                }}</span>
+                        </div>
+                        }
+                    </div>
+                </div>
+            </div>
+            }
+
+            @case ('keywords') {
+            <div class="space-y-6 animate-in slide-in-from-right-4 duration-500">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-xl font-black uppercase tracking-widest" style="color: var(--text-color)">Top
+                        Ranking Terms</h4>
+                    <span class="text-xs font-bold opacity-40 uppercase tracking-widest">Showing Top 20</span>
+                </div>
+
+                @defer (on viewport) {
+                <div class="overflow-hidden rounded-2xl border border-opacity-5"
+                    style="border-color: var(--border-color)">
+                    <table class="w-full">
+                        <thead class="bg-gray-50/50 dark:bg-white/5">
+                            <tr>
+                                <th class="p-4 text-left text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">Keyword</th>
+                                <th class="p-4 text-center text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">Pos</th>
+                                <th class="p-4 text-center text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">Vol</th>
+                                <th class="p-4 text-right text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">Difficulty</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-opacity-5 border-border-color">
+                            @for (kw of report()?.data_for_seo_metrics?.organic_keywords; track $index) {
+                            <tr class="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                                <td class="p-4 font-black" style="color: var(--text-color)">{{ kw.keyword }}</td>
+                                <td class="p-4 text-center">
+                                    <span
+                                        class="px-3 py-1 rounded-lg text-xs font-black bg-blue-500/10 text-blue-500">#{{
+                                        kw.rank }}</span>
+                                </td>
+                                <td class="p-4 text-center font-bold opacity-40" style="color: var(--text-color)">{{
+                                    (kw.search_volume || 0) | number }}</td>
+                                <td class="p-4 text-right">
+                                    <div class="flex items-center justify-end space-x-2">
+                                        <div class="w-16 h-1.5 rounded-full bg-gray-200 dark:bg-white/10">
+                                            <div class="h-full rounded-full"
+                                                [style.backgroundColor]="'var(--accent-color)'"
+                                                [style.width.%]="kw.keyword_difficulty || 0"></div>
+                                        </div>
+                                        <span class="text-[10px] font-black opacity-60">{{ kw.keyword_difficulty || 0
+                                            }}</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                } @placeholder {
+                <div class="p-12 text-center rounded-2xl border border-opacity-5"
+                    style="border-color: var(--border-color)">
+                    <div class="animate-pulse flex flex-col items-center justify-center space-y-4">
+                        <div class="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-800"></div>
+                        <div class="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                    </div>
+                </div>
+                }
+            </div>
+            }
+
+            @case ('ai') {
+            <div class="space-y-10 animate-in slide-in-from-right-4 duration-500">
+                @defer (on viewport) {
+                <div class="ai-bubble">
+                    <div class="flex items-center space-x-3 text-accent-color">
+                        <i-lucide [name]="Sparkles" class="w-5 h-5 fill-current"></i-lucide>
+                        <h4 class="text-lg font-black uppercase tracking-widest">Executive Summary Memo</h4>
+                    </div>
+                    <p class="text-lg font-medium opacity-90 leading-[1.6]" style="color: var(--text-color)">
+                        {{ report()?.llm_analysis?.summary }}
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="space-y-4">
+                        <div class="flex items-center space-x-2 opacity-40 uppercase font-black text-[10px] tracking-widest"
+                            style="color: var(--text-color)">
+                            <i-lucide [name]="Zap" class="w-3.5 h-3.5 text-blue-500"></i-lucide>
+                            <span>Valuable Assets</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            @for (asset of report()?.llm_analysis?.valuable_assets; track $index) {
+                            <span class="px-4 py-2 rounded-xl border border-opacity-5 text-xs font-bold"
+                                style="border-color: var(--border-color); background: var(--card-bg); color: var(--text-color)">{{
+                                asset }}</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="flex items-center space-x-2 opacity-40 uppercase font-black text-[10px] tracking-widest"
+                            style="color: var(--text-color)">
+                            <i-lucide [name]="AlertTriangle" class="w-3.5 h-3.5 text-red-500"></i-lucide>
+                            <span>Major Concerns</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            @for (concern of report()?.llm_analysis?.major_concerns; track $index) {
+                            <span
+                                class="px-4 py-2 rounded-xl border border-opacity-5 text-xs font-bold hover:border-red-500/30 transition-colors"
+                                style="border-color: var(--border-color); background: var(--card-bg); color: var(--text-color)">{{
+                                concern }}</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+                } @placeholder {
+                <div class="p-12 text-center rounded-2xl border border-opacity-5"
+                    style="border-color: var(--border-color)">
+                    <div class="animate-pulse h-24 w-full bg-slate-200 dark:bg-slate-800 rounded"></div>
+                </div>
+                }
+            </div>
+            }
+
+            @case ('action') {
+            @defer (on viewport) {
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in zoom-in-95 duration-700">
+                <!-- Phase 1: Immediate -->
+                <div class="space-y-4 p-8 rounded-3xl border border-opacity-5 flex flex-col"
+                    style="border-color: var(--border-color); background: rgba(var(--accent-color-rgb), 0.02)">
+                    <div class="flex items-center justify-between">
+                        <i-lucide [name]="Flag" class="w-6 h-6 text-red-500"></i-lucide>
+                        <span class="text-[10px] font-black uppercase opacity-30">First 48h</span>
+                    </div>
+                    <h5 class="text-xl font-black uppercase tracking-tighter" style="color: var(--text-color)">Immediate
+                        Fire</h5>
+                    <div class="space-y-3 pt-4 flex-grow">
+                        @for (act of report()?.llm_analysis?.action_plan?.immediate_actions; track $index) {
+                        <div class="flex items-start space-x-3 group">
+                            <div class="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 opacity-40 group-hover:opacity-100">
+                            </div>
+                            <span class="text-xs font-bold leading-relaxed opacity-70"
+                                style="color: var(--text-color)">{{ act }}</span>
+                        </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Phase 2: Growth -->
+                <div class="space-y-4 p-8 rounded-3xl border border-opacity-5 flex flex-col"
+                    style="border-color: var(--border-color); background: rgba(var(--accent-color-rgb), 0.04)">
+                    <div class="flex items-center justify-between">
+                        <i-lucide [name]="TrendingUp" class="w-6 h-6 text-blue-500"></i-lucide>
+                        <span class="text-[10px] font-black uppercase opacity-30">Month 1</span>
+                    </div>
+                    <h5 class="text-xl font-black uppercase tracking-tighter" style="color: var(--text-color)">Scaling
+                        Growth</h5>
+                    <div class="space-y-3 pt-4 flex-grow">
+                        @for (act of report()?.llm_analysis?.action_plan?.first_month; track $index) {
+                        <div class="flex items-start space-x-3 group">
+                            <div class="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1.5 opacity-40 group-hover:opacity-100">
+                            </div>
+                            <span class="text-xs font-bold leading-relaxed opacity-70"
+                                style="color: var(--text-color)">{{ act }}</span>
+                        </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Phase 3: Long Term -->
+                <div class="space-y-4 p-8 rounded-3xl border border-opacity-5 flex flex-col text-white"
+                    style="background: var(--accent-color)">
+                    <div class="flex items-center justify-between">
+                        <i-lucide [name]="Lightbulb" class="w-6 h-6"></i-lucide>
+                        <span class="text-[10px] font-black uppercase opacity-50">Visionary</span>
+                    </div>
+                    <h5 class="text-xl font-black uppercase tracking-tighter">Exit Strategy</h5>
+                    <div class="space-y-3 pt-4 flex-grow">
+                        @for (act of report()?.llm_analysis?.action_plan?.long_term_strategy; track $index) {
+                        <div class="flex items-start space-x-3 group">
+                            <div class="w-1.5 h-1.5 rounded-full bg-white mt-1.5 opacity-40 group-hover:opacity-100">
+                            </div>
+                            <span class="text-xs font-bold leading-relaxed opacity-80">{{ act }}</span>
+                        </div>
+                        }
+                    </div>
+                </div>
+            </div>
+            } @placeholder {
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="h-64 rounded-3xl bg-slate-200 dark:bg-slate-800 animate-pulse"></div>
+                <div class="h-64 rounded-3xl bg-slate-200 dark:bg-slate-800 animate-pulse"></div>
+                <div class="h-64 rounded-3xl bg-slate-200 dark:bg-slate-800 animate-pulse"></div>
+            </div>
+            }
+            }
+
+            @case ('backlinks') {
+            <div class="space-y-8 animate-in slide-in-from-right-4 duration-500">
+                @defer (on viewport) {
+                <div class="flex items-center space-x-4">
+                    <div class="p-3 rounded-2xl bg-blue-500/10 text-blue-500">
+                        <i-lucide [name]="ShieldCheck" class="w-6 h-6"></i-lucide>
+                    </div>
+                    <div>
+                        <h4 class="text-xl font-black uppercase tracking-widest" style="color: var(--text-color)">Trust
+                            Flow Map</h4>
+                        <p class="text-[10px] font-bold opacity-30 uppercase tracking-widest mt-0.5">Backlink spam and
+                            relevance scoring</p>
+                    </div>
+                </div>
+
+                <!-- Backlinks Table Summary -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    @for (link of report()?.data_for_seo_metrics?.referring_domains_info?.slice(0, 10); track $index) {
+                    <div class="p-4 rounded-xl border border-opacity-5 hover:border-blue-500/20 transition-all flex items-center justify-between group"
+                        style="border-color: var(--border-color); background: var(--card-bg)">
+                        <div class="flex flex-col">
+                            <span class="text-sm font-black truncate max-w-[200px]" style="color: var(--text-color)">{{
+                                link.domain }}</span>
+                            <span class="text-[10px] font-bold opacity-30 uppercase tracking-widest mt-1">Found in: {{
+                                link.anchor_text || 'Generic' }}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="px-2 py-1 rounded-lg text-[10px] font-black bg-blue-500/10 text-blue-500">DR {{
+                                link.domain_rank }}</span>
+                            <div class="text-[10px] font-bold opacity-40 mt-1 uppercase">Spam: {{
+                                link.backlink_spam_score }}%</div>
+                        </div>
+                    </div>
+                    }
+                </div>
+                } @placeholder {
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="h-16 rounded-xl bg-slate-200 dark:bg-slate-800 animate-pulse"></div>
+                    <div class="h-16 rounded-xl bg-slate-200 dark:bg-slate-800 animate-pulse"></div>
+                </div>
+                }
+            </div>
+            }
+            }
+
+            } @else if (report()?.status === 'failed') {
+            <div class="flex flex-col items-center justify-center py-20 space-y-4">
+                <i-lucide [name]="AlertTriangle" class="w-16 h-16 text-red-500 opacity-20"></i-lucide>
+                <div class="text-center space-y-1">
+                    <h3 class="text-xl font-black uppercase tracking-widest" style="color: var(--text-color)">Analysis
+                        Interrupted</h3>
+                    <p class="text-sm opacity-40" style="color: var(--text-color)">{{ report()?.error_message || 'An
+                        internal error occurred during processing.' }}</p>
+                </div>
+            </div>
+            }
+        </div>
+    </div>
+
+</div>

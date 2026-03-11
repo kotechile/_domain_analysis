@@ -2053,6 +2053,7 @@ async def trigger_bulk_all_metrics_analysis(
 
 @router.get("/auctions/report")
 async def get_auctions_report(
+    search: Optional[str] = Query(None, description="Search by domain name"),
     preferred: Optional[bool] = Query(None, description="Filter by preferred status"),
     auction_site: Optional[str] = Query(None, description="Filter by auction site"),
     offering_type: Optional[str] = Query(None, description="Filter by market type: 'auction', 'backorder', 'buy_now'"),
@@ -2081,6 +2082,8 @@ async def get_auctions_report(
     try:
         # Build filters
         filters = {}
+        if search:
+            filters['search'] = search
         if preferred is not None:
             filters['preferred'] = preferred
         if auction_sites:
@@ -2724,3 +2727,159 @@ async def delete_expired_auctions():
         logger.error("Failed to delete expired auctions", error=error_msg, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to delete expired auctions: {error_msg}")
 
+
+@router.get("/auctions/refresh-costs")
+async def get_refresh_costs(current_user = Depends(get_current_user)):
+    """Get the credit costs for various refresh actions"""
+    try:
+        from services.marketplace_batch_service import MarketplaceBatchService
+        service = MarketplaceBatchService()
+        costs = await service.get_refresh_costs()
+        return costs
+    except Exception as e:
+        logger.error("Failed to get refresh costs", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/auctions/bulk-refresh")
+async def trigger_bulk_refresh(
+    payload: Dict[str, Any] = Body(...),
+    current_user = Depends(get_current_user)
+):
+    """
+    'Find and Fill' — refresh up to 1,000 domains with missing metrics.
+    Body: { filters: {...}, force: bool }
+    """
+    try:
+        from services.marketplace_batch_service import MarketplaceBatchService
+        service = MarketplaceBatchService()
+
+        # The Angular client wraps filters in { filters: {...}, force: bool }
+        filters = payload.get("filters", payload)  # Fallback: treat whole body as filters
+        force = payload.get("force", False)
+
+        result = await service.trigger_marketplace_refresh(
+            user_id=current_user.id,
+            filters=filters,
+            force=force
+        )
+
+        # "skipped" means nothing to do — still a success, don't raise 400
+        if not result.get("success") and not result.get("skipped"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to trigger bulk refresh", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/auctions/force-refresh")
+async def trigger_force_refresh(
+    payload: Dict[str, Any] = Body(...),
+    current_user = Depends(get_current_user)
+):
+    """
+    Force Refresh — get fresh SEO metrics for up to 1,000 domains matching filters,
+    overriding any existing metrics regardless of when they were last refreshed.
+    Body: { filters: {...}, force: bool }
+    """
+    try:
+        from services.marketplace_batch_service import MarketplaceBatchService
+        service = MarketplaceBatchService()
+
+        # Same payload format as bulk-refresh
+        filters = payload.get("filters", payload)
+
+        result = await service.trigger_marketplace_refresh(
+            user_id=current_user.id,
+            filters=filters,
+            force=True  # Always force for this endpoint
+        )
+
+        if not result.get("success") and not result.get("skipped"):
+            raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to trigger force refresh", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/auctions/refresh-history")
+async def get_refresh_history(
+    limit: int = Query(20, ge=1, le=100),
+    current_user = Depends(get_current_user)
+):
+    """Get the batch refresh history for the current user"""
+    try:
+        from services.marketplace_batch_service import MarketplaceBatchService
+        service = MarketplaceBatchService()
+        history = await service.get_refresh_history(user_id=current_user.id, limit=limit)
+        return history
+    except Exception as e:
+        logger.error("Failed to get refresh history", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/auctions/domain-refresh")
+async def trigger_domain_refresh(
+    payload: Dict[str, Any] = Body(...),
+    current_user = Depends(get_current_user)
+):
+    """Trigger a refresh for a single domain"""
+    try:
+        domain = payload.get("domain")
+        if not domain:
+            raise HTTPException(status_code=400, detail="Domain is required")
+            
+        from services.marketplace_batch_service import MarketplaceBatchService
+        service = MarketplaceBatchService()
+        result = await service.refresh_single_domain(
+            user_id=current_user.id,
+            domain=domain
+        )
+        if not result.get("success"):
+            raise HTTPException(status_code=400, detail=result.get("error"))
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to trigger domain refresh", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/auctions/{auction_id}/preferred")
+async def toggle_preferred_auction(
+    auction_id: str,
+    payload: Dict[str, Any] = Body(...),
+    db = Depends(get_database),
+    current_user = Depends(get_current_user)
+):
+    """Toggle the preferred status of an auction"""
+    try:
+        preferred = payload.get("preferred", False)
+        
+        # We don't check for ownership here since auctions are shared across users in the base table.
+        # But this flag affects how they are filtered/shown. 
+        # In this system, 'preferred' is usually global or we'd need a sub-table per user.
+        # Given the current schema, we update the auctions table.
+        # DO NOT update `updated_at` here, because `updated_at` is used by the frontend
+        # to determine if SEO metrics are "fresh" or "stale". Toggling a favorite 
+        # is just a UI metadata change and should not trigger a "fresh" state.
+        result = db.client.table('auctions').update({
+            'preferred': preferred
+        }).eq('id', auction_id).execute()
+        
+        if not result.data:
+            # If no auction with that ID, it might be a UUID mismatch or domain-based update needed.
+            # But normally auctions have a UUID ID.
+            logger.warning("No auction found to toggle preferred", auction_id=auction_id)
+            return {"success": False, "message": "Auction not found"}
+            
+        return {"success": True, "preferred": preferred}
+        
+    except Exception as e:
+        logger.error("Failed to toggle preferred auction", 
+                    auction_id=auction_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))

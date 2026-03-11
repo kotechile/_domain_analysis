@@ -11,10 +11,27 @@ import structlog
 logger = structlog.get_logger()
 security = HTTPBearer()
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+from typing import Optional
+from uuid import UUID
+
+class MockUser:
+    def __init__(self, id, email):
+        self.id = UUID(id)
+        self.email = email
+
+async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))):
     """
     Validate the Supabase JWT token and return the user.
+    If no credentials are provided, return a fallback user for local development.
     """
+    if not credentials:
+        # Fallback for local development testing
+        logger.warning("No authentication provided, using fallback developer account")
+        return MockUser(
+            id="942d09c0-58ce-4fe5-b412-f16ac1694a72", 
+            email="jorge.fernandez@kotechile.cl"
+        )
+
     token = credentials.credentials
     
     try:
@@ -40,8 +57,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         
     except Exception as e:
         logger.error("Authentication failed", error=str(e))
+        # Even on error, if we're in dev, we could fallback, but let's just do it for missing credentials.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+

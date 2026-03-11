@@ -221,101 +221,126 @@ class N8NService:
     
     async def trigger_bulk_page_summary_workflow(self, domains: List[str]) -> Optional[Dict[str, Any]]:
         """
-        Trigger N8N workflow to fetch bulk page summary data for multiple domains
-        
-        This method triggers the N8N webhook with a list of domains and returns immediately.
-        The actual data will be received via the webhook callback endpoint.
-        
+        Trigger N8N workflow to fetch bulk page summary data for multiple domains.
+
+        Fire-and-forget: we POST to the webhook and return immediately.
+        N8N is async — it will process and call back independently.
+        The response status is logged but does NOT block the API response.
+
         Args:
             domains: List of domain names to analyze (will be normalized)
-            
+
         Returns:
-            Dict with request_id if successful, None if failed
+            Dict with request_id (always returns immediately)
         """
         if not self.enabled:
             logger.warning("N8N integration is disabled", domain_count=len(domains))
             return None
-        
+
         if not domains:
             logger.warning("Empty domain list provided")
             return None
-        
+
         try:
-            # Normalize all domains to ensure they're in the correct format
             normalized_domains = [self._normalize_domain(d) for d in domains if d]
-            
+
             if not normalized_domains:
                 logger.warning("No valid domains after normalization")
                 return None
-            
+
             request_id = str(uuid.uuid4())
             callback_url = self.settings.N8N_CALLBACK_URL
-            
+
             if not callback_url:
                 logger.error("N8N callback URL not configured")
                 return None
-            
-            # Use bulk-specific callback URL
+
+            # Build bulk-specific callback URL
             if callback_url.endswith("/backlinks") or callback_url.endswith("/backlinks-summary"):
                 bulk_callback_url = callback_url.replace("/backlinks", "").replace("/backlinks-summary", "") + "/backlinks-bulk-page-summary"
             else:
                 bulk_callback_url = f"{callback_url}/backlinks-bulk-page-summary"
-            
-            # Prepare webhook payload
-            # Send domains as an array - n8n will map this to DataForSEO's "targets" field
-            payload = {
-                "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_callback_url,
-                "request_id": request_id,
-                "type": "bulk_summary"  # Indicate this is a bulk summary request
-            }
-            
-            # Use configured bulk webhook URL
+
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK
-            
             if not webhook_url:
                 logger.error("N8N bulk webhook URL not configured")
                 return None
-            
-            logger.info("Triggering N8N workflow for bulk page summary", 
-                       domain_count=len(normalized_domains),
-                       original_count=len(domains),
-                       request_id=request_id,
-                       webhook_url=webhook_url)
-            
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    webhook_url,
-                    json=payload
-                )
-                
-                if response.status_code in [200, 201, 202]:
-                    logger.info("N8N bulk summary workflow triggered successfully", 
-                               domain_count=len(normalized_domains),
-                               request_id=request_id,
-                               status_code=response.status_code)
-                    return {
-                        "request_id": request_id,
-                        "domains": normalized_domains,
-                        "domain_count": len(normalized_domains),
-                        "status": "triggered"
-                    }
-                else:
-                    error_text = response.text[:500] if response.text else "No response body"
-                    logger.error("N8N bulk summary workflow trigger failed", 
-                               domain_count=len(domains),
-                               status_code=response.status_code,
-                               response=error_text,
-                               webhook_url=webhook_url)
-                    return None
-                    
-        except httpx.TimeoutException:
-            logger.error("N8N bulk summary workflow trigger timed out", domain_count=len(domains), timeout=self.timeout)
-            return None
+
+            # The DataForSEO Bulk Pages Summary API maxes out at 100 unique domains per request.
+            # We chunk the domains into batches of 100 and fire a webhook for each batch.
+            # The backend stores them individually by domain, so sharing request_id is perfectly fine.
+            chunk_size = 100
+            domain_chunks = [normalized_domains[i:i + chunk_size] for i in range(0, len(normalized_domains), chunk_size)]
+
+            logger.info(
+                "Firing N8N bulk page summary webhooks (fire-and-forget)",
+                total_domains=len(normalized_domains),
+                chunks=len(domain_chunks),
+                request_id=request_id,
+                webhook_url=webhook_url
+            )
+
+            # Fire-and-forget: spawn a background task so the API returns immediately
+            async def _fire():
+                import asyncio
+                try:
+                    # Short timeout: 10s just to get the connection accepted.
+                    async with httpx.AsyncClient(
+                        timeout=httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=5.0)
+                    ) as client:
+                        for chunk_idx, chunk in enumerate(domain_chunks):
+                            payload = {
+                                "domains": chunk,
+                                "callback_url": bulk_callback_url,
+                                "request_id": request_id, 
+                                "type": "bulk_summary",
+                                "chunk_index": chunk_idx + 1,
+                                "total_chunks": len(domain_chunks)
+                            }
+                            
+                            resp = await client.post(webhook_url, json=payload)
+                            if resp.status_code in [200, 201, 202]:
+                                logger.info(
+                                    "N8N bulk webhook accepted for chunk",
+                                    request_id=request_id,
+                                    chunk_index=chunk_idx + 1,
+                                    chunk_size=len(chunk),
+                                    status=resp.status_code
+                                )
+                            else:
+                                logger.error(
+                                    "N8N bulk webhook rejected for chunk",
+                                    request_id=request_id,
+                                    chunk_index=chunk_idx + 1,
+                                    status=resp.status_code,
+                                    body=resp.text[:300]
+                                )
+                            
+                            # Brief pause to avoid flooding N8N with concurrent parallel workflow starts at the exact millisecond
+                            if chunk_idx < len(domain_chunks) - 1:
+                                await asyncio.sleep(0.5)
+
+                except httpx.TimeoutException:
+                    logger.error("N8N bulk webhook timed out (fire-and-forget)", request_id=request_id)
+                except Exception as ex:
+                    logger.error("N8N bulk webhook fire-and-forget failed", request_id=request_id, error=str(ex))
+
+            import asyncio
+            asyncio.create_task(_fire())
+
+            # Return immediately — don't wait for N8N
+            return {
+                "request_id": request_id,
+                "domain_count": len(normalized_domains),
+                "chunks": len(domain_chunks),
+                "status": "queued"
+            }
+
         except Exception as e:
-            logger.error("N8N bulk summary workflow trigger failed", domain_count=len(domains), error=str(e))
+            logger.error("Failed to queue N8N bulk summary workflow", domain_count=len(domains), error=str(e))
             return None
-    
+
+
     async def trigger_bulk_rank_workflow(self, domains: List[str]) -> Optional[Dict[str, Any]]:
         """
         Trigger N8N workflow to fetch bulk rank data for multiple domains (up to 1000)

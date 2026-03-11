@@ -1,0 +1,112 @@
+<div class="relative min-h-screen flex flex-col items-center justify-center px-6"
+    style="padding-top: 10vh; padding-bottom: 15vh;">
+    <!-- Hero Background Glow -->
+    <div class="hero-glow"></div>
+
+    <!-- Centered Content — max-w-2xl for focused, non-crowded feel -->
+    <div class="max-w-2xl w-full text-center relative z-10">
+
+        <!-- Badge Row -->
+        <div class="flex items-center justify-center space-x-2 mb-10">
+            <span class="badge-premium">AI Powered</span>
+            <span class="badge-premium"
+                style="background: var(--accent-color); color: white; border: none; opacity: 0.9">SaaS Finalist</span>
+        </div>
+
+        <!-- Hero Title -->
+        <h1 class="text-5xl md:text-6xl font-bold tracking-tight mb-5 leading-tight" style="color: var(--text-color)">
+            Invest in the<br>
+            <span class="text-transparent bg-clip-text"
+                style="background-image: linear-gradient(135deg, var(--accent-color), color-mix(in srgb, var(--accent-color) 60%, #6366f1))">
+                Perfect Domain
+            </span>
+        </h1>
+
+        <!-- Subtitle -->
+        <p class="text-base md:text-lg opacity-50 max-w-lg mx-auto leading-relaxed mb-12"
+            style="color: var(--text-color)">
+            Evaluate brandability, SEO potential, and real-time market value — powered by Gemini AI.
+        </p>
+
+        <!-- Search Form -->
+        <form [formGroup]="analysisForm" (ngSubmit)="startAnalysis()" class="w-full">
+            <div class="card p-2! flex gap-2 transition-all search-group overflow-hidden shadow-xl">
+                <div class="flex-1 flex items-center px-4 space-x-3 min-h-[56px]">
+                    <i-lucide [name]="Search" class="w-4 h-4 opacity-30 shrink-0"></i-lucide>
+                    <input type="text" formControlName="domain" placeholder="yourdomain.com..."
+                        class="w-full bg-transparent border-none focus:ring-0 text-base placeholder-opacity-20"
+                        style="color: var(--text-color)" [attr.disabled]="isLoading() ? true : null">
+                </div>
+                <button type="submit" [disabled]="analysisForm.invalid || isLoading()"
+                    class="h-[56px] px-7 rounded-xl font-semibold text-white text-sm transition-all flex items-center justify-center space-x-2 shrink-0 active:scale-95 disabled:opacity-40 disabled:grayscale"
+                    style="background: var(--accent-color)">
+                    @if (isLoading()) {
+                    <div class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                    <span>Analyzing…</span>
+                    } @else {
+                    <i-lucide [name]="analysisForm.get('mode')?.value === 'dual' ? Sparkles : Zap"
+                        class="w-4 h-4"></i-lucide>
+                    <span>{{ analysisForm.get('mode')?.value === 'dual' ? 'Deep Analysis' : 'Quick Check' }}</span>
+                    }
+                </button>
+            </div>
+
+            <!-- Error -->
+            @if (error()) {
+            <div class="mt-3 flex items-center justify-center space-x-2 text-red-500 text-xs font-medium animate-pulse">
+                <i-lucide [name]="AlertCircle" class="w-3.5 h-3.5"></i-lucide>
+                <span>{{ error() }}</span>
+            </div>
+            }
+
+            <!-- Mode Toggles — slim, below search -->
+            <div class="mt-4 flex justify-center gap-2">
+                <button type="button" (click)="setMode('dual')"
+                    class="px-4 py-2 rounded-lg text-xs font-semibold transition-all"
+                    [ngStyle]="{'background': analysisForm.get('mode')?.value === 'dual' ? 'var(--accent-color)' : 'transparent',
+                               'color': analysisForm.get('mode')?.value === 'dual' ? 'white' : 'var(--text-color)',
+                               'opacity': analysisForm.get('mode')?.value === 'dual' ? '1' : '0.4',
+                               'border': '1px solid',
+                               'border-color': analysisForm.get('mode')?.value === 'dual' ? 'var(--accent-color)' : 'transparent'}">
+                    ✦ Full SEO + AI Audit
+                </button>
+                <button type="button" (click)="setMode('legacy')"
+                    class="px-4 py-2 rounded-lg text-xs font-semibold transition-all"
+                    [ngStyle]="{'background': analysisForm.get('mode')?.value === 'legacy' ? 'var(--accent-color)' : 'transparent',
+                               'color': analysisForm.get('mode')?.value === 'legacy' ? 'white' : 'var(--text-color)',
+                               'opacity': analysisForm.get('mode')?.value === 'legacy' ? '1' : '0.4',
+                               'border': '1px solid',
+                               'border-color': analysisForm.get('mode')?.value === 'legacy' ? 'var(--accent-color)' : 'transparent'}">
+                    ⚡ Metrics Only
+                </button>
+            </div>
+        </form>
+
+        <!-- Minimal Feature Hints — text only, no cards -->
+        <div class="mt-16 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-xs font-semibold opacity-30"
+            style="color: var(--text-color)">
+            <span class="flex items-center space-x-1.5">
+                <i-lucide [name]="ShieldCheck" class="w-3.5 h-3.5"></i-lucide>
+                <span>Spam Safety Audit</span>
+            </span>
+            <span class="opacity-20">·</span>
+            <span class="flex items-center space-x-1.5">
+                <i-lucide [name]="TrendingUp" class="w-3.5 h-3.5"></i-lucide>
+                <span>Real-time SEO Metrics</span>
+            </span>
+            <span class="opacity-20">·</span>
+            <span class="flex items-center space-x-1.5">
+                <i-lucide [name]="History" class="w-3.5 h-3.5"></i-lucide>
+                <span>Wayback AI History</span>
+            </span>
+        </div>
+
+        <!-- Quick Nav Links -->
+        <div class="mt-10 flex justify-center space-x-8 text-xs font-semibold opacity-30">
+            <a routerLink="/marketplace" class="hover:opacity-80 transition-opacity"
+                style="color: var(--text-color)">Marketplace</a>
+            <a routerLink="/reports" class="hover:opacity-80 transition-opacity" style="color: var(--text-color)">Recent
+                Scans</a>
+        </div>
+    </div>
+</div>

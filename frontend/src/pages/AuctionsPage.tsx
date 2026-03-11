@@ -22,6 +22,12 @@ import {
   Tab,
   Chip,
   useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  Snackbar,
 } from '@mui/material';
 import {
   CloudUpload as CloudUploadIcon,
@@ -31,6 +37,7 @@ import {
   FilterList as FilterListIcon,
   Analytics as AnalyticsIcon,
   InsertDriveFile as InsertDriveFileIcon,
+  ElectricBolt as ElectricBoltIcon,
 } from '@mui/icons-material';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -140,6 +147,32 @@ const AuctionsPage: React.FC = () => {
       ),
     refetchInterval: 30000,
   });
+
+  const [refreshPromptOpen, setRefreshPromptOpen] = useState(false);
+  const [refreshCosts, setRefreshCosts] = useState<{ bulk_refresh_1k: number; force_refresh_1k: number } | null>(null);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
+    open: false, message: '', severity: 'info'
+  });
+
+  // Fetch costs and balance
+  const { data: balanceData } = useQuery({
+    queryKey: ['credits-balance'],
+    queryFn: () => api.getBalance(),
+  });
+
+  useEffect(() => {
+    api.getRefreshCosts().then(setRefreshCosts).catch(console.error);
+  }, [api]);
+
+  // Prompt logic: If many items have missing stats
+  useEffect(() => {
+    if (auctionsData && auctionsData.auctions.length > 0) {
+      const missingCount = auctionsData.auctions.filter(a => !a.organic_traffic && !a.backlinks).length;
+      if (missingCount > 5 && !refreshPromptOpen) {
+        setRefreshPromptOpen(true);
+      }
+    }
+  }, [auctionsData, refreshPromptOpen]);
 
   // CSV upload mutation
   const uploadMutation = useMutation({
@@ -311,6 +344,54 @@ const AuctionsPage: React.FC = () => {
     },
   });
 
+  const domainRefreshMutation = useMutation({
+    mutationFn: (domain: string) => api.triggerDomainRefresh(domain),
+    onSuccess: (data) => {
+      setSnackbar({ open: true, message: data.message || 'Domain refresh triggered!', severity: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['credits-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['auctions-report'] });
+    },
+    onError: (error: any) => {
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.detail || 'Failed to trigger domain refresh',
+        severity: 'error'
+      });
+    }
+  });
+
+  const bulkRefreshMutation = useMutation({
+    mutationFn: (f: any) => api.triggerBulkRefresh(f),
+    onSuccess: (data) => {
+      setSnackbar({ open: true, message: data.message || 'Bulk refresh triggered!', severity: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['credits-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['auctions-report'] });
+    },
+    onError: (error: any) => {
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.detail || 'Failed to trigger bulk refresh',
+        severity: 'error'
+      });
+    }
+  });
+
+  const forceRefreshMutation = useMutation({
+    mutationFn: (f: any) => api.triggerForceRefresh(f),
+    onSuccess: (data) => {
+      setSnackbar({ open: true, message: data.message || 'Force refresh triggered!', severity: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['credits-balance'] });
+      queryClient.invalidateQueries({ queryKey: ['auctions-report'] });
+    },
+    onError: (error: any) => {
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.detail || 'Failed to trigger force refresh',
+        severity: 'error'
+      });
+    }
+  });
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -374,6 +455,10 @@ const AuctionsPage: React.FC = () => {
     setPage(0);
   };
 
+  const handleRefreshDomain = (domain: string) => {
+    domainRefreshMutation.mutate(domain);
+  };
+
   const handleRefresh = () => {
     refetchAuctions();
     fetchScoringStats();
@@ -388,18 +473,34 @@ const AuctionsPage: React.FC = () => {
       <Header />
       <Container maxWidth="xl" sx={{ py: { xs: 3, sm: 4 } }}>
         {/* Page Header */}
-        <Box sx={{ mb: 4 }}>
-          <Typography
-            variant="h4"
-            component="h1"
-            gutterBottom
-            sx={{ fontWeight: 700 }}
-          >
-            Domain Auctions
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Upload, process, and analyze domain auctions from multiple sources
-          </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 4 }}>
+          <Box>
+            <Typography
+              variant="h4"
+              component="h1"
+              gutterBottom
+              sx={{ fontWeight: 700 }}
+            >
+              Domain Auctions
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Upload, process, and analyze domain auctions from multiple sources
+            </Typography>
+          </Box>
+
+          {balanceData && (
+            <Card sx={{ bgcolor: 'primary.main', color: 'white', px: 2, py: 1, borderRadius: 2 }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <AnalyticsIcon />
+                <Box>
+                  <Typography variant="caption" sx={{ opacity: 0.8, display: 'block' }}>Balance</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1 }}>
+                    {balanceData.balance.toLocaleString()} Credits
+                  </Typography>
+                </Box>
+              </Stack>
+            </Card>
+          )}
         </Box>
 
         {/* Tabs */}
@@ -746,6 +847,7 @@ const AuctionsPage: React.FC = () => {
                     onPageChange={setPage}
                     pageSize={pageSize}
                     availableTlds={tldsData || []}
+                    onRefreshDomain={handleRefreshDomain}
                   />
                 )}
               </CardContent>
@@ -797,6 +899,7 @@ const AuctionsPage: React.FC = () => {
                     onPageChange={setPage}
                     pageSize={pageSize}
                     availableTlds={tldsData || []}
+                    onRefreshDomain={handleRefreshDomain}
                   />
                 )}
               </CardContent>
@@ -804,6 +907,71 @@ const AuctionsPage: React.FC = () => {
           </TabPanel>
         </Card>
       </Container>
+
+      {/* Credit Refresh Prompt */}
+      <Dialog
+        open={refreshPromptOpen}
+        onClose={() => setRefreshPromptOpen(false)}
+        PaperProps={{ sx: { borderRadius: 3, p: 1 } }}
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ElectricBoltIcon color="warning" />
+          Refresh Domain SEO Metrics?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Many domains in your current view are missing SEO metrics (DR, Backlinks, Traffic).
+            Would you like to trigger a batch refresh for 1,000 domains matching your current filters?
+          </DialogContentText>
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 2, border: '1px solid divider' }}>
+            <Typography variant="subtitle2" gutterBottom>Options:</Typography>
+            <Typography variant="body2">• <strong>Bulk Refresh:</strong> {refreshCosts?.bulk_refresh_1k ?? 50} credits (Updates domains missing data)</Typography>
+            <Typography variant="body2">• <strong>Force Refresh:</strong> {refreshCosts?.force_refresh_1k ?? 150} credits (Force updates all domains regardless of cache)</Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={() => setRefreshPromptOpen(false)} color="inherit">Cancel</Button>
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={() => {
+              setRefreshPromptOpen(false);
+              bulkRefreshMutation.mutate(filters);
+            }}
+            disabled={bulkRefreshMutation.isPending}
+          >
+            Bulk Refresh ({refreshCosts?.bulk_refresh_1k ?? 50})
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => {
+              setRefreshPromptOpen(false);
+              forceRefreshMutation.mutate(filters);
+            }}
+            disabled={forceRefreshMutation.isPending}
+          >
+            Force Refresh ({refreshCosts?.force_refresh_1k ?? 150})
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar Notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%', borderRadius: 2 }}
+          variant="filled"
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

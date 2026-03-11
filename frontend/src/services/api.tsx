@@ -570,6 +570,7 @@ export interface TransactionResponse {
   description: string;
   reference_id?: string;
   balance_after: number;
+  dollar_amount: number;
   created_at: string;
 }
 
@@ -1443,11 +1444,48 @@ class ApiService {
     return response.data;
   }
 
+  async getPaymentHistory(limit: number = 20, offset: number = 0): Promise<TransactionResponse[]> {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      offset: offset.toString(),
+    });
+    const response: AxiosResponse<TransactionResponse[]> = await this.client.get(
+      `/credits/payments?${params.toString()}`
+    );
+    return response.data;
+  }
+
   async purchaseCredits(amount: number, description: string = 'Credit purchase'): Promise<PurchaseResponse> {
     const response: AxiosResponse<PurchaseResponse> = await this.client.post('/credits/purchase', {
       amount,
       description,
     });
+    return response.data;
+  }
+
+  // Marketplace Refresh Methods
+  async getRefreshCosts(): Promise<any> {
+    const response = await this.client.get('/auctions/refresh-costs');
+    return response.data;
+  }
+
+  async triggerBulkRefresh(filters: any): Promise<any> {
+    const response = await this.client.post('/auctions/bulk-refresh', filters);
+    return response.data;
+  }
+
+  async triggerForceRefresh(filters: any): Promise<any> {
+    const response = await this.client.post('/auctions/force-refresh', filters);
+    return response.data;
+  }
+
+  async getRefreshHistory(limit: number = 20): Promise<any> {
+    const response = await this.client.get(`/auctions/refresh-history?limit=${limit}`);
+    return response.data;
+  }
+
+  async triggerDomainRefresh(domain: string): Promise<any> {
+    const response = await this.client.post('/auctions/domain-refresh', { domain });
     return response.data;
   }
 
