@@ -41,9 +41,13 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
-    # API proxy - uses variable to avoid DNS resolution at startup
+    # API proxy - uses resolver for dynamic backend discovery
+    # The backend host is set via API_BACKEND_URL env var (e.g., http://backend:8000)
     location /api/ {
-        proxy_pass ${API_BACKEND_URL};
+        # Use resolver with variable to defer DNS lookup until request time
+        resolver 127.0.0.11 ipv6=off valid=30s;
+        set $backend "${API_BACKEND_URL}";
+        proxy_pass $backend;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
