@@ -35,19 +35,6 @@ services:
     restart: unless-stopped
     networks:
       - coolify
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.backend-scout.rule=Host(`api.scout.buildomain.com`)"
-      - "traefik.http.routers.backend-scout.entrypoints=https"
-      - "traefik.http.routers.backend-scout.tls=true"
-      - "traefik.http.routers.backend-scout.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.backend-scout.service=backend-scout-svc"
-      - "traefik.http.services.backend-scout-svc.loadbalancer.server.port=8000"
-      - "traefik.http.routers.backend-scout-insecure.rule=Host(`api.scout.buildomain.com`)"
-      - "traefik.http.routers.backend-scout-insecure.entrypoints=http"
-      - "traefik.http.routers.backend-scout-insecure.middlewares=backend-scout-redirect"
-      - "traefik.http.middlewares.backend-scout-redirect.redirectscheme.scheme=https"
-      - "traefik.docker.network=coolify"
 
   # Frontend
   frontend:
@@ -80,7 +67,6 @@ services:
     environment:
       - REACT_APP_API_URL=/api/v1
       - API_BACKEND_URL=http://backend:8000
-      - API_BACKEND_HOST=api.scout.buildomain.com
     depends_on:
       - backend
     restart: unless-stopped
