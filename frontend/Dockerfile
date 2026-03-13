@@ -4,7 +4,7 @@ ARG REACT_APP_SUPABASE_URL
 ARG REACT_APP_SUPABASE_ANON_KEY
 ARG REACT_APP_URL=https://scout.buildomain.com
 
-# Multi-stage build for React app
+# Multi-stage build for Angular app
 FROM node:20-alpine as build
 
 # Pass build arg to environment
@@ -20,37 +20,37 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-# Install dependencies (including devDependencies for build)
-# Install dependencies
 RUN npm install
 
 # Copy source code
-# Copy source code
 COPY . .
 
-# Disable CI=true to prevent warnings from failing the build
-ENV CI=false
-ENV GENERATE_SOURCEMAP=false
-ENV NODE_OPTIONS="--max-old-space-size=1536"
-
-# Build the application
-RUN CI=false npm run build
-RUN ls -la /app/build || echo "Build directory not found"
+# Build the Angular application
+RUN npm run build
+RUN ls -la /app/dist/angular-version/browser || echo "Build directory not found"
 
 # Production stage with nginx
 FROM nginx:alpine
 
-# Install curl for healthchecks
-RUN apk add --no-cache curl
+# Install curl for healthchecks and envsubst for config templating
+RUN apk add --no-cache curl gettext
 
-# Copy built app from build stage
-COPY --from=build /app/build /usr/share/nginx/html
+# Copy built app from build stage to nginx serving directory
+COPY --from=build /app/dist/angular-version/browser /usr/share/nginx/html
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx configuration template
+COPY nginx.conf.template /etc/nginx/conf.d/default.conf.template
+
+# Copy and set up entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 # Expose port
 EXPOSE 80
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Health check for Coolify - checks if nginx is responding
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Use entrypoint script to substitute env vars and start nginx
+ENTRYPOINT ["/docker-entrypoint.sh"]

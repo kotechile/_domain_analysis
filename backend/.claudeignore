@@ -1,0 +1,20 @@
+# 1. SECURITY (The Essentials)
+.env
+.env.*
+*.pem
+*.key
+.claudecode/  # Keep Claude from reading its own internal logs/configs
+
+# 2. PERFORMANCE (Save credits)
+node_modules/
+dist/
+build/
+.next/
+package-lock.json
+yarn.lock
+*.log
+*.csv
+*.json.gz  # Large data files that eat context
+
+# 3. PROJECT SPECIFIC
+# docs/high_res_photos/
