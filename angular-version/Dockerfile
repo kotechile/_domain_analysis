@@ -41,6 +41,9 @@ COPY --from=build /app/dist/angular-version/browser /usr/share/nginx/html
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Validate nginx configuration
+RUN nginx -t
+
 # Expose port
 EXPOSE 80
 
