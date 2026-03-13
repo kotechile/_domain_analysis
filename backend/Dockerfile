@@ -58,6 +58,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
-# Run the application - listen on all interfaces (0.0.0.0 binds to all IPv4)
-# Docker handles IPv6-to-IPv4 translation
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application - listen on IPv6 which accepts both IPv4 and IPv6 on Linux
+# The [::] binds to all IPv6 addresses and dual-stack accepts IPv4 too
+CMD ["uvicorn", "src.main:app", "--host", "::", "--port", "8000"]
