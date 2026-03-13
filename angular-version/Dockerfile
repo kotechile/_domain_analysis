@@ -44,5 +44,9 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Expose port
 EXPOSE 80
 
+# Health check for Coolify
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"]
