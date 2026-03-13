@@ -39,7 +39,7 @@ services:
   # Frontend
   frontend:
     build:
-      context: ./frontend
+      context: ./angular-version
       dockerfile: Dockerfile
       args:
         - REACT_APP_API_URL=/api/v1
