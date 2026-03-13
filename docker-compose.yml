@@ -66,6 +66,7 @@ services:
       - "traefik.docker.network=coolify"
     environment:
       - REACT_APP_API_URL=/api/v1
+      - API_BACKEND_URL=http://backend:8000
     depends_on:
       - backend
     restart: unless-stopped

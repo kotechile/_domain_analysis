@@ -32,21 +32,25 @@ RUN ls -la /app/dist/angular-version/browser || echo "Build directory not found"
 # Production stage with nginx
 FROM nginx:alpine
 
-# Install curl for healthchecks
-RUN apk add --no-cache curl
+# Install curl for healthchecks and envsubst for config templating
+RUN apk add --no-cache curl gettext
 
 # Copy built app from build stage to nginx serving directory
 COPY --from=build /app/dist/angular-version/browser /usr/share/nginx/html
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx configuration template
+COPY nginx.conf.template /etc/nginx/conf.d/default.conf.template
+
+# Copy and set up entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 # Expose port
 EXPOSE 80
 
-# Health check for Coolify
-HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
+# Health check for Coolify - checks if nginx is responding
+HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
     CMD curl -f http://localhost/health || exit 1
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Use entrypoint script to substitute env vars and start nginx
+ENTRYPOINT ["/docker-entrypoint.sh"]
