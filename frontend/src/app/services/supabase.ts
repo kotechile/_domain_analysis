@@ -14,7 +14,13 @@ export class SupabaseService {
   loading = signal<boolean>(true);
 
   constructor() {
-    this.supabase = createClient(environment.supabaseUrl, environment.supabaseAnonKey);
+    this.supabase = createClient(environment.supabaseUrl, environment.supabaseAnonKey, {
+      auth: {
+        // Disable LockManager to prevent "immediately failed" warnings
+        // This is safe for single-tab usage; multi-tab sync won't work
+        lock: undefined
+      }
+    });
 
     // Initialize session and set up listener
     this.initSession();
