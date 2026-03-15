@@ -904,6 +904,163 @@ async def _process_file_detached(
                     exc_info=True)
 
 
+class NameSiloActiveSalesRequest(BaseModel):
+    """Request model for NameSilo active sales data"""
+    sales_data: List[Dict[str, Any]]
+    filename: Optional[str] = "namesilo_active_sales.csv"
+    offering_type: Optional[str] = "buy_now"
+
+
+@router.post("/auctions/process-namesilo-active-sales")
+async def process_namesilo_active_sales(
+    request: NameSiloActiveSalesRequest
+):
+    """
+    Process NameSilo active sales data directly from API.
+
+    Accepts JSON data from NameSilo marketplaceActiveSalesOverview API,
+    converts it to CSV format, and processes it like a regular upload.
+
+    The sales_data should be the 'sale_details' array from the NameSilo response.
+    """
+    job_id = str(uuid.uuid4())
+
+    try:
+        # Convert NameSilo data to CSV format
+        csv_rows = []
+
+        # Header row
+        headers = [
+            "Domain", "Status", "Reserve", "Buy_Now", "Portfolio",
+            "Sale_Type", "Pay_Plan_Offered", "End_Date",
+            "Auto_Extend_Days", "Time_Remaining", "Private", "Active_Bid_Or_Offer"
+        ]
+        csv_rows.append(",".join(f'"{h}"' for h in headers))
+
+        # Data rows
+        for sale in request.sales_data:
+            row = [
+                sale.get("domain", ""),
+                sale.get("status", ""),
+                sale.get("reserve", ""),
+                sale.get("buy_now", ""),
+                sale.get("portfolio", ""),
+                sale.get("sale_type", ""),
+                sale.get("pay_plan_offered", ""),
+                sale.get("end_date", ""),
+                sale.get("auto_extend_days", ""),
+                sale.get("time_remaining", ""),
+                sale.get("private", ""),
+                sale.get("active_bid_or_offer", "")
+            ]
+            # Escape quotes and wrap in quotes
+            escaped_row = ['"' + str(cell).replace('"', '""') + '"' for cell in row]
+            csv_rows.append(",".join(escaped_row))
+
+        csv_content = "\n".join(csv_rows)
+
+        # Create detached background task to process the CSV
+        asyncio.create_task(
+            _process_namesilo_sales_detached(
+                job_id=job_id,
+                csv_content=csv_content,
+                filename=request.filename,
+                offering_type=request.offering_type
+            )
+        )
+
+        # Yield control to ensure the task is scheduled
+        await asyncio.sleep(0)
+
+        logger.info("NameSilo active sales processing triggered",
+                   job_id=job_id,
+                   record_count=len(request.sales_data),
+                   filename=request.filename)
+
+        return {
+            "success": True,
+            "message": "NameSilo active sales processing started in background.",
+            "job_id": job_id,
+            "filename": request.filename,
+            "record_count": len(request.sales_data),
+            "status": "accepted"
+        }
+
+    except Exception as e:
+        logger.error("Failed to process NameSilo active sales",
+                    error=str(e),
+                    exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to process NameSilo sales: {str(e)}")
+
+
+async def _process_namesilo_sales_detached(
+    job_id: str,
+    csv_content: str,
+    filename: str,
+    offering_type: Optional[str] = None
+):
+    """
+    Background task to upload NameSilo sales CSV to storage and process it.
+    """
+    import tempfile
+    import os
+
+    temp_path = None
+
+    try:
+        db = get_database()
+
+        # Create temp file
+        safe_filename = filename.replace('/', '_').replace('\\', '_')
+        temp_fd, temp_path = tempfile.mkstemp(suffix=f"_{safe_filename}")
+        os.close(temp_fd)
+
+        # Write CSV content
+        with open(temp_path, 'w', encoding='utf-8') as f:
+            f.write(csv_content)
+
+        # Upload to storage
+        with open(temp_path, 'rb') as f:
+            file_content = f.read()
+
+        storage_path = await db.upload_csv_to_storage(file_content, filename)
+        logger.info("NameSilo sales uploaded to storage",
+                   job_id=job_id,
+                   storage_path=storage_path)
+
+        # Process the file
+        await process_csv_upload_async(
+            job_id=job_id,
+            csv_content=temp_path,
+            filename=filename,
+            auction_site="namesilo",
+            offering_type=offering_type,
+            is_file=True
+        )
+
+    except Exception as e:
+        logger.error("Failed to process NameSilo sales in background",
+                    job_id=job_id,
+                    error=str(e),
+                    exc_info=True)
+        try:
+            db = get_database()
+            await db.update_csv_upload_progress(
+                job_id=job_id,
+                status='failed',
+                error_message=str(e)
+            )
+        except:
+            pass
+    finally:
+        # Cleanup temp file
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+
+
 async def background_handle_upload_and_process(
     job_id: str,
     local_path: str,

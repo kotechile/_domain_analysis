@@ -1,0 +1,215 @@
+{
+  "_comment": "NameSilo Active Sales Nodes - Add these to your existing workflow. Replace YOUR_NAMESILO_API_KEY with your actual NameSilo API key",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.namesilo.com/api/marketplaceActiveSalesOverview",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "version",
+              "value": "1"
+            },
+            {
+              "name": "type",
+              "value": "json"
+            },
+            {
+              "name": "key",
+              "value": "YOUR_NAMESILO_API_KEY"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [11000, 2600],
+      "id": "namesilo-api-call",
+      "name": "Fetch NameSilo Active Sales"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract sale_details from NameSilo response\nconst response = $json;\n\nif (!response.reply || !response.reply.sale_details) {\n  return [{\n    json: {\n      error: 'No sales data found',\n      response: response\n    }\n  }];\n}\n\nconst sales = response.reply.sale_details;\n\n// Return the sales array for processing\nreturn [{\n  json: {\n    sales_data: sales,\n    count: sales.length\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [11200, 2600],
+      "id": "extract-sales-data",
+      "name": "Extract Sales Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert sales data to CSV format\nconst sales = $json.sales_data;\n\nif (!sales || sales.length === 0) {\n  return [{ json: { csv_content: '', record_count: 0 } }];\n}\n\n// Define CSV headers\nconst headers = [\n  'Domain',\n  'Status',\n  'Reserve',\n  'Buy_Now',\n  'Portfolio',\n  'Sale_Type',\n  'Pay_Plan_Offered',\n  'End_Date',\n  'Auto_Extend_Days',\n  'Time_Remaining',\n  'Private',\n  'Active_Bid_Or_Offer'\n];\n\n// Build CSV rows\nlet csvRows = [headers.join(',')];\n\nfor (const sale of sales) {\n  const row = [\n    sale.domain || '',\n    sale.status || '',\n    sale.reserve || '',\n    sale.buy_now || '',\n    sale.portfolio || '',\n    sale.sale_type || '',\n    sale.pay_plan_offered || '',\n    sale.end_date || '',\n    sale.auto_extend_days || '',\n    sale.time_remaining || '',\n    sale.private || '',\n    sale.active_bid_or_offer || ''\n  ];\n  \n  // Escape values that contain commas or quotes\n  const escapedRow = row.map(cell => {\n    const str = String(cell);\n    if (str.includes(',') || str.includes('\"') || str.includes('\\n')) {\n      return '\"' + str.replace(/\"/g, '\"\"') + '\"';\n    }\n    return str;\n  });\n  \n  csvRows.push(escapedRow.join(','));\n}\n\nconst csvContent = csvRows.join('\\n');\n\nreturn [{\n  json: {\n    csv_content: csvContent,\n    record_count: sales.length,\n    filename: 'namesilo_active_sales.csv'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [11400, 2600],
+      "id": "convert-to-csv",
+      "name": "Convert to CSV"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare binary data for upload\nconst csvContent = $json.csv_content;\nconst filename = $json.filename;\n\nif (!csvContent) {\n  return [];\n}\n\n// Create binary data\nconst binaryData = Buffer.from(csvContent, 'utf-8');\n\nreturn [{\n  json: {\n    filename: filename,\n    record_count: $json.record_count\n  },\n  binary: {\n    data: {\n      data: binaryData.toString('base64'),\n      mimeType: 'text/csv',\n      fileName: filename,\n      fileExtension: 'csv'\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [11600, 2600],
+      "id": "prepare-binary",
+      "name": "Prepare Binary Data"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sbdomain.buildomain.com/storage/v1/object/auction-csvs/' + $json.filename }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_SUPABASE_ANON_KEY"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/csv"
+            },
+            {
+              "name": "apikey",
+              "value": "Bearer YOUR_SUPABASE_ANON_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [11800, 2600],
+      "id": "upload-namesilo-csv",
+      "name": "Upload CSV to Supabase",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://scout.buildomain.com/api/v1/auctions/process-existing-upload",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "storage_path",
+              "value": "={{ $json.filename }}"
+            },
+            {
+              "name": "filename",
+              "value": "={{ $json.filename }}"
+            },
+            {
+              "name": "auction_site",
+              "value": "namesilo"
+            },
+            {
+              "name": "offering_type",
+              "value": "buy_now"
+            },
+            {
+              "name": "bucket",
+              "value": "auction-csvs"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [12000, 2600],
+      "id": "trigger-backend-processing",
+      "name": "Trigger Backend Processing",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
+    }
+  ],
+  "connections": {
+    "Fetch NameSilo Active Sales": {
+      "main": [
+        [
+          {
+            "node": "Extract Sales Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Sales Data": {
+      "main": [
+        [
+          {
+            "node": "Convert to CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to CSV": {
+      "main": [
+        [
+          {
+            "node": "Prepare Binary Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Binary Data": {
+      "main": [
+        [
+          {
+            "node": "Upload CSV to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload CSV to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Trigger Backend Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
