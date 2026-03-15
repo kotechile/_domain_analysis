@@ -337,16 +337,19 @@ class CSVParserService:
     def parse_namesilo_csv(self, content: Any, is_handle: bool = False) -> Iterator[AuctionInput]:
         """
         Parse NameSilo CSV format
-        
-        Expected columns: ID, Leader User ID, Owner User ID, Domain ID, Domain, Status, Type,
-        Opening Bid, Current Bid, Max Bid, Domain Created On, Auction End, Url, Bid Count, External Provider
-        
+
+        Supports two formats:
+        1. Auction export: ID, Leader User ID, Owner User ID, Domain ID, Domain, Status, Type,
+           Opening Bid, Current Bid, Max Bid, Domain Created On, Auction End, Url, Bid Count, External Provider
+        2. Active sales: Domain, Status, Reserve, Buy_Now, Portfolio, Sale_Type, Pay_Plan_Offered,
+           End_Date, Auto_Extend_Days, Time_Remaining, Private, Active_Bid_Or_Offer
+
         Note: NameSilo auctions do NOT have an end_date (expiration_date). They are active auctions.
         The "Auction End" field is used as the start_date for tracking purposes.
         """
         try:
             csv_file = content if is_handle else io.StringIO(content)
-            
+
             # Debug: Read first bit of file to ensure it's not empty/garbled
             sample = "N/A"
             if is_handle and hasattr(csv_file, 'readable') and csv_file.readable():
@@ -355,81 +358,156 @@ class CSVParserService:
                 sample = csv_file.read(500) # Read more bytes to see full header
                 csv_file.seek(pos)
                 logger.info("NameSilo CSV File Content Peek", sample=sample, position=pos)
-            
+
             reader = csv.DictReader(csv_file)
-            
+
             # Log available columns for debugging
             if reader.fieldnames:
                 logger.info("NameSilo CSV columns detected", columns=list(reader.fieldnames))
+                fieldnames_lower = [f.lower() for f in reader.fieldnames]
             else:
                 msg = f"NameSilo CSV has no header row or empty file. Content Start: '{sample}'"
                 logger.warning(msg)
                 return
-            
-            count = 0
-            for row_num, row in enumerate(reader, start=2):
-                try:
-                    # NameSilo format uses "Domain" column (case-sensitive)
-                    domain_name = row.get('Domain', '').strip()
-                    if not domain_name:
-                        logger.warning("Skipping row with empty Domain", row=row_num, available_keys=list(row.keys()))
-                        continue
-                    
-                    # Parse "Domain Created On" as start_date (when domain was created)
-                    start_date = self._parse_date(row.get('Domain Created On', ''))
-                    
-                    # NameSilo auctions SHOULD have an expiration_date for auctions
-                    # For 'Offer/Counter Offer' (Buy Now), it might be empty or valid
-                    # Use "Auction End" if available, otherwise far future
-                    auction_end_date = self._parse_date(row.get('Auction End', ''))
-                    
-                    # Parse Current Bid
-                    try:
-                        current_bid_str = row.get('Current Bid', '0').strip()
-                        current_bid = float(current_bid_str) if current_bid_str else 0.0
-                    except (ValueError, TypeError):
-                        current_bid = 0.0
 
-                    # Parse Url
-                    url = row.get('Url', '').strip()
-                    if not url and domain_name:
-                        # Fallback to domain-specific details page if URL is missing
-                        url = f"https://www.namesilo.com/marketplace/domain-details/{domain_name}"
+            # Detect format: active sales vs auction export
+            is_active_sales_format = 'sale_type' in fieldnames_lower or 'buy_now' in fieldnames_lower
 
-                    from datetime import datetime, timezone
-                    far_future_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
-                    
-                    final_expiration_date = auction_end_date if auction_end_date else far_future_date
-                    
-                    # For active auctions, we want the real end date
-                    # For buy now/make offer, 2099 is appropriate if no date provided
-                    
-                    auction = AuctionInput(
-                        domain=domain_name,
-                        start_date=start_date,
-                        expiration_date=final_expiration_date,
-                        end_date=final_expiration_date,
-                        current_bid=current_bid,
-                        auction_site='namesilo',
-                        source_data=row,
-                        link=url
-                    )
-                    
-                    yield auction
-                    count += 1
-                    
-                except Exception as e:
-                    logger.warning("Failed to parse NameSilo CSV row", row=row_num, error=str(e))
-                    continue
-            
-            if count == 0:
-                logger.warning(f"No valid NameSilo auctions found. Headers: {reader.fieldnames}. Content Start: '{sample}'")
-            
-            logger.info("Parsed NameSilo CSV streaming started")
-            
+            if is_active_sales_format:
+                logger.info("Detected NameSilo active sales format")
+                yield from self._parse_namesilo_active_sales(reader)
+            else:
+                logger.info("Detected NameSilo auction export format")
+                yield from self._parse_namesilo_auction_export(reader, sample)
+
         except Exception as e:
             logger.error("Failed to parse NameSilo CSV", error=str(e))
             raise
+
+    def _parse_namesilo_active_sales(self, reader) -> Iterator[AuctionInput]:
+        """
+        Parse NameSilo active sales CSV format from marketplaceActiveSalesOverview API
+
+        Expected columns: Domain, Status, Reserve, Buy_Now, Portfolio, Sale_Type,
+        Pay_Plan_Offered, End_Date, Auto_Extend_Days, Time_Remaining, Private, Active_Bid_Or_Offer
+        """
+        count = 0
+        from datetime import datetime, timezone
+
+        for row_num, row in enumerate(reader, start=2):
+            try:
+                # Get domain name
+                domain_name = row.get('Domain', '').strip()
+                if not domain_name:
+                    logger.warning("Skipping row with empty Domain", row=row_num)
+                    continue
+
+                # Parse end date from End_Date
+                end_date = self._parse_date(row.get('End_Date', ''))
+                if not end_date:
+                    # Default to far future if no end date
+                    end_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+                # Parse buy_now price as current_bid
+                try:
+                    buy_now_str = row.get('Buy_Now', '0').strip()
+                    # Remove non-numeric characters (like " (hidden)")
+                    buy_now_clean = ''.join(c for c in buy_now_str if c.isdigit() or c == '.')
+                    current_bid = float(buy_now_clean) if buy_now_clean else 0.0
+                except (ValueError, TypeError):
+                    current_bid = 0.0
+
+                # Build URL
+                url = f"https://www.namesilo.com/marketplace/domain-details/{domain_name}"
+
+                auction = AuctionInput(
+                    domain=domain_name,
+                    start_date=None,  # Not provided in active sales
+                    expiration_date=end_date,
+                    end_date=end_date,
+                    current_bid=current_bid,
+                    auction_site='namesilo',
+                    source_data=row,
+                    link=url
+                )
+
+                yield auction
+                count += 1
+
+            except Exception as e:
+                logger.warning("Failed to parse NameSilo active sales row", row=row_num, error=str(e))
+                continue
+
+        logger.info(f"Parsed {count} NameSilo active sales records")
+
+    def _parse_namesilo_auction_export(self, reader, sample: str) -> Iterator[AuctionInput]:
+        """
+        Parse NameSilo auction export CSV format
+
+        Expected columns: ID, Leader User ID, Owner User ID, Domain ID, Domain, Status, Type,
+        Opening Bid, Current Bid, Max Bid, Domain Created On, Auction End, Url, Bid Count, External Provider
+        """
+        count = 0
+
+        for row_num, row in enumerate(reader, start=2):
+            try:
+                # NameSilo format uses "Domain" column (case-sensitive)
+                domain_name = row.get('Domain', '').strip()
+                if not domain_name:
+                    logger.warning("Skipping row with empty Domain", row=row_num, available_keys=list(row.keys()))
+                    continue
+
+                # Parse "Domain Created On" as start_date (when domain was created)
+                start_date = self._parse_date(row.get('Domain Created On', ''))
+
+                # NameSilo auctions SHOULD have an expiration_date for auctions
+                # For 'Offer/Counter Offer' (Buy Now), it might be empty or valid
+                # Use "Auction End" if available, otherwise far future
+                auction_end_date = self._parse_date(row.get('Auction End', ''))
+
+                # Parse Current Bid
+                try:
+                    current_bid_str = row.get('Current Bid', '0').strip()
+                    current_bid = float(current_bid_str) if current_bid_str else 0.0
+                except (ValueError, TypeError):
+                    current_bid = 0.0
+
+                # Parse Url
+                url = row.get('Url', '').strip()
+                if not url and domain_name:
+                    # Fallback to domain-specific details page if URL is missing
+                    url = f"https://www.namesilo.com/marketplace/domain-details/{domain_name}"
+
+                from datetime import datetime, timezone
+                far_future_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+                final_expiration_date = auction_end_date if auction_end_date else far_future_date
+
+                # For active auctions, we want the real end date
+                # For buy now/make offer, 2099 is appropriate if no date provided
+
+                auction = AuctionInput(
+                    domain=domain_name,
+                    start_date=start_date,
+                    expiration_date=final_expiration_date,
+                    end_date=final_expiration_date,
+                    current_bid=current_bid,
+                    auction_site='namesilo',
+                    source_data=row,
+                    link=url
+                )
+
+                yield auction
+                count += 1
+
+            except Exception as e:
+                logger.warning("Failed to parse NameSilo CSV row", row=row_num, error=str(e))
+                continue
+
+        if count == 0:
+            logger.warning(f"No valid NameSilo auctions found. Headers: {reader.fieldnames}. Content Start: '{sample}'")
+
+        logger.info("Parsed NameSilo CSV streaming started")
     
     def parse_generic_csv(self, content: Any, auction_site: str, is_handle: bool = False) -> Iterator[AuctionInput]:
         """
