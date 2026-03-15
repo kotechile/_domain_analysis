@@ -21,3 +21,6 @@ build/
 .DS_Store
 
 large_test_auctions.csv
+
+# N8N workflows with secrets
+n8n/*.json
