@@ -216,8 +216,8 @@
     },
     {
       "parameters": {
-        "amount": 5,
-        "unit": "minutes"
+        "amount": 30,
+        "unit": "seconds"
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
@@ -226,7 +226,7 @@
         2240
       ],
       "id": "ef135a83-6f0c-44a2-a169-0e62679f2c1d",
-      "name": "Wait 5 Minutes",
+      "name": "Wait 30 Seconds",
       "webhookId": "2cf6de16-ec05-4b38-9ec9-c0d018a90b5f"
     },
     {
