@@ -339,6 +339,16 @@ async def process_csv_upload_async(
                     type_field = auction.source_data.get('Type', '').strip() if auction.source_data else ''
                     record_offer_type = map_namesilo_type_to_offer_type(type_field)
                     namesilo_type_counts[type_field] = namesilo_type_counts.get(type_field, 0) + 1
+                elif auction_site.lower() == 'godaddy':
+                    # Extract auctionType from GoDaddy JSON (BuyNow or Bid)
+                    auction_type = auction.source_data.get('auctionType', '').strip() if auction.source_data else ''
+                    if auction_type.lower() == 'buynow':
+                        record_offer_type = 'buy_now'
+                    elif auction_type.lower() == 'bid':
+                        record_offer_type = 'auction'
+                    # If auctionType not found, fall back to offering_type parameter
+                    if not record_offer_type:
+                        record_offer_type = 'auction'
                 elif not record_offer_type:
                      # Detect from filename for Namecheap
                      if 'buy_now' in filename.lower():
