@@ -355,6 +355,12 @@ async def process_csv_upload_async(
                     # If auctionType not found, fall back to offering_type parameter
                     if not record_offer_type:
                         record_offer_type = 'auction'
+                elif auction_site.lower() == 'namecheap':
+                    # Detect from filename for Namecheap
+                    if 'buy_now' in filename.lower():
+                        record_offer_type = 'buy_now'
+                    else:
+                        record_offer_type = 'auction'
                 elif not record_offer_type:
                      # Detect from filename for Namecheap
                      if 'buy_now' in filename.lower():
