@@ -858,6 +858,9 @@ async def trigger_processing_async(
         )
     )
 
+    # Yield control to ensure the task is scheduled and response is flushed
+    await asyncio.sleep(0)
+
     logger.info("Detached processing triggered",
                filename=request.filename,
                job_id=job_id,

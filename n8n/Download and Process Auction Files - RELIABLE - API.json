@@ -200,7 +200,7 @@
         },
         "options": {
           "allowUnauthorizedCerts": true,
-          "timeout": 10000
+          "timeout": 30000
         }
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -211,7 +211,8 @@
       ],
       "id": "7595de6a-109d-4483-8788-a969c46f1276",
       "name": "Trigger Backend",
-      "retryOnFail": false
+      "retryOnFail": true,
+      "waitBetweenTries": 2000
     },
     {
       "parameters": {
