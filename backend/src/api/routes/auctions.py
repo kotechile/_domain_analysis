@@ -794,17 +794,15 @@ async def process_existing_upload(
 ):
     """
     Trigger processing for a file already uploaded to Supabase Storage.
-    
-    Use this to bypass backend upload limits/timeouts. 
+
+    Use this to bypass backend upload limits/timeouts.
     Upload directly to Supabase Storage from client (e.g. N8N), then call this.
     """
     try:
         job_id = str(uuid.uuid4())
-        
-        # Start background processing directly (job creation is handled in the background task)
-        db = get_database()
-        
-        # Start background processing directly
+
+        # Start background processing immediately - NO database call here to avoid timeouts
+        # The background task will handle database initialization
         background_tasks.add_task(
             process_file_from_storage_async,
             job_id=job_id,
@@ -814,19 +812,20 @@ async def process_existing_upload(
             auction_site=request.auction_site,
             offering_type=request.offering_type
         )
-        
-        logger.info("Triggered processing for existing storage file", 
-                   filename=request.filename, 
+
+        logger.info("Triggered processing for existing storage file",
+                   filename=request.filename,
                    job_id=job_id,
                    storage_path=request.storage_path)
-            
+
+        # Return immediately - the background task runs after response is sent
         return {
             "success": True,
             "message": "Processing started in background.",
             "job_id": job_id,
             "filename": request.filename
         }
-        
+
     except Exception as e:
         logger.error("Failed to trigger storage processing", error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to trigger processing: {str(e)}")
