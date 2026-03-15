@@ -210,13 +210,19 @@ async def process_csv_upload_async(
             if not type_field:
                 return 'auction'
             type_lower = type_field.lower().strip()
-            if 'customer auction' in type_lower:
+            # Explicit mappings for NameSilo Type field values
+            if 'offer/counter' in type_lower or 'offer' in type_lower or 'counter' in type_lower:
+                # Offer/Counter Offer is treated as buy_now
+                return 'buy_now'
+            elif type_lower == 'auction':
+                return 'auction'
+            elif type_lower == 'expired':
+                # Expired domains are classified as auction
+                return 'auction'
+            elif 'customer auction' in type_lower:
                 return 'auction'
             elif 'expired domain auction' in type_lower:
                 return 'auction'
-            elif 'offer' in type_lower or 'counter' in type_lower:
-                # Offer/Counter Offer is treated as buy_now
-                return 'buy_now'
             elif 'backorder' in type_lower:
                 return 'backorder'
             else:
