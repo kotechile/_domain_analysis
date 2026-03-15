@@ -217,12 +217,12 @@ async def process_csv_upload_async(
             elif type_lower == 'auction':
                 return 'auction'
             elif type_lower == 'expired':
-                # Expired domains are classified as auction
-                return 'auction'
+                # Expired domains are classified as backorder
+                return 'backorder'
             elif 'customer auction' in type_lower:
                 return 'auction'
             elif 'expired domain auction' in type_lower:
-                return 'auction'
+                return 'backorder'
             elif 'backorder' in type_lower:
                 return 'backorder'
             else:
