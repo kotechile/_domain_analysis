@@ -351,14 +351,14 @@
       "main": [
         [
           {
-            "node": "Wait 5 Minutes",
+            "node": "Wait 30 Seconds",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wait 5 Minutes": {
+    "Wait 30 Seconds": {
       "main": [
         [
           {
