@@ -831,6 +831,76 @@ async def process_existing_upload(
         raise HTTPException(status_code=500, detail=f"Failed to trigger processing: {str(e)}")
 
 
+@router.post("/auctions/trigger-processing-async")
+async def trigger_processing_async(
+    request: StorageProcessingRequest
+):
+    """
+    Fire-and-forget endpoint to trigger auction file processing.
+
+    This endpoint returns immediately (202 Accepted) and processes the file
+    in a completely detached background task. Use this from N8N or other
+    automation tools to avoid timeouts.
+
+    The processing status can be checked via /auctions/upload-progress/{job_id}
+    """
+    job_id = str(uuid.uuid4())
+
+    # Create detached background task - runs completely independently
+    asyncio.create_task(
+        _process_file_detached(
+            job_id=job_id,
+            bucket=request.bucket,
+            path=request.storage_path,
+            filename=request.filename,
+            auction_site=request.auction_site,
+            offering_type=request.offering_type
+        )
+    )
+
+    logger.info("Detached processing triggered",
+               filename=request.filename,
+               job_id=job_id,
+               storage_path=request.storage_path)
+
+    # Return immediately - 202 Accepted
+    return {
+        "success": True,
+        "message": "Processing started in background.",
+        "job_id": job_id,
+        "filename": request.filename,
+        "status": "accepted"
+    }
+
+
+async def _process_file_detached(
+    job_id: str,
+    bucket: str,
+    path: str,
+    filename: str,
+    auction_site: str,
+    offering_type: Optional[str] = None
+):
+    """
+    Wrapper to run process_file_from_storage_async in a detached task
+    with proper error handling.
+    """
+    try:
+        await process_file_from_storage_async(
+            job_id=job_id,
+            bucket=bucket,
+            path=path,
+            filename=filename,
+            auction_site=auction_site,
+            offering_type=offering_type
+        )
+    except Exception as e:
+        logger.error("Detached processing failed",
+                    job_id=job_id,
+                    error=str(e),
+                    exc_info=True)
+
+
 async def background_handle_upload_and_process(
     job_id: str,
     local_path: str,

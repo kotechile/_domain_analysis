@@ -1,0 +1,394 @@
+{
+  "name": "Download and Process Auction Files - RELIABLE - API Version",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://sbdomain.buildomain.com/rest/v1/rpc/delete_expired_auctions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc3MzUxNzI2MCwiZXhwIjo0OTI5MTkwODYwLCJyb2xlIjoiYW5vbiJ9.zxcfAdU3YO-jb8SOsCSbzBfrf4uD6L-v5v6valikHTE"
+            },
+            {
+              "name": "apikey",
+              "value": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc3MzUxNzI2MCwiZXhwIjo0OTI5MTkwODYwLCJyb2xlIjoiYW5vbiJ9.zxcfAdU3YO-jb8SOsCSbzBfrf4uD6L-v5v6valikHTE"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "id": "20c786f4-ab42-47d5-a21e-7ba7a6cdd047",
+      "name": "Delete Expired Auctions (API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        10896,
+        2240
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n    {\n    json: {\n      url: 'https://www.namesilo.com/auctions/api/search?keyword=&keywordLocation=anywhere&type=all&domainAge=any&reserve=any&digits=any&addedOn=all&format=csv',\n      filename: 'namesilo_export.csv',\n      is_compressed: false,\n      auction_site: 'namesilo'\n    }\n  },\n  {\n    json: {\n      url: 'https://inventory.auctions.godaddy.com/all_listings_ending_tomorrow.json.zip',\n      filename: 'godaddy_tomorrow.json',\n      is_compressed: true,\n      auction_site: 'godaddy'\n    }\n  },\n  {\n    json: {\n      url: 'https://inventory.auctions.godaddy.com/all_listings_ending_today.json.zip',\n      filename: 'godaddy_today.json',\n      is_compressed: true,\n      auction_site: 'godaddy'\n    }\n  },\n  {\n    json: {\n      url: 'https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales.csv',\n      filename: 'Namecheap_Market_Sales.csv',\n      is_compressed: false,\n      auction_site: 'namecheap'\n    }\n  },\n  {\n    json: {\n      url: 'https://d3ry1h4w5036x1.cloudfront.net/reports/Namecheap_Market_Sales_Buy_Now.csv',\n      filename: 'Namecheap_Market_Sales_Buy_Now.csv',\n      is_compressed: false,\n      auction_site: 'namecheap',\n      offering_type: 'buy_now'\n    }\n  }\n\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        11088,
+        2240
+      ],
+      "id": "5f6a1f28-3e6a-484e-b9ae-73f1cf245e68",
+      "name": "Define Files"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [
+        11312,
+        2240
+      ],
+      "id": "8fbf02d9-c2a1-4cf3-876f-c309bc13eba3",
+      "name": "Process One By One"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        11504,
+        2240
+      ],
+      "id": "42b19e8b-9327-4476-8865-2f951a34445c",
+      "name": "Download File"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.is_compressed }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        11712,
+        2240
+      ],
+      "id": "4de71015-e54f-4123-9064-13958ebd7cff",
+      "name": "Check Compression"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.compression",
+      "typeVersion": 1.1,
+      "position": [
+        11904,
+        2112
+      ],
+      "id": "139d1e15-5fd7-40cb-924b-34c7b4f7de50",
+      "name": "Decompress"
+    },
+    {
+      "parameters": {
+        "jsCode": "return $input.all().map(item => {\n    let filename = item.json.filename;\n    if (!filename) {\n        try {\n          filename = $('Process One By One').first().json.filename;\n          item.json.filename = filename;\n        } catch (e) { }\n    }\n    if (item.binary) {\n        const keys = Object.keys(item.binary);\n        if (keys.length > 0) {\n            if (!item.binary.data) {\n                item.binary.data = item.binary[keys[0]];\n            }\n            if (filename) {\n                item.binary.data.fileName = filename;\n                const ext = filename.split('.').pop();\n                if (ext) item.binary.data.fileExtension = ext;\n            }\n            if (!item.binary.data.mimeType || item.binary.data.mimeType === 'application/json') {\n                 if (filename && filename.endsWith('.csv')) {\n                     item.binary.data.mimeType = 'text/csv';\n                 } else if (filename && filename.endsWith('.json')) {\n                     item.binary.data.mimeType = 'application/json';\n                 } else {\n                     item.binary.data.mimeType = 'application/octet-stream';\n                 }\n            }\n        }\n    }\n    return item;\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        12112,
+        2240
+      ],
+      "id": "bf68caa3-cc90-4569-9e8d-22615540b345",
+      "name": "Standardize Binary"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://sbdomain.buildomain.com/storage/v1/object/auction-csvs/' + $('Process One By One').first().json.filename }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc3MzUxNzI2MCwiZXhwIjo0OTI5MTkwODYwLCJyb2xlIjoiYW5vbiJ9.zxcfAdU3YO-jb8SOsCSbzBfrf4uD6L-v5v6valikHTE"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            },
+            {
+              "name": "Content-Type",
+              "value": "={{ $binary.data.mimeType }}"
+            },
+            {
+              "name": "apikey",
+              "value": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc3MzUxNzI2MCwiZXhwIjo0OTI5MTkwODYwLCJyb2xlIjoiYW5vbiJ9.zxcfAdU3YO-jb8SOsCSbzBfrf4uD6L-v5v6valikHTE"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        12304,
+        2240
+      ],
+      "id": "b9187238-c6c6-477e-a2e5-eba228be8ce7",
+      "name": "Upload to Supabase",
+      "credentials": {
+        "supabaseApi": {
+          "id": "0OY7oWL8Qf1ctaxQ",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://scout.buildomain.com/api/v1/auctions/trigger-processing-async",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "storage_path",
+              "value": "={{ $('Process One By One').first().json.filename }}"
+            },
+            {
+              "name": "filename",
+              "value": "={{ $('Process One By One').first().json.filename }}"
+            },
+            {
+              "name": "auction_site",
+              "value": "={{ $('Process One By One').first().json.auction_site }}"
+            },
+            {
+              "name": "offering_type",
+              "value": "={{ $('Process One By One').first().json.offering_type || 'auction' }}"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        12512,
+        2240
+      ],
+      "id": "7595de6a-109d-4483-8788-a969c46f1276",
+      "name": "Trigger Backend",
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        12704,
+        2240
+      ],
+      "id": "ef135a83-6f0c-44a2-a169-0e62679f2c1d",
+      "name": "Wait 5 Minutes",
+      "webhookId": "2cf6de16-ec05-4b38-9ec9-c0d018a90b5f"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "50 16 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        10688,
+        2240
+      ],
+      "id": "4dfe41c5-93ec-4c32-b49f-54dbf00ad417",
+      "name": "Daily Schedule (18:45 PM)"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Delete Expired Auctions (API)": {
+      "main": [
+        [
+          {
+            "node": "Define Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define Files": {
+      "main": [
+        [
+          {
+            "node": "Process One By One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process One By One": {
+      "main": [
+        [
+          {
+            "node": "Download File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download File": {
+      "main": [
+        [
+          {
+            "node": "Check Compression",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Compression": {
+      "main": [
+        [
+          {
+            "node": "Decompress",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Standardize Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decompress": {
+      "main": [
+        [
+          {
+            "node": "Standardize Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standardize Binary": {
+      "main": [
+        [
+          {
+            "node": "Upload to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Trigger Backend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Backend": {
+      "main": [
+        [
+          {
+            "node": "Wait 5 Minutes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Process One By One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Schedule (18:45 PM)": {
+      "main": [
+        [
+          {
+            "node": "Delete Expired Auctions (API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2319f343-29ec-4f23-ad58-767fe1b46da8",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8ed9ed81fad64d2f2e539654b7152113b5201cf79b5e9548649591c372302289"
+  },
+  "id": "hM8ssCvxLrMb1tsa",
+  "tags": []
+}
