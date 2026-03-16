@@ -532,8 +532,16 @@ async def process_json_upload_async(
             try:
                 auction = auction_input.to_auction()
                 
-                # Use the offering_type from parameter
+                # Determine offer_type
                 record_offer_type = offering_type or 'auction'
+
+                # For GoDaddy, check auctionType from source_data
+                if auction_site.lower() == 'godaddy' and auction.source_data:
+                    auction_type = auction.source_data.get('auctionType', '').strip()
+                    if auction_type.lower() == 'buynow':
+                        record_offer_type = 'buy_now'
+                    elif auction_type.lower() == 'bid':
+                        record_offer_type = 'auction'
                 
                 # Convert to NamecheapDomain for scoring
                 source_data = auction.source_data or {}
