@@ -44,10 +44,10 @@ export class HeaderComponent {
     if (user) {
       // Try to get name from user metadata, fallback to email
       const metadata = user.user_metadata;
-      if (metadata?.full_name) {
-        return metadata.full_name;
-      } else if (metadata?.name) {
-        return metadata.name;
+      if (metadata?.['full_name']) {
+        return metadata['full_name'];
+      } else if (metadata?.['name']) {
+        return metadata['name'];
       } else if (user.email) {
         return user.email.split('@')[0];
       }
@@ -59,7 +59,7 @@ export class HeaderComponent {
     const user = this.supabase.user();
     if (user) {
       const metadata = user.user_metadata;
-      const fullName = metadata?.full_name || metadata?.name || '';
+      const fullName = metadata?.['full_name'] || metadata?.['name'] || '';
       if (fullName) {
         const parts = fullName.split(' ');
         if (parts.length >= 2) {

@@ -122,6 +122,7 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnDestroy {
             callbacks: {
               label: (context) => {
                 const value = context.parsed.y;
+                if (value == null) return 'Traffic: N/A';
                 return `Traffic: ${value.toLocaleString()}`;
               },
             },
@@ -134,8 +135,7 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnDestroy {
               display: false,
             },
             ticks: {
-              color: 'var(--text-color)',
-              opacity: 0.5,
+              color: 'rgba(128, 128, 128, 0.5)',
               maxTicksLimit: 12,
               maxRotation: 0,
               font: {
@@ -146,12 +146,10 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnDestroy {
           y: {
             display: true,
             grid: {
-              color: 'var(--border-color)',
-              opacity: 0.1,
+              color: 'rgba(128, 128, 128, 0.1)',
             },
             ticks: {
-              color: 'var(--text-color)',
-              opacity: 0.5,
+              color: 'rgba(128, 128, 128, 0.5)',
               font: {
                 size: 10,
               },
