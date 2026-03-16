@@ -204,14 +204,15 @@ class DataForSEOService:
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
-            
+
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 url = f"{credentials['api_url']}/dataforseo_labs/google/historical_rank_overview/live"
-                
-                # Calculate dates (last 4 years)
+
+                # DataForSEO provides data since October 1, 2020 (over 5 years of history)
+                # Use the maximum available date range
                 end_date = datetime.utcnow() - timedelta(days=1)
-                start_date = end_date - timedelta(days=365*4)
-                
+                start_date = datetime(2020, 10, 1)  # October 1, 2020
+
                 post_data = [{
                     "target": domain,
                     "language_name": "English",
@@ -220,26 +221,27 @@ class DataForSEOService:
                     "date_to": end_date.strftime("%Y-%m-%d"),
                     "include_clickstream_data": True
                 }]
-                
-                logger.info("Making DataForSEO historical rank overview request", url=url, domain=domain)
+
+                logger.info("Making DataForSEO historical rank overview request", url=url, domain=domain, date_from=start_date.strftime("%Y-%m-%d"), date_to=end_date.strftime("%Y-%m-%d"))
                 response = await client.post(
                     url,
                     auth=(credentials['login'], credentials['password']),
                     json=post_data
                 )
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     if data.get("status_code") == 20000 and data.get("tasks"):
                         result = data["tasks"][0].get("result", [])
                         if result and result[0].get("items"):
-                            logger.info("DataForSEO historical rank overview retrieved successfully", domain=domain)
+                            items_count = len(result[0].get("items", []))
+                            logger.info("DataForSEO historical rank overview retrieved successfully", domain=domain, items_count=items_count)
                             return result[0]
-                
-                logger.warning("DataForSEO historical rank overview request failed", 
+
+                logger.warning("DataForSEO historical rank overview request failed",
                              domain=domain, status=response.status_code)
                 return None
-                
+
         except Exception as e:
             logger.error("Failed to get DataForSEO historical rank overview", domain=domain, error=str(e))
             return None
@@ -251,14 +253,14 @@ class DataForSEOService:
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
-            
+
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 url = f"{credentials['api_url']}/traffic_analytics/history/live"
-                
-                # Calculate dates (last 2 years approx for traffic analytics often differs in availability but usage is similar)
+
+                # DataForSEO provides data since October 1, 2020 (over 5 years of history)
                 end_date = datetime.utcnow()
-                start_date = end_date - timedelta(days=365*2)
-                
+                start_date = datetime(2020, 10, 1)  # October 1, 2020
+
                 post_data = [{
                     "target": domain,
                     "language_name": "English",
@@ -266,26 +268,27 @@ class DataForSEOService:
                     "date_from": start_date.strftime("%Y-%m-%d"),
                     "date_to": end_date.strftime("%Y-%m-%d")
                 }]
-                
-                logger.info("Making DataForSEO traffic analytics history request", url=url, domain=domain)
+
+                logger.info("Making DataForSEO traffic analytics history request", url=url, domain=domain, date_from=start_date.strftime("%Y-%m-%d"), date_to=end_date.strftime("%Y-%m-%d"))
                 response = await client.post(
                     url,
                     auth=(credentials['login'], credentials['password']),
                     json=post_data
                 )
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     if data.get("status_code") == 20000 and data.get("tasks"):
                         result = data["tasks"][0].get("result", [])
                         if result and result[0].get("items"):
-                            logger.info("DataForSEO traffic analytics history retrieved successfully", domain=domain)
+                            items_count = len(result[0].get("items", []))
+                            logger.info("DataForSEO traffic analytics history retrieved successfully", domain=domain, items_count=items_count)
                             return result[0]
-                
-                logger.warning("DataForSEO traffic analytics history request failed", 
+
+                logger.warning("DataForSEO traffic analytics history request failed",
                              domain=domain, status=response.status_code)
                 return None
-                
+
         except Exception as e:
             logger.error("Failed to get DataForSEO traffic analytics history", domain=domain, error=str(e))
             return None

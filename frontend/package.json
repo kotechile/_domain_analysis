@@ -22,6 +22,7 @@
     "@angular/router": "^21.2.0",
     "@supabase/supabase-js": "^2.99.0",
     "axios": "^1.13.6",
+    "chart.js": "^4.5.1",
     "lucide-angular": "^0.577.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",

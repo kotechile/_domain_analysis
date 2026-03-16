@@ -1,15 +1,16 @@
-import { Component, inject, signal, computed, effect, OnDestroy, OnInit } from '@angular/core';
+import { Component, inject, signal, computed, effect, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule, TitleCasePipe, DatePipe, DecimalPipe } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../services/api';
-import { LucideAngularModule, ArrowLeft, RefreshCw, Download, Sparkles, TrendingUp, History, ShieldCheck, Globe, Zap, AlertTriangle, CheckCircle, Search, Info, Flag, Target, Lightbulb } from 'lucide-angular';
+import { LucideAngularModule, ArrowLeft, RefreshCw, Download, Sparkles, TrendingUp, History, ShieldCheck, Globe, Zap, AlertTriangle, CheckCircle, Search, Info, Flag, Target, Lightbulb, BarChart3 } from 'lucide-angular';
 import { firstValueFrom, interval, Subscription, startWith, switchMap, takeWhile } from 'rxjs';
 import { DomainAnalysisReport } from '../../models/domain.model';
+import { TrafficChartComponent } from '../../components/traffic-chart/traffic-chart';
 
 @Component({
     selector: 'app-report-detail',
     standalone: true,
-    imports: [CommonModule, RouterLink, LucideAngularModule, TitleCasePipe, DatePipe, DecimalPipe],
+    imports: [CommonModule, RouterLink, LucideAngularModule, TitleCasePipe, DatePipe, DecimalPipe, TrafficChartComponent],
     templateUrl: './report-detail.html',
     styles: [`
     .report-card {
@@ -62,6 +63,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     readonly Flag = Flag;
     readonly Target = Target;
     readonly Lightbulb = Lightbulb;
+    readonly BarChart3 = BarChart3;
 
     // State
     domain = signal<string | null>(null);
@@ -161,5 +163,21 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     // Formatting helpers
     formatNumber(val: number | undefined): string {
         return val ? val.toLocaleString() : '0';
+    }
+
+    // Traffic chart helpers
+    getLatestTraffic(): number {
+        const traffic = this.report()?.historical_data?.rank_overview?.organic_traffic;
+        if (!traffic?.length) return 0;
+        const sorted = [...traffic].sort((a, b) =>
+            new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+        return sorted[0]?.value || 0;
+    }
+
+    getPeakTraffic(): number {
+        const traffic = this.report()?.historical_data?.rank_overview?.organic_traffic;
+        if (!traffic?.length) return 0;
+        return Math.max(...traffic.map(t => t.value));
     }
 }
