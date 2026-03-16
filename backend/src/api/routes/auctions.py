@@ -811,8 +811,7 @@ class StorageProcessingRequest(BaseModel):
 
 @router.post("/auctions/process-existing-upload")
 async def process_existing_upload(
-    request: StorageProcessingRequest,
-    background_tasks: BackgroundTasks
+    request: StorageProcessingRequest
 ):
     """
     Trigger processing for a file already uploaded to Supabase Storage.
@@ -823,16 +822,17 @@ async def process_existing_upload(
     try:
         job_id = str(uuid.uuid4())
 
-        # Start background processing immediately - NO database call here to avoid timeouts
-        # The background task will handle database initialization
-        background_tasks.add_task(
-            process_file_from_storage_async,
-            job_id=job_id,
-            bucket=request.bucket,
-            path=request.storage_path,
-            filename=request.filename,
-            auction_site=request.auction_site,
-            offering_type=request.offering_type
+        # Start background processing using asyncio.create_task (proper for async functions)
+        # BackgroundTasks.add_task is for sync functions only and can swallow exceptions
+        asyncio.create_task(
+            process_file_from_storage_async(
+                job_id=job_id,
+                bucket=request.bucket,
+                path=request.storage_path,
+                filename=request.filename,
+                auction_site=request.auction_site,
+                offering_type=request.offering_type
+            )
         )
 
         logger.info("Triggered processing for existing storage file",
@@ -1436,12 +1436,11 @@ async def process_from_storage(
     path: str = Body(..., description="File path in storage"),
     auction_site: str = Body(..., description="Auction site source"),
     offering_type: Optional[str] = Body(None, description="Type of domain offering"),
-    filename: Optional[str] = Body(None, description="Original filename"),
-    background_tasks: BackgroundTasks = BackgroundTasks()
+    filename: Optional[str] = Body(None, description="Original filename")
 ):
     """
     Process auction file from Supabase storage
-    
+
     Returns immediately and processes the file in the background to avoid ngrok timeouts.
     Downloads the file from storage and processes it (CSV or JSON)
     """
@@ -1450,30 +1449,28 @@ async def process_from_storage(
         file_path = filename or path
         is_json = file_path.lower().endswith('.json')
         is_csv = file_path.lower().endswith('.csv')
-        
+
         if not (is_json or is_csv):
             raise HTTPException(status_code=400, detail="File must be CSV or JSON")
-        
+
         # Generate unique job ID
         job_id = str(uuid.uuid4())
-        
-        # Create job in background to return immediately
-        # db = get_database() call removed from here to avoid connection wait
 
-        
-        # Start background task to download and process file
-        background_tasks.add_task(
-            process_file_from_storage_async,
-            job_id=job_id,
-            bucket=bucket,
-            path=path,
-            filename=file_path,
-            auction_site=auction_site,
-            offering_type=offering_type
+        # Start background task using asyncio.create_task (proper for async functions)
+        # BackgroundTasks.add_task is for sync functions only and can swallow exceptions
+        asyncio.create_task(
+            process_file_from_storage_async(
+                job_id=job_id,
+                bucket=bucket,
+                path=path,
+                filename=file_path,
+                auction_site=auction_site,
+                offering_type=offering_type
+            )
         )
-        
+
         logger.info("File processing started in background", job_id=job_id, bucket=bucket, path=path)
-        
+
         return {
             "success": True,
             "job_id": job_id,
@@ -1483,13 +1480,13 @@ async def process_from_storage(
             "bucket": bucket,
             "path": path
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
         error_msg = str(e)
-        logger.error("Failed to initiate file processing from storage", 
-                    bucket=bucket, 
+        logger.error("Failed to initiate file processing from storage",
+                    bucket=bucket,
                     path=path,
                     error=error_msg,
                     exc_info=True)
