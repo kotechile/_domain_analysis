@@ -47,14 +47,25 @@
                 class="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-500 border-2 border-white dark:border-slate-900"></span>
         </button>
 
+        <!-- Logout Button -->
+        <button
+            (click)="logout()"
+            class="p-2.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-xs font-black shadow-sm"
+            style="color: var(--text-color)"
+            title="Sign Out">
+            <i-lucide [name]="LogOut" class="w-5 h-5 opacity-40"></i-lucide>
+        </button>
+
+        <div class="w-px h-6 opacity-10" style="background: var(--text-color)"></div>
+
         <div class="flex items-center space-x-3 group cursor-pointer p-1.5 pr-4 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-all"
             routerLink="/billing">
             <div
                 class="user-avatar w-10 h-10 rounded-2xl flex items-center justify-center font-black text-lg group-hover:scale-110 transition-transform shadow-md">
-                JF
+                {{ getUserInitials() }}
             </div>
             <div class="flex flex-col">
-                <span class="text-xs font-black" style="color: var(--text-color)">Jorge Fernandez</span>
+                <span class="text-xs font-black" style="color: var(--text-color)">{{ getUserName() }}</span>
                 <span class="text-[9px] font-black uppercase tracking-widest" [style.color]="'var(--accent-color)'">
                     {{ creditService.balance() | number }} Credits
                 </span>

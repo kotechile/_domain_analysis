@@ -4,11 +4,14 @@ import { MarketplaceComponent } from './pages/marketplace/marketplace';
 import { ReportDetailComponent } from './pages/report-detail/report-detail';
 import { BillingComponent } from './pages/billing/billing';
 import { ThemeShowcaseComponent } from './components/theme-showcase/theme-showcase';
+import { LoginComponent } from './pages/login/login';
+import { AuthGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
-    { path: '', component: DomainAnalysisComponent },
-    { path: 'marketplace', component: MarketplaceComponent },
-    { path: 'reports/:domain', component: ReportDetailComponent },
-    { path: 'billing', component: BillingComponent },
-    { path: 'themes', component: ThemeShowcaseComponent }
+    { path: 'login', component: LoginComponent },
+    { path: '', component: DomainAnalysisComponent, canActivate: [AuthGuard] },
+    { path: 'marketplace', component: MarketplaceComponent, canActivate: [AuthGuard] },
+    { path: 'reports/:domain', component: ReportDetailComponent, canActivate: [AuthGuard] },
+    { path: 'billing', component: BillingComponent, canActivate: [AuthGuard] },
+    { path: 'themes', component: ThemeShowcaseComponent, canActivate: [AuthGuard] }
 ];

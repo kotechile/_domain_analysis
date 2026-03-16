@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Scout** is a comprehensive domain analysis and investment platform that helps users discover, evaluate, and invest in premium domains. The platform aggregates data from multiple domain marketplaces (GoDaddy, Namecheap, NameSilo), analyzes SEO metrics, backlink profiles, and provides AI-powered investment recommendations.
+**Domain ScoutApp** is a comprehensive domain analysis and investment platform that helps users discover, evaluate, and invest in premium domains. The platform aggregates data from multiple domain marketplaces (GoDaddy, Namecheap, NameSilo), analyzes SEO metrics, backlink profiles, and provides AI-powered investment recommendations.
 
 **Live URL**: https://scout.buildomain.com
 
@@ -18,7 +18,7 @@
 | **Backend** | Python 3.10 + FastAPI + Uvicorn |
 | **Database** | Supabase (PostgreSQL with JSONB) |
 | **Cache** | Redis 7 (Alpine) |
-| **AI/LLM** | Google Gemini API |
+| **AI/LLM** | Default LLM defined as default in supabase table llmproviders (Google Gemini API) |
 | **SEO Data** | DataForSEO API |
 | **Hosting** | Coolify (Docker Compose deployment) |
 | **Proxy** | Traefik (via Coolify) |
@@ -59,7 +59,7 @@ _domain_analysis/
 ### 1. Domain Analysis
 - **Single Domain Analysis**: Enter any domain for comprehensive SEO analysis
 - **Real-time Processing**: Live progress updates during analysis
-- **AI-Powered Insights**: Gemini LLM generates investment recommendations
+- **AI-Powered Insights**: The default LLM in table LLM providers generates investment recommendations
 - **Historical Data**: Wayback Machine integration for domain history
 
 ### 2. Marketplace Aggregation

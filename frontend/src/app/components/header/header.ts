@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ThemeService, ThemeMode } from '../../services/theme';
 import { SupabaseService } from '../../services/supabase';
 import { CreditService } from '../../services/credit';
-import { LucideAngularModule, Moon, Sun, Monitor, Palette, Search, Bell, User } from 'lucide-angular';
+import { LucideAngularModule, Moon, Sun, Monitor, Palette, Search, Bell, User, LogOut } from 'lucide-angular';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 @Component({
@@ -33,6 +33,45 @@ export class HeaderComponent {
   readonly Search = Search;
   readonly Bell = Bell;
   readonly User = User;
+  readonly LogOut = LogOut;
+
+  async logout() {
+    await this.supabase.signOut();
+  }
+
+  getUserName(): string {
+    const user = this.supabase.user();
+    if (user) {
+      // Try to get name from user metadata, fallback to email
+      const metadata = user.user_metadata;
+      if (metadata?.full_name) {
+        return metadata.full_name;
+      } else if (metadata?.name) {
+        return metadata.name;
+      } else if (user.email) {
+        return user.email.split('@')[0];
+      }
+    }
+    return 'User';
+  }
+
+  getUserInitials(): string {
+    const user = this.supabase.user();
+    if (user) {
+      const metadata = user.user_metadata;
+      const fullName = metadata?.full_name || metadata?.name || '';
+      if (fullName) {
+        const parts = fullName.split(' ');
+        if (parts.length >= 2) {
+          return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        }
+        return fullName.substring(0, 2).toUpperCase();
+      } else if (user.email) {
+        return user.email.substring(0, 2).toUpperCase();
+      }
+    }
+    return 'U';
+  }
 
   themes: { mode: ThemeMode; label: string; icon: any }[] = [
     { mode: 'light-modern', label: 'Modern Light', icon: Sun },

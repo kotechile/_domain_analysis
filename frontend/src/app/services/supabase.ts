@@ -49,6 +49,23 @@ export class SupabaseService {
     });
   }
 
+  async signInWithEmail(email: string, password: string) {
+    return await this.supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+  }
+
+  async signUpWithEmail(email: string, password: string) {
+    return await this.supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`
+      }
+    });
+  }
+
   async signOut() {
     await this.supabase.auth.signOut();
   }
