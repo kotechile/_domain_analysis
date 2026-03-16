@@ -680,16 +680,26 @@ class CSVParserService:
                         logger.warning("Skipping listing with empty domainName", index=idx)
                         continue
                     
+                    # Determine if this is a BuyNow or Bid auction
+                    auction_type = listing.get('auctionType', '').strip()
+                    is_buynow = auction_type.lower() == 'buynow'
+
                     # Parse auction end time (expiration_date)
-                    auction_end_time_str = listing.get('auctionEndTime', '')
-                    if not auction_end_time_str:
-                        logger.warning("Skipping listing without auctionEndTime", index=idx, domain=domain_name)
-                        continue
-                    
-                    expiration_date = self._parse_date(auction_end_time_str)
-                    if not expiration_date:
-                        logger.warning("Could not parse auctionEndTime", index=idx, domain=domain_name, date_str=auction_end_time_str)
-                        continue
+                    # For BuyNow offers, use far future date (2099-12-31) since they're available until sold
+                    # For Bid auctions, use the auctionEndTime
+                    if is_buynow:
+                        from datetime import datetime, timezone
+                        expiration_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+                    else:
+                        auction_end_time_str = listing.get('auctionEndTime', '')
+                        if not auction_end_time_str:
+                            logger.warning("Skipping listing without auctionEndTime", index=idx, domain=domain_name)
+                            continue
+
+                        expiration_date = self._parse_date(auction_end_time_str)
+                        if not expiration_date:
+                            logger.warning("Could not parse auctionEndTime", index=idx, domain=domain_name, date_str=auction_end_time_str)
+                            continue
                     
                     # Parse price (current bid)
                     price_str = listing.get('price', '')
