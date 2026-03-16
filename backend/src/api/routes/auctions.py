@@ -72,15 +72,13 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
             break
             
         # 2. Prepare for upsert to main table
-        # 2. Prepare for upsert to main table
-        # Deduplicate records based on domain and auction_site to prevent 
-        # "ON CONFLICT DO UPDATE command cannot affect row a second time" error.
-        unique_records = {} 
+        # Deduplicate records based on domain, auction_site, and expiration_date to match
+        # the database unique constraint and prevent "ON CONFLICT DO UPDATE command cannot
+        # affect row a second time" error.
+        unique_records = {}
         for r in records:
-            # We key by domain + auction_site to be safe. 
-            # If the DB unique constraint is stricter (e.g. includes expiration), this still works.
-            # If the DB unique constraint is looser (e.g. just domain+site), this prevents the error.
-            key = (r.get('domain'), r.get('auction_site'))
+            # Key must match the database unique constraint: domain + auction_site + expiration_date
+            key = (r.get('domain'), r.get('auction_site'), r.get('expiration_date'))
             
             # Extract link from source_data if not present
             link = r.get('link')
