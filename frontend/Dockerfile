@@ -38,6 +38,9 @@ RUN apk add --no-cache curl gettext
 # Copy built app from build stage to nginx serving directory
 COPY --from=build /app/dist/angular-version/browser /usr/share/nginx/html
 
+# Copy env template for runtime substitution
+COPY src/assets/env.template.js /usr/share/nginx/html/assets/
+
 # Copy nginx configuration template
 COPY nginx.conf.template /etc/nginx/conf.d/default.conf.template
 

@@ -1,21 +1,44 @@
 #!/bin/sh
 
 # Entrypoint script for Angular frontend container
-# Substitutes environment variables in nginx config and starts nginx
+# Substitutes environment variables in nginx config and generates runtime env.js
 
-# Set default backend URL if not provided
-# In Coolify, the backend service name is passed as an environment variable
-# Can also use direct IP if needed
+# Set default values if not provided
 if [ -z "$API_BACKEND_URL" ]; then
     echo "WARNING: API_BACKEND_URL not set, using default http://backend:8000"
-    echo "Set this environment variable in Coolify to point to your backend service"
     export API_BACKEND_URL="http://backend:8000"
 fi
 
+# Set default Supabase values
+if [ -z "$REACT_APP_SUPABASE_URL" ]; then
+    echo "WARNING: REACT_APP_SUPABASE_URL not set, using default"
+    export REACT_APP_SUPABASE_URL="https://sbdomain.buildomain.com"
+fi
+
+if [ -z "$REACT_APP_SUPABASE_ANON_KEY" ]; then
+    echo "WARNING: REACT_APP_SUPABASE_ANON_KEY not set"
+    export REACT_APP_SUPABASE_ANON_KEY=""
+fi
+
+if [ -z "$REACT_APP_API_URL" ]; then
+    export REACT_APP_API_URL="/api/v1"
+fi
+
+if [ -z "$REACT_APP_URL" ]; then
+    export REACT_APP_URL="https://scout.buildomain.com"
+fi
+
 echo "Configuring nginx with backend URL: $API_BACKEND_URL"
+echo "Supabase URL: $REACT_APP_SUPABASE_URL"
 
 # Substitute environment variables in nginx config
 envsubst '$API_BACKEND_URL' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf
+
+# Generate runtime environment config for Angular
+# This allows the frontend to read env vars at runtime
+envsubst < /usr/share/nginx/html/assets/env.template.js > /usr/share/nginx/html/assets/env.js
+
+echo "Generated runtime environment config"
 
 # For Docker environments where backend may not resolve at startup,
 # we skip the config test because nginx will fail if the upstream doesn't resolve.
