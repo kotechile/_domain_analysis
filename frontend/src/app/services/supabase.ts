@@ -2,13 +2,16 @@ import { Injectable, signal } from '@angular/core';
 import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
 import { environment } from '../../environments/environment';
 
-// Custom lock implementation that bypasses Navigator LockManager
-const customLock = {
-  acquire: async (name: string, timeout: number = 0): Promise<() => void> => {
-    // Immediately return a dummy release function
-    // This bypasses the Navigator LockManager entirely
-    return () => {};
-  }
+// Custom lock function that bypasses Navigator LockManager
+// Supabase expects: lock(name: string, timeout: number, callback: () => Promise<T>): Promise<T>
+const customLock = async <T>(
+  name: string,
+  timeout: number,
+  callback: () => Promise<T>
+): Promise<T> => {
+  // Immediately execute the callback without actual locking
+  // This bypasses the Navigator LockManager entirely
+  return await callback();
 };
 
 @Injectable({
@@ -31,7 +34,7 @@ export class SupabaseService {
         // Use a fresh storage key to ignore old "stuck" locks
         storageKey: 'scout-dna-v1',
         // Use custom lock to bypass Navigator LockManager
-        lock: customLock as any
+        lock: customLock
       }
     });
 
