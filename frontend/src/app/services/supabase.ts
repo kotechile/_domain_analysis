@@ -20,16 +20,9 @@ export class SupabaseService {
         autoRefreshToken: true,
         detectSessionInUrl: true,
         // Use a fresh storage key to ignore old "stuck" locks
-        storageKey: 'scout-dna-v1',
-        // Bypass the failing Navigator LockManager
-        lock: {
-          acquire: async () => {
-            // Return a dummy release function immediately
-            return () => {};
-          }
-        }
+        storageKey: 'scout-dna-v1'
       }
-    });
+    } as any);
 
     // Initialize session and set up listener
     this.initSession();
