@@ -156,16 +156,8 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
       left: 0;
       width: 100%;
       height: 100%;
-      background: linear-gradient(-45deg, #1e1b4b, #312e81, #4c1d95, #1e1b4b);
-      background-size: 400% 400%;
-      animation: gradientShift 15s ease infinite;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 50%, #dee2e6 100%);
       z-index: -1;
-    }
-
-    @keyframes gradientShift {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
     }
 
     /* Glass Card */
@@ -173,10 +165,10 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
       width: 100%;
       max-width: 420px;
       padding: 2.5rem;
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.7);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.8);
       border-radius: 24px;
       box-shadow:
         0 8px 32px rgba(0, 0, 0, 0.3),
@@ -222,14 +214,14 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
     .logo-title {
       font-size: 1.75rem;
       font-weight: 700;
-      color: white;
+      color: #1f2937;
       margin-bottom: 0.5rem;
       letter-spacing: -0.02em;
     }
 
     .logo-subtitle {
       font-size: 0.875rem;
-      color: rgba(255, 255, 255, 0.6);
+      color: #6b7280;
       line-height: 1.5;
     }
 
@@ -237,10 +229,10 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
     .error-message {
       padding: 0.875rem 1rem;
       margin-bottom: 1rem;
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
       border-radius: 12px;
-      color: #fca5a5;
+      color: #dc2626;
       font-size: 0.875rem;
       text-align: center;
     }
@@ -248,10 +240,10 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
     .success-message {
       padding: 0.875rem 1rem;
       margin-bottom: 1rem;
-      background: rgba(34, 197, 94, 0.15);
-      border: 1px solid rgba(34, 197, 94, 0.3);
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.2);
       border-radius: 12px;
-      color: #86efac;
+      color: #16a34a;
       font-size: 0.875rem;
       text-align: center;
     }
@@ -295,7 +287,7 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
       display: flex;
       align-items: center;
       margin: 1.5rem 0;
-      color: rgba(255, 255, 255, 0.4);
+      color: #9ca3af;
       font-size: 0.875rem;
     }
 
@@ -304,7 +296,7 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
       content: '';
       flex: 1;
       height: 1px;
-      background: rgba(255, 255, 255, 0.2);
+      background: rgba(0, 0, 0, 0.1);
     }
 
     .divider span {
@@ -335,7 +327,7 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
       left: 1rem;
       width: 20px;
       height: 20px;
-      color: rgba(255, 255, 255, 0.5);
+      color: #9ca3af;
       pointer-events: none;
       z-index: 1;
     }
@@ -343,19 +335,19 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
     .form-input {
       width: 100%;
       padding: 1rem 1rem 1rem 3rem;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid rgba(0, 0, 0, 0.1);
       border-radius: 12px;
-      color: white;
+      color: #1f2937;
       font-size: 0.9375rem;
       transition: all 0.3s ease;
     }
 
     .form-input:focus {
       outline: none;
-      border-color: rgba(99, 102, 241, 0.8);
-      background: rgba(255, 255, 255, 0.12);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+      border-color: #6366f1;
+      background: rgba(255, 255, 255, 1);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
     }
 
     .form-input.error {
@@ -372,7 +364,7 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
       left: 3rem;
       top: 50%;
       transform: translateY(-50%);
-      color: rgba(255, 255, 255, 0.5);
+      color: #9ca3af;
       font-size: 0.9375rem;
       pointer-events: none;
       transition: all 0.3s ease;
@@ -383,13 +375,13 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
       top: 0;
       left: 0.75rem;
       transform: translateY(-50%) scale(0.85);
-      background: rgba(30, 27, 75, 0.8);
+      background: rgba(255, 255, 255, 0.9);
       padding: 0 0.5rem;
-      color: rgba(255, 255, 255, 0.8);
+      color: #4b5563;
     }
 
     .form-input:focus ~ .floating-label {
-      color: #818cf8;
+      color: #6366f1;
     }
 
     /* Toggle Password */
@@ -408,17 +400,17 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
     .toggle-icon {
       width: 20px;
       height: 20px;
-      color: rgba(255, 255, 255, 0.5);
+      color: #9ca3af;
       transition: color 0.3s ease;
     }
 
     .toggle-password:hover .toggle-icon {
-      color: rgba(255, 255, 255, 0.8);
+      color: #6b7280;
     }
 
     .error-text {
       font-size: 0.75rem;
-      color: #fca5a5;
+      color: #dc2626;
       margin-left: 0.5rem;
     }
 
@@ -482,18 +474,18 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
       text-align: center;
       margin-top: 1.5rem;
       padding-top: 1.5rem;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      border-top: 1px solid rgba(0, 0, 0, 0.1);
     }
 
     .toggle-section p {
-      color: rgba(255, 255, 255, 0.6);
+      color: #6b7280;
       font-size: 0.875rem;
     }
 
     .toggle-btn {
       background: none;
       border: none;
-      color: #818cf8;
+      color: #6366f1;
       font-weight: 600;
       cursor: pointer;
       margin-left: 0.25rem;
@@ -501,7 +493,7 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
     }
 
     .toggle-btn:hover {
-      color: #a5b4fc;
+      color: #4f46e5;
       text-decoration: underline;
     }
 
@@ -510,18 +502,18 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
       text-align: center;
       margin-top: 1.5rem;
       font-size: 0.75rem;
-      color: rgba(255, 255, 255, 0.4);
+      color: #9ca3af;
       line-height: 1.5;
     }
 
     .terms-text a {
-      color: rgba(255, 255, 255, 0.6);
+      color: #6b7280;
       text-decoration: none;
       transition: color 0.3s ease;
     }
 
     .terms-text a:hover {
-      color: #818cf8;
+      color: #6366f1;
     }
 
     /* Responsive */
