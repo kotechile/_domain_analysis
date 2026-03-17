@@ -4,7 +4,7 @@ import { ThemeService, ThemeMode } from '../../services/theme';
 import { SupabaseService } from '../../services/supabase';
 import { CreditService } from '../../services/credit';
 import { LucideAngularModule, Moon, Sun, Monitor, Palette, Search, Bell, User, LogOut } from 'lucide-angular';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { RouterLink, RouterLinkActive, Router } from '@angular/router';
 
 @Component({
   selector: 'app-header',
@@ -26,6 +26,7 @@ export class HeaderComponent {
   themeService = inject(ThemeService);
   supabase = inject(SupabaseService);
   creditService = inject(CreditService);
+  router = inject(Router);
 
   readonly Sun = Sun;
   readonly Moon = Moon;
@@ -37,6 +38,7 @@ export class HeaderComponent {
 
   async logout() {
     await this.supabase.signOut();
+    this.router.navigate(['/login']);
   }
 
   getUserName(): string {

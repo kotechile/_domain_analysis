@@ -222,9 +222,9 @@ export class LoginComponent {
   successMessage = signal('');
 
   constructor() {
-    // Redirect if already logged in
+    // Redirect if already logged in (but not if on login page to prevent loops)
     effect(() => {
-      if (this.supabase.user()) {
+      if (this.supabase.user() && this.router.url !== '/login') {
         this.router.navigate(['/']);
       }
     });
