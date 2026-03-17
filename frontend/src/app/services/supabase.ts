@@ -2,32 +2,6 @@ import { Injectable, signal } from '@angular/core';
 import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
 import { environment } from '../../environments/environment';
 
-// Custom storage implementation that avoids LockManager issues
-// while still persisting to localStorage
-const customStorage = {
-  getItem: (key: string): string | null => {
-    try {
-      return localStorage.getItem(key);
-    } catch {
-      return null;
-    }
-  },
-  setItem: (key: string, value: string): void => {
-    try {
-      localStorage.setItem(key, value);
-    } catch {
-      // Ignore storage errors (e.g., quota exceeded)
-    }
-  },
-  removeItem: (key: string): void => {
-    try {
-      localStorage.removeItem(key);
-    } catch {
-      // Ignore storage errors
-    }
-  }
-};
-
 @Injectable({
   providedIn: 'root'
 })
@@ -42,12 +16,18 @@ export class SupabaseService {
   constructor() {
     this.supabase = createClient(environment.supabaseUrl, environment.supabaseAnonKey, {
       auth: {
-        // Use custom storage to avoid LockManager issues
-        storage: customStorage,
-        storageKey: 'sb-auth-token',
-        // Disable auto-refresh to avoid LockManager
+        persistSession: true,
         autoRefreshToken: true,
-        persistSession: true
+        detectSessionInUrl: true,
+        // Use a fresh storage key to ignore old "stuck" locks
+        storageKey: 'scout-dna-v1',
+        // Bypass the failing Navigator LockManager
+        lock: {
+          acquire: async () => {
+            // Return a dummy release function immediately
+            return () => {};
+          }
+        }
       }
     });
 
