@@ -18,7 +18,7 @@ export class SupabaseService {
       auth: {
         // Disable LockManager to prevent "immediately failed" warnings
         // This is safe for single-tab usage; multi-tab sync won't work
-        lock: null,
+        lock: undefined,
         storageKey: 'sb-auth-token'
       }
     });
