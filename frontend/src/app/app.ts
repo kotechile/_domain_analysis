@@ -12,7 +12,21 @@ import { LoginComponent } from './pages/login/login';
   standalone: true,
   imports: [RouterOutlet, HeaderComponent, SidebarComponent, LucideAngularModule, CommonModule, LoginComponent],
   template: `
-    @if (isAuthenticated()) {
+    @if (isLoading()) {
+      <!-- Loading State -->
+      <div class="min-h-screen flex items-center justify-center"
+           style="background: var(--bg-color); color: var(--text-color)">
+        <div class="text-center space-y-4">
+          <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4 animate-pulse"
+               style="background: var(--accent-color)">
+            <span class="text-2xl font-black text-white">S</span>
+          </div>
+          <h1 class="text-xl font-black tracking-tight" style="color: var(--text-color)">
+            Loading...
+          </h1>
+        </div>
+      </div>
+    } @else if (isAuthenticated()) {
       <div class="min-h-screen transition-all duration-500"
            style="background: var(--bg-color); color: var(--text-color)">
 

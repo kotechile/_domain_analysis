@@ -222,12 +222,8 @@ export class LoginComponent {
   successMessage = signal('');
 
   constructor() {
-    // Redirect if already logged in (but not if on login page to prevent loops)
-    effect(() => {
-      if (this.supabase.user() && this.router.url !== '/login') {
-        this.router.navigate(['/']);
-      }
-    });
+    // Auth redirect is handled by AppComponent
+    // This component just handles the login form
   }
 
   setAuthMode(mode: AuthMode) {
