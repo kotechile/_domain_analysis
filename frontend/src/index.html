@@ -8,11 +8,16 @@
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <!-- Runtime environment configuration - generated at container startup -->
   <script src="assets/env.js"></script>
-  <!-- Suppress LockManager warning from Supabase -->
+  <!-- Suppress Supabase warnings (LockManager and clock skew) -->
   <script>
     const originalWarn = console.warn;
     console.warn = function(...args) {
-      if (args[0] && typeof args[0] === 'string' && args[0].includes('LockManager')) return;
+      if (args[0] && typeof args[0] === 'string') {
+        // Suppress LockManager and clock skew warnings
+        if (args[0].includes('LockManager') ||
+            args[0].includes('issued in the future') ||
+            args[0].includes('Check the device clock')) return;
+      }
       originalWarn.apply(console, args);
     };
   </script>
