@@ -2,8 +2,7 @@
 Database service for Supabase integration
 """
 
-from supabase.aio.client import create_client, AsyncClient
-from supabase.lib.client_options import ClientOptions
+from supabase import create_async_client as create_client, AsyncClient, ClientOptions
 from typing import Optional, Dict, Any, List
 import structlog
 import re
@@ -71,10 +70,10 @@ class DatabaseService:
             if not verify_ssl:
                 # This is a bit of a hack but necessary for self-hosted instances with self-signed certs
                 # if the supabase library doesn't expose a direct way to pass 'verify' to the underlying httpx client
-                if hasattr(self.client, 'postgrest') and hasattr(await (await self._get_client()).postgrest, 'session'):
-                    (await self._get_client()).postgrest.session.verify = False
-                if hasattr(self.client, 'realtime') and hasattr((await self._get_client()).realtime, 'session'):
-                    (await self._get_client()).realtime.session.verify = False
+                if hasattr(self.client, 'postgrest') and hasattr(self.client.postgrest, 'session'):
+                    self.client.postgrest.session.verify = False
+                if hasattr(self.client, 'realtime') and hasattr(self.client.realtime, 'session'):
+                    self.client.realtime.session.verify = False
 
             logger.info("Supabase Async client initialized successfully")
             return self.client
