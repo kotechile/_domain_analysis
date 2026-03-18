@@ -7,7 +7,7 @@ import { LucideAngularModule, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, E
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { CreditService } from '../../services/credit';
 import { firstValueFrom, interval, Subscription } from 'rxjs';
-import { switchMap, takeWhile } from 'rxjs/operators';
+import { switchMap, takeWhile, take } from 'rxjs/operators';
 import { Auction } from '../../models/domain.model';
 
 @Component({
