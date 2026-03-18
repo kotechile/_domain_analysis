@@ -130,7 +130,7 @@ async def list_reports(
         db = get_database()
         
         # Build query - only select necessary fields to improve performance (avoid fetching heavy JSONB fields like historical_data)
-        query = db.client.table('reports').select(
+        query = (await db._get_client()).table('reports').select(
             'id, domain_name, status, analysis_timestamp, processing_time_seconds, error_message, analysis_phase, analysis_mode, data_for_seo_metrics, detailed_data_available, created_at'
         )
         
@@ -141,7 +141,7 @@ async def list_reports(
         query = query.order('created_at', desc=True).range(offset, offset + limit - 1)
         
         try:
-            result = query.execute()
+            result = await query.execute()
         except Exception as query_error:
             logger.error("Database query failed in list_reports", error=str(query_error))
             raise HTTPException(status_code=500, detail="Failed to query reports from database")

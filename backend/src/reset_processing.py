@@ -16,7 +16,7 @@ async def reset_processing():
     print("--- 1. Clearing Auctions Staging Table ---")
     try:
         # Delete all records from staging
-        res = db.client.table('auctions_staging').delete().neq('domain', 'forcing-delete-all').execute()
+        res = (await db._get_client()).table('auctions_staging').delete().neq('domain', 'forcing-delete-all').execute()
         print(f"Cleared staging table.")
     except Exception as e:
         print(f"Error clearing staging: {e}")
@@ -24,14 +24,14 @@ async def reset_processing():
     print("\n--- 2. Resetting Stuck Jobs in csv_upload_progress ---")
     try:
         # Find all non-completed, non-failed jobs
-        res = db.client.table('csv_upload_progress').select('job_id, status').not_.in_('status', ['completed', 'failed']).execute()
+        res = (await db._get_client()).table('csv_upload_progress').select('job_id, status').not_.in_('status', ['completed', 'failed']).execute()
         if res.data:
             print(f"Found {len(res.data)} stuck jobs. Marking as failed...")
             for job in res.data:
-                db.client.table('csv_upload_progress').update({
+                (await db._get_client()).table('csv_upload_progress').update({
                     'status': 'failed',
                     'error_message': 'Reset manually by admin to resolve interference.'
-                }).eq('job_id', job['job_id']).execute()
+                await }).eq('job_id', job['job_id']).execute()
                 print(f"Marked Job {job['job_id']} as failed.")
         else:
             print("No stuck jobs found.")
@@ -42,7 +42,7 @@ async def reset_processing():
     try:
         sites = ['godaddy', 'namecheap', 'namesilo']
         for site in sites:
-            res = db.client.table('auctions').select('domain', count='exact').eq('auction_site', site).execute()
+            res = (await db._get_client()).table('auctions').select('domain', count='exact').eq('auction_site', site).execute()
             print(f"Site: {site}, Count: {res.count}")
     except Exception as e:
         print(f"Error checking auctions: {e}")

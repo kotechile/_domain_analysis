@@ -44,13 +44,13 @@ class AuctionScoringService:
                 raise Exception("Supabase client not available")
             
             # Call the optimized PostgreSQL function
-            result = self.db_service.client.rpc(
+            result = (await self.db_service._get_client()).rpc(
                 'filter_and_pre_score_auctions',
                 {
                     'p_batch_limit': batch_size,
                     'p_config_id': config_id
                 }
-            ).execute()
+            await ).execute()
             
             if result.data:
                 logger.info("Fetched unprocessed batch", count=len(result.data), batch_size=batch_size)
@@ -257,10 +257,10 @@ class AuctionScoringService:
                 }
             
             # Call bulk update function
-            result = self.db_service.client.rpc(
+            result = (await self.db_service._get_client()).rpc(
                 'bulk_update_auction_scores',
                 {'p_scores': scores_jsonb}
-            ).execute()
+            await ).execute()
             
             if result.data and 'updated_count' in result.data:
                 updated_count = result.data['updated_count']
@@ -292,10 +292,10 @@ class AuctionScoringService:
             if use_chunked:
                 try:
                     logger.info("Attempting chunked ranking recalculation")
-                    result = self.db_service.client.rpc(
+                    result = (await self.db_service._get_client()).rpc(
                         'recalculate_auction_rankings_chunked',
                         {'p_batch_size': 50000}
-                    ).execute()
+                    await ).execute()
                     
                     if result.data and result.data.get('success'):
                         logger.info("Chunked ranking recalculation successful", result=result.data)
@@ -311,7 +311,7 @@ class AuctionScoringService:
             
             # Fallback to standard approach
             logger.info("Using standard ranking recalculation")
-            result = self.db_service.client.rpc('recalculate_auction_rankings').execute()
+            result = (await self.db_service._get_client()).rpc('recalculate_auction_rankings').execute()
             
             if result.data:
                 logger.info("Recalculated rankings", result=result.data)
@@ -431,31 +431,31 @@ class AuctionScoringService:
             
             # Query unprocessed count
             unprocessed_result = (
-                self.db_service.client.table('auctions')
+                (await self.db_service._get_client()).table('auctions')
                 .select('id', count='exact')
                 .eq('processed', False)
-                .execute()
+                await .execute()
             )
             
             unprocessed_count = unprocessed_result.count if hasattr(unprocessed_result, 'count') else 0
             
             # Query processed count
             processed_result = (
-                self.db_service.client.table('auctions')
+                (await self.db_service._get_client()).table('auctions')
                 .select('id', count='exact')
                 .eq('processed', True)
-                .execute()
+                await .execute()
             )
             
             processed_count = processed_result.count if hasattr(processed_result, 'count') else 0
             
             # Query scored count (processed with non-null score)
             scored_result = (
-                self.db_service.client.table('auctions')
+                (await self.db_service._get_client()).table('auctions')
                 .select('id', count='exact')
                 .eq('processed', True)
                 .not_.is_('score', 'null')
-                .execute()
+                await .execute()
             )
             
             scored_count = scored_result.count if hasattr(scored_result, 'count') else 0

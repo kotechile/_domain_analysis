@@ -40,7 +40,7 @@ class SecretsService:
                 return self._cache[service_name]
             
             # Query Supabase for the secret
-            result = self.db.client.table('secrets').select('credentials').eq('service_name', service_name).eq('is_active', True).execute()
+            result = (await self.db._get_client()).table('secrets').select('credentials').eq('service_name', service_name).eq('is_active', True).execute()
             
             if not result.data:
                 logger.warning("Secret not found in database", service=service_name)
@@ -211,12 +211,12 @@ class SecretsService:
             True if successful, False otherwise
         """
         try:
-            result = self.db.client.table('secrets').upsert({
+            result = (await self.db._get_client()).table('secrets').upsert({
                 'service_name': service_name,
                 'credentials': credentials,
                 'is_active': True,
                 'updated_at': datetime.utcnow().isoformat()
-            }).execute()
+            await }).execute()
             
             if result.data:
                 # Clear cache for this service

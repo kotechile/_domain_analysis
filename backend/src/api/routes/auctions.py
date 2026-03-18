@@ -35,7 +35,7 @@ async def _clear_staging_chunked(db, auction_site: str, job_id: str):
     total_cleared = 0
     while True:
         # Fetch domains for this job
-        clear_res = db.client.table('auctions_staging').select('domain').eq('job_id', job_id).limit(5000).execute()
+        clear_res = (await db._get_client()).table('auctions_staging').select('domain').eq('job_id', job_id).limit(5000).execute()
         if not clear_res.data:
             break
         
@@ -43,7 +43,7 @@ async def _clear_staging_chunked(db, auction_site: str, job_id: str):
         # Use small sub-batches for IN filter to avoid URL length limit
         for j in range(0, len(domains_to_del), 100):
             sub_domains = domains_to_del[j:j + 100]
-            db.client.table('auctions_staging').delete().eq('job_id', job_id).in_('domain', sub_domains).execute()
+            await (await db._get_client()).table('auctions_staging').delete().eq('job_id', job_id).in_('domain', sub_domains).execute()
         
         total_cleared += len(domains_to_del)
         await asyncio.sleep(0.01)
@@ -62,12 +62,12 @@ async def _mark_auctions_for_deletion(db, auction_site: str):
         # Update all records for this auction_site to set to_delete = true
         # We do this in chunks to avoid timeouts
         while True:
-            result = db.client.table('auctions')\
+            result = (await db._get_client()).table('auctions')\
                 .select('domain')\
                 .eq('auction_site', auction_site)\
                 .eq('to_delete', False)\
                 .limit(5000)\
-                .execute()
+                await .execute()
 
             if not result.data:
                 break
@@ -77,11 +77,11 @@ async def _mark_auctions_for_deletion(db, auction_site: str):
             # Update in smaller batches
             for i in range(0, len(domains), 100):
                 batch = domains[i:i+100]
-                db.client.table('auctions')\
+                (await db._get_client()).table('auctions')\
                     .update({'to_delete': True})\
                     .eq('auction_site', auction_site)\
                     .in_('domain', batch)\
-                    .execute()
+                    await .execute()
 
             await asyncio.sleep(0.01)
 
@@ -103,12 +103,12 @@ async def _delete_flagged_auctions(db, auction_site: str):
         # Delete in chunks to avoid timeouts
         while True:
             # Get batch of records to delete
-            result = db.client.table('auctions')\
+            result = (await db._get_client()).table('auctions')\
                 .select('domain')\
                 .eq('auction_site', auction_site)\
                 .eq('to_delete', True)\
                 .limit(1000)\
-                .execute()
+                await .execute()
 
             if not result.data:
                 break
@@ -118,12 +118,12 @@ async def _delete_flagged_auctions(db, auction_site: str):
             # Delete in smaller batches
             for i in range(0, len(domains), 100):
                 batch = domains[i:i+100]
-                db.client.table('auctions')\
+                (await db._get_client()).table('auctions')\
                     .delete()\
                     .eq('auction_site', auction_site)\
                     .eq('to_delete', True)\
                     .in_('domain', batch)\
-                    .execute()
+                    await .execute()
                 total_deleted += len(batch)
 
             await asyncio.sleep(0.01)
@@ -148,7 +148,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
         # 1. Fetch a batch of records from staging
         # We also need to fetch columns that we want to keep if they are in the staging record,
         # but the staging record usually only has basic auction info.
-        result = db.client.table('auctions_staging').select('*').eq('job_id', job_id).limit(2000).execute()
+        result = (await db._get_client()).table('auctions_staging').select('*').eq('job_id', job_id).limit(2000).execute()
         records = result.data
 
         if not records:
@@ -195,10 +195,10 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
 
         # 3. Upsert to main table
         try:
-            db.client.table('auctions').upsert(
+            (await db._get_client()).table('auctions').upsert(
                 main_records,
                 on_conflict='domain,auction_site,expiration_date'
-            ).execute()
+            await ).execute()
 
             # 4. Delete merged records from staging in small sub-batches
             # Use smaller batches for the IN filter to avoid "URL component 'query' too long" (max ~2000 chars)
@@ -206,7 +206,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
             sub_batch_size = 100 # Safe size for URLs
             for j in range(0, len(domains), sub_batch_size):
                 sub_domains = domains[j:j + sub_batch_size]
-                db.client.table('auctions_staging').delete().eq('job_id', job_id).in_('domain', sub_domains).execute()
+                await (await db._get_client()).table('auctions_staging').delete().eq('job_id', job_id).in_('domain', sub_domains).execute()
 
             total_merged += len(records)
             logger.info("Merged batch successfully", job_id=job_id, site=auction_site, count=len(records), total=total_merged)
@@ -362,7 +362,7 @@ async def process_csv_upload_async(
                     if retry > 0:
                         await asyncio.sleep(1.0 * retry)
                         
-                    db.client.table('auctions_staging').insert(staging_batch).execute()
+                    await (await db._get_client()).table('auctions_staging').insert(staging_batch).execute()
                     inserted = True
                     break
                 except Exception as insert_err:
@@ -749,13 +749,13 @@ async def process_json_upload_async(
              
              # try:
              #     # Build the base query
-             #     mark_query = db.client.table('auctions').update({'deletion_flag': True}).eq('auction_site', auction_site)
+             #     mark_query = (await db._get_client()).table('auctions').update({'deletion_flag': True}).eq('auction_site', auction_site)
              #     
              #     # Apply scope rules
              #     if auction_site.lower() != 'namesilo':
              #         mark_query = mark_query.eq('offer_type', effective_offering_type)
              #     
-             #     mark_result = mark_query.execute()
+             #     mark_result = await mark_query.execute()
              #     marked_count = len(mark_result.data) if mark_result.data else 0
              #     
              #     logger.info("Marked records for deletion", 
@@ -775,7 +775,7 @@ async def process_json_upload_async(
              for i in range(0, len(auction_dicts), batch_size):
                  batch = auction_dicts[i:i + batch_size]
                  staging_batch = [{k: v for k, v in r.items() if k != 'ranking'} for r in batch]
-                 db.client.table('auctions_staging').insert(staging_batch).execute()
+                 await (await db._get_client()).table('auctions_staging').insert(staging_batch).execute()
                  # Small sleep to yield control
                  await asyncio.sleep(0.01)
              
@@ -788,7 +788,7 @@ async def process_json_upload_async(
              # logger.info("Cleaning up stale records (cleanup phase 2)", job_id=job_id)
              # try:
              #     # Build the base query
-             #     delete_query = db.client.table('auctions').delete().eq('auction_site', auction_site).eq('deletion_flag', True)
+             #     delete_query = (await db._get_client()).table('auctions').delete().eq('auction_site', auction_site).eq('deletion_flag', True)
              #     
              #     # Apply same scope rules as Mark phase
              #     # Use effective_offering_type
@@ -796,7 +796,7 @@ async def process_json_upload_async(
              #     if auction_site.lower() != 'namesilo':
              #          delete_query = delete_query.eq('offer_type', effective_offering_type)
              #     
-             #     delete_result = delete_query.execute()
+             #     delete_result = await delete_query.execute()
              #     deleted_count = len(delete_result.data) if delete_result.data else 0
              #     
              #     logger.info("Cleanup complete: deleted stale records", 
@@ -2736,9 +2736,9 @@ async def fetch_wayback_first_seen(domain: str):
             raise HTTPException(status_code=503, detail="Database connection not available")
         
         try:
-            result = db.client.table('auctions').update({
+            result = (await db._get_client()).table('auctions').update({
                 'first_seen': first_seen_dt.isoformat()
-            }).eq('domain', domain).execute()
+            await }).eq('domain', domain).execute()
             
             updated_count = len(result.data) if result.data else 0
             
@@ -2798,9 +2798,9 @@ async def process_dataforseo_queue():
             return
         
         # Get 100 pending domains ordered by expiration_date ASC (closest to NOW first)
-        queue_result = db.client.table('dataforseo_queue').select(
+        queue_result = (await db._get_client()).table('dataforseo_queue').select(
             'id,domain,expiration_date'
-        ).eq('status', 'pending').order('expiration_date', desc=False).limit(100).execute()
+        ).eq('status', 'pending').order('expiration_date', desc= await False).limit(100).execute()
         
         if not queue_result.data or len(queue_result.data) < 100:
             logger.info("Queue does not have 100 domains yet", count=len(queue_result.data) if queue_result.data else 0)
@@ -2810,10 +2810,10 @@ async def process_dataforseo_queue():
         queue_ids = [item['id'] for item in queue_result.data]
         
         # Update queue items to 'processing'
-        db.client.table('dataforseo_queue').update({
+        (await db._get_client()).table('dataforseo_queue').update({
             'status': 'processing',
             'updated_at': datetime.now(timezone.utc).isoformat()
-        }).in_('id', queue_ids).execute()
+        await }).in_('id', queue_ids).execute()
         
         logger.info("Processing DataForSEO queue", domain_count=len(domains))
         
@@ -2829,11 +2829,11 @@ async def process_dataforseo_queue():
             # when page_statistics are updated in the auctions table
         else:
             # Mark as failed if N8N trigger failed
-            db.client.table('dataforseo_queue').update({
+            (await db._get_client()).table('dataforseo_queue').update({
                 'status': 'failed',
                 'error_message': 'Failed to trigger N8N workflow',
                 'updated_at': datetime.now(timezone.utc).isoformat()
-            }).in_('id', queue_ids).execute()
+            await }).in_('id', queue_ids).execute()
             logger.error("Failed to trigger N8N workflow for queue", queue_ids=queue_ids)
             
     except Exception as e:
@@ -2859,9 +2859,9 @@ async def queue_domain_for_dataforseo(domain: str):
             raise HTTPException(status_code=503, detail="Database connection not available")
         
         # Check if domain exists in auctions table and meets criteria
-        auction_result = db.client.table('auctions').select(
+        auction_result = (await db._get_client()).table('auctions').select(
             'id,domain,score,expiration_date,page_statistics'
-        ).eq('domain', domain).limit(1).execute()
+        await ).eq('domain', domain).limit(1).execute()
         
         if not auction_result.data or len(auction_result.data) == 0:
             return {
@@ -2889,12 +2889,12 @@ async def queue_domain_for_dataforseo(domain: str):
             }
         
         # Check if domain is already in queue
-        queue_check = db.client.table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
+        queue_check = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
         if queue_check.data and len(queue_check.data) > 0:
             queue_item = queue_check.data[0]
             if queue_item['status'] == 'pending':
                 # Get position in queue
-                position_result = db.client.table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
+                position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
                 position = None
                 if position_result.data:
                     for idx, item in enumerate(position_result.data, 1):
@@ -2920,7 +2920,7 @@ async def queue_domain_for_dataforseo(domain: str):
             'auction_id': auction.get('id')
         }
         
-        result = db.client.table('dataforseo_queue').insert(queue_data).execute()
+        result = (await db._get_client()).table('dataforseo_queue').insert(queue_data).execute()
         
         # Get queue count
         queue_count = await get_queue_count()
@@ -2931,7 +2931,7 @@ async def queue_domain_for_dataforseo(domain: str):
             asyncio.create_task(process_dataforseo_queue())
         
         # Get position in queue (ordered by expiration_date ASC)
-        position_result = db.client.table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
+        position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
         position = None
         if position_result.data:
             for idx, item in enumerate(position_result.data, 1):
@@ -2983,10 +2983,10 @@ async def get_dataforseo_queue_status(domain: Optional[str] = Query(None, descri
         
         # If domain provided, check position
         if domain:
-            queue_item = db.client.table('dataforseo_queue').select('id,status').eq('domain', domain).eq('status', 'pending').limit(1).execute()
+            queue_item = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).eq('status', 'pending').limit(1).execute()
             if queue_item.data and len(queue_item.data) > 0:
                 # Calculate position
-                position_result = db.client.table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
+                position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
                 position = None
                 if position_result.data:
                     for idx, item in enumerate(position_result.data, 1):
@@ -3024,7 +3024,7 @@ async def cancel_domain_queue_request(domain: str):
             raise HTTPException(status_code=503, detail="Database connection not available")
         
         # Check if domain is in queue
-        queue_check = db.client.table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
+        queue_check = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
         
         if not queue_check.data or len(queue_check.data) == 0:
             return {
@@ -3044,7 +3044,7 @@ async def cancel_domain_queue_request(domain: str):
             }
         
         # Delete from queue
-        result = db.client.table('dataforseo_queue').delete().eq('id', queue_item['id']).execute()
+        result = (await db._get_client()).table('dataforseo_queue').delete().eq('id', queue_item['id']).execute()
         
         logger.info("Domain removed from DataForSEO queue", domain=domain)
         
@@ -3338,9 +3338,9 @@ async def toggle_preferred_auction(
         # DO NOT update `updated_at` here, because `updated_at` is used by the frontend
         # to determine if SEO metrics are "fresh" or "stale". Toggling a favorite 
         # is just a UI metadata change and should not trigger a "fresh" state.
-        result = db.client.table('auctions').update({
+        result = (await db._get_client()).table('auctions').update({
             'preferred': preferred
-        }).eq('id', auction_id).execute()
+        await }).eq('id', auction_id).execute()
         
         if not result.data:
             # If no auction with that ID, it might be a UUID mismatch or domain-based update needed.

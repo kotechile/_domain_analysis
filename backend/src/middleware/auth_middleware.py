@@ -36,15 +36,9 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
     
     try:
         db_service = get_database()
-        if not db_service.client:
-            logger.error("Supabase client not initialized")
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Database service unavailable"
-            )
-            
         # Verify token with Supabase
-        user_response = db_service.client.auth.get_user(token)
+        client = await db_service._get_client()
+        user_response = await client.auth.get_user(token)
         
         if not user_response or not user_response.user:
             raise HTTPException(

@@ -117,7 +117,7 @@ class UsageTrackingService:
             
             # Use Supabase client directly
             if self.db.client:
-                self.db.client.table('user_resource_usage').insert(usage_record).execute()
+                await (await self.db._get_client()).table('user_resource_usage').insert(usage_record).execute()
                 logger.info("Usage tracked", 
                            user_id=str(user_id) if user_id else "system",
                            resource=resource_type,

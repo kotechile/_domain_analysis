@@ -49,14 +49,14 @@ async def get_filters(
             raise HTTPException(status_code=503, detail="Database connection not available")
         
         # Get default filter (user_id is NULL for global defaults)
-        result = db.client.table('filters').select('*').eq('is_default', True)
+        result = (await db._get_client()).table('filters').select('*').eq('is_default', True)
         
         if user_id:
             result = result.eq('user_id', user_id)
         else:
             result = result.is_('user_id', 'null')
         
-        result = result.limit(1).execute()
+        result = await result.limit(1).execute()
         
         if result.data and len(result.data) > 0:
             filter_data = result.data[0]
@@ -127,13 +127,13 @@ async def update_filters(
             raise HTTPException(status_code=503, detail="Database connection not available")
         
         # Check if default filter exists
-        query = db.client.table('filters').select('id').eq('is_default', True)
+        query = (await db._get_client()).table('filters').select('id').eq('is_default', True)
         if user_id:
             query = query.eq('user_id', user_id)
         else:
             query = query.is_('user_id', 'null')
         
-        existing = query.limit(1).execute()
+        existing = await query.limit(1).execute()
         
         filter_data = {
             "preferred": filter_settings.preferred,
@@ -161,11 +161,11 @@ async def update_filters(
         if existing.data and len(existing.data) > 0:
             # Update existing filter
             filter_id = existing.data[0]['id']
-            result = db.client.table('filters').update(filter_data).eq('id', filter_id).execute()
+            result = (await db._get_client()).table('filters').update(filter_data).eq('id', filter_id).execute()
             logger.info("Updated filter settings", filter_id=filter_id, user_id=user_id)
         else:
             # Create new filter
-            result = db.client.table('filters').insert(filter_data).execute()
+            result = (await db._get_client()).table('filters').insert(filter_data).execute()
             logger.info("Created new filter settings", user_id=user_id)
         
         return {

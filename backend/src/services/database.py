@@ -35,18 +35,13 @@ class DatabaseService:
             return self.client
             
         try:
-            import httpx
-            
-            # Configure HTTP client with SSL verification setting and increased timeout
-            timeout = httpx.Timeout(600.0, connect=60.0)
-            
             # Use service role key for admin operations
             key = self.settings.SUPABASE_SERVICE_ROLE_KEY
             if not key:
                 logger.warning("SUPABASE_SERVICE_ROLE_KEY not found, falling back to SUPABASE_KEY. RLS policies may fail!")
                 key = self.settings.SUPABASE_KEY
             else:
-                logger.info("Initializing Supabase Async client with SERVICE_ROLE_KEY")
+                logger.debug("Initializing Supabase Async client with SERVICE_ROLE_KEY")
 
             # Configure options
             options = ClientOptions(
@@ -57,8 +52,6 @@ class DatabaseService:
             
             # Check for SSL verification override
             verify_ssl = getattr(self.settings, 'SUPABASE_VERIFY_SSL', True)
-            if not verify_ssl:
-                logger.warning("SSL verification disabled for Supabase client (self-hosted instance)")
             
             self.client = await create_client(
                 self.settings.SUPABASE_URL,
@@ -68,8 +61,6 @@ class DatabaseService:
             
             # Monkey-patch the httpx client if needed for SSL verification
             if not verify_ssl:
-                # This is a bit of a hack but necessary for self-hosted instances with self-signed certs
-                # if the supabase library doesn't expose a direct way to pass 'verify' to the underlying httpx client
                 if hasattr(self.client, 'postgrest') and hasattr(self.client.postgrest, 'session'):
                     self.client.postgrest.session.verify = False
                 if hasattr(self.client, 'realtime') and hasattr(self.client.realtime, 'session'):
@@ -86,6 +77,7 @@ class DatabaseService:
     
     async def init_database(self):
         """Initialize database tables and indexes"""
+        client = await self._get_client()
         try:
             # Get async client
             client = await self._get_client()
@@ -105,6 +97,7 @@ class DatabaseService:
     
     async def _create_tables(self):
         """Create database tables"""
+        client = await self._get_client()
         # This would typically be done via Supabase migrations
         # For now, we'll assume tables exist or create them via SQL
         tables_sql = """
@@ -151,11 +144,13 @@ class DatabaseService:
     
     async def _create_indexes(self):
         """Create database indexes for performance"""
+        client = await self._get_client()
         # Indexes are created in _create_tables method
         pass
     
     async def save_report(self, report: DomainAnalysisReport) -> str:
         """Save domain analysis report to database"""
+        client = await self._get_client()
         try:
             report_data = report.dict()
             report_data['analysis_timestamp'] = report_data['analysis_timestamp'].isoformat()
@@ -165,7 +160,7 @@ class DatabaseService:
                 if hasattr(report_data['wayback_machine_summary']['last_capture_date'], 'isoformat'):
                     report_data['wayback_machine_summary']['last_capture_date'] = report_data['wayback_machine_summary']['last_capture_date'].isoformat()
             
-            result = await (await self._get_client()).table('reports').upsert({
+            result = client.table('reports').upsert({
                 'domain_name': report.domain_name,
                 'analysis_timestamp': report_data['analysis_timestamp'],
                 'status': report.status.value,
@@ -180,7 +175,7 @@ class DatabaseService:
                 'processing_time_seconds': report.processing_time_seconds,
                 'error_message': report.error_message,
                 'updated_at': datetime.utcnow().isoformat()
-            }, on_conflict='domain_name').execute()
+            }, on_conflict= await 'domain_name').execute()
             
             report_id = result.data[0]['id'] if result.data else None
             logger.info("Report saved successfully", domain=report.domain_name, report_id=report_id)
@@ -192,8 +187,9 @@ class DatabaseService:
     
     async def get_report(self, domain_name: str) -> Optional[DomainAnalysisReport]:
         """Get domain analysis report by domain name"""
+        client = await self._get_client()
         try:
-            result = await (await self._get_client()).table('reports').select('*').eq('domain_name', domain_name).execute()
+            result = await client.table('reports').select('*').eq('domain_name', domain_name).execute()
             
             if not result.data:
                 return None
@@ -226,6 +222,7 @@ class DatabaseService:
     
     async def save_raw_data(self, domain_name: str, api_source: DataSource, data: Dict[str, Any]) -> str:
         """Save raw API data to cache, merging with existing data if present"""
+        client = await self._get_client()
         try:
             settings = get_settings()
             expires_at = datetime.utcnow() + timedelta(seconds=settings.CACHE_TTL_SECONDS)
@@ -238,12 +235,12 @@ class DatabaseService:
                 existing.update(data)
                 data = existing
             
-            result = await (await self._get_client()).table('raw_data_cache').upsert({
+            result = client.table('raw_data_cache').upsert({
                 'domain_name': domain_name,
                 'api_source': api_source.value,
                 'json_data': data,
                 'expires_at': expires_at.isoformat()
-            }, on_conflict='domain_name,api_source').execute()
+            }, on_conflict= await 'domain_name,api_source').execute()
             
             cache_id = result.data[0]['id'] if result.data else None
             logger.info("Raw data cached successfully", domain=domain_name, source=api_source.value)
@@ -255,8 +252,9 @@ class DatabaseService:
     
     async def get_raw_data(self, domain_name: str, api_source: DataSource) -> Optional[Dict[str, Any]]:
         """Get cached raw API data"""
+        client = await self._get_client()
         try:
-            result = await (await self._get_client()).table('raw_data_cache').select('*').eq('domain_name', domain_name).eq('api_source', api_source.value).execute()
+            result = await client.table('raw_data_cache').select('*').eq('domain_name', domain_name).eq('api_source', api_source.value).execute()
             
             if not result.data:
                 return None
@@ -282,8 +280,9 @@ class DatabaseService:
     
     async def delete_raw_data(self, domain_name: str, api_source: DataSource):
         """Delete cached raw data"""
+        client = await self._get_client()
         try:
-            await (await self._get_client()).table('raw_data_cache').delete().eq('domain_name', domain_name).eq('api_source', api_source.value).execute()
+            await client.table('raw_data_cache').delete().eq('domain_name', domain_name).eq('api_source', api_source.value).execute()
             logger.info("Raw data deleted from cache", domain=domain_name, source=api_source.value)
         except Exception as e:
             logger.error("Failed to delete raw data", domain=domain_name, source=api_source.value, error=str(e))
@@ -291,8 +290,9 @@ class DatabaseService:
     
     async def cleanup_expired_data(self):
         """Clean up expired cached data"""
+        client = await self._get_client()
         try:
-            result = await (await self._get_client()).table('raw_data_cache').delete().lt('expires_at', datetime.utcnow().isoformat()).execute()
+            result = await client.table('raw_data_cache').delete().lt('expires_at', datetime.utcnow().isoformat()).execute()
             logger.info("Expired data cleaned up", deleted_count=len(result.data) if result.data else 0)
         except Exception as e:
             logger.error("Failed to cleanup expired data", error=str(e))
@@ -301,19 +301,20 @@ class DatabaseService:
     # Detailed Data Storage Methods
     async def save_detailed_data(self, detailed_data: DetailedAnalysisData) -> str:
         """Save detailed analysis data to database"""
+        client = await self._get_client()
         try:
             expires_at = None
             if detailed_data.expires_at:
                 expires_at = detailed_data.expires_at.isoformat()
             
-            result = await (await self._get_client()).table('detailed_analysis_data').upsert({
+            result = client.table('detailed_analysis_data').upsert({
                 'domain_name': detailed_data.domain_name,
                 'data_type': detailed_data.data_type.value,
                 'json_data': detailed_data.json_data,
                 'task_id': detailed_data.task_id,
                 'data_source': detailed_data.data_source,
                 'expires_at': expires_at
-            }, on_conflict='domain_name,data_type').execute()
+            }, on_conflict= await 'domain_name,data_type').execute()
             
             data_id = result.data[0]['id'] if result.data else None
             logger.info("Detailed data saved successfully", 
@@ -331,8 +332,9 @@ class DatabaseService:
     
     async def get_detailed_data(self, domain_name: str, data_type: DetailedDataType) -> Optional[DetailedAnalysisData]:
         """Get detailed analysis data by domain and type"""
+        client = await self._get_client()
         try:
-            result = await (await self._get_client()).table('detailed_analysis_data').select('*').eq('domain_name', domain_name).eq('data_type', data_type.value).execute()
+            result = await client.table('detailed_analysis_data').select('*').eq('domain_name', domain_name).eq('data_type', data_type.value).execute()
             
             if not result.data:
                 return None
@@ -367,8 +369,9 @@ class DatabaseService:
     
     async def delete_detailed_data(self, domain_name: str, data_type: DetailedDataType):
         """Delete detailed analysis data"""
+        client = await self._get_client()
         try:
-            await (await self._get_client()).table('detailed_analysis_data').delete().eq('domain_name', domain_name).eq('data_type', data_type.value).execute()
+            await client.table('detailed_analysis_data').delete().eq('domain_name', domain_name).eq('data_type', data_type.value).execute()
             logger.info("Detailed data deleted", domain=domain_name, data_type=data_type.value)
         except Exception as e:
             logger.error("Failed to delete detailed data", domain=domain_name, data_type=data_type.value, error=str(e))
@@ -377,15 +380,16 @@ class DatabaseService:
     # Async Task Tracking Methods
     async def save_async_task(self, async_task: AsyncTask) -> str:
         """Save async task to database"""
+        client = await self._get_client()
         try:
-            result = await (await self._get_client()).table('async_tasks').upsert({
+            result = client.table('async_tasks').upsert({
                 'domain_name': async_task.domain_name,
                 'task_id': async_task.task_id,
                 'task_type': async_task.task_type.value,
                 'status': async_task.status.value,
                 'error_message': async_task.error_message,
                 'retry_count': async_task.retry_count
-            }, on_conflict='task_id').execute()
+            }, on_conflict= await 'task_id').execute()
             
             task_id = result.data[0]['id'] if result.data else None
             logger.info("Async task saved successfully", 
@@ -403,8 +407,9 @@ class DatabaseService:
     
     async def get_async_task(self, task_id: str) -> Optional[AsyncTask]:
         """Get async task by task ID"""
+        client = await self._get_client()
         try:
-            result = await (await self._get_client()).table('async_tasks').select('*').eq('task_id', task_id).execute()
+            result = await client.table('async_tasks').select('*').eq('task_id', task_id).execute()
             
             if not result.data:
                 return None
@@ -432,8 +437,9 @@ class DatabaseService:
     
     async def get_pending_task(self, domain_name: str, task_type: DetailedDataType) -> Optional[AsyncTask]:
         """Get pending async task for domain and type"""
+        client = await self._get_client()
         try:
-            result = await (await self._get_client()).table('async_tasks').select('*').eq('domain_name', domain_name).eq('task_type', task_type.value).eq('status', 'pending').execute()
+            result = await client.table('async_tasks').select('*').eq('domain_name', domain_name).eq('task_type', task_type.value).eq('status', 'pending').execute()
             
             if not result.data:
                 return None
@@ -461,6 +467,7 @@ class DatabaseService:
     
     async def update_async_task_status(self, task_id: str, status: AsyncTaskStatus, error_message: str = None):
         """Update async task status"""
+        client = await self._get_client()
         try:
             update_data = {
                 'status': status.value,
@@ -472,7 +479,7 @@ class DatabaseService:
             elif status == AsyncTaskStatus.FAILED and error_message:
                 update_data['error_message'] = error_message
             
-            await (await self._get_client()).table('async_tasks').update(update_data).eq('task_id', task_id).execute()
+            await client.table('async_tasks').update(update_data).eq('task_id', task_id).execute()
             
             logger.info("Async task status updated", task_id=task_id, status=status.value)
             
@@ -483,15 +490,16 @@ class DatabaseService:
     # Analysis Mode Configuration Methods
     async def get_mode_config(self, domain_name: str = None) -> Optional[AnalysisModeConfig]:
         """Get analysis mode configuration for domain or global"""
+        client = await self._get_client()
         try:
-            query = await (await self._get_client()).table('analysis_mode_config').select('*')
+            query = client.table('analysis_mode_config').select('*')
             
             if domain_name:
                 query = query.eq('domain_name', domain_name)
             else:
                 query = query.is_('domain_name', 'null')
             
-            result = query.execute()
+            result = await query.execute()
             
             if not result.data:
                 return None
@@ -519,15 +527,16 @@ class DatabaseService:
     
     async def save_mode_config(self, config: AnalysisModeConfig) -> str:
         """Save analysis mode configuration"""
+        client = await self._get_client()
         try:
-            result = await (await self._get_client()).table('analysis_mode_config').upsert({
+            result = client.table('analysis_mode_config').upsert({
                 'domain_name': config.domain_name,
                 'mode_preference': config.mode_preference.value,
                 'async_enabled': config.async_enabled,
                 'cache_ttl_hours': config.cache_ttl_hours,
                 'manual_refresh_enabled': config.manual_refresh_enabled,
                 'progress_indicators_enabled': config.progress_indicators_enabled
-            }, on_conflict='domain_name').execute()
+            }, on_conflict= await 'domain_name').execute()
             
             config_id = result.data[0]['id'] if result.data else None
             logger.info("Mode config saved successfully", domain=config.domain_name, config_id=config_id)
@@ -547,19 +556,20 @@ class DatabaseService:
         - Async tasks
         - Mode configuration
         """
+        client = await self._get_client()
         try:
             logger.info("Starting domain analysis deletion", domain=domain_name)
             deleted_count = 0
             
             # Check if client is available
-            if not self.client:
+            if not client:
                 logger.error("Supabase client not available", domain=domain_name)
                 raise Exception("Supabase client not available")
             
             # Delete detailed analysis data
             try:
                 logger.info("Attempting to delete detailed analysis data", domain=domain_name)
-                detailed_data_result = await (await self._get_client()).table('detailed_analysis_data').delete().eq('domain_name', domain_name).execute()
+                detailed_data_result = await client.table('detailed_analysis_data').delete().eq('domain_name', domain_name).execute()
                 deleted_count += len(detailed_data_result.data) if detailed_data_result.data else 0
                 logger.info("Deleted detailed analysis data", domain=domain_name, count=len(detailed_data_result.data) if detailed_data_result.data else 0, result_data=detailed_data_result.data)
             except Exception as e:
@@ -567,22 +577,22 @@ class DatabaseService:
                 raise
             
             # Delete raw data cache
-            cache_result = await (await self._get_client()).table('raw_data_cache').delete().eq('domain_name', domain_name).execute()
+            cache_result = await client.table('raw_data_cache').delete().eq('domain_name', domain_name).execute()
             deleted_count += len(cache_result.data) if cache_result.data else 0
             logger.info("Deleted raw data cache", domain=domain_name, count=len(cache_result.data) if cache_result.data else 0)
             
             # Delete async tasks
-            tasks_result = await (await self._get_client()).table('async_tasks').delete().eq('domain_name', domain_name).execute()
+            tasks_result = await client.table('async_tasks').delete().eq('domain_name', domain_name).execute()
             deleted_count += len(tasks_result.data) if tasks_result.data else 0
             logger.info("Deleted async tasks", domain=domain_name, count=len(tasks_result.data) if tasks_result.data else 0)
             
             # Delete mode configuration
-            config_result = await (await self._get_client()).table('analysis_mode_config').delete().eq('domain_name', domain_name).execute()
+            config_result = await client.table('analysis_mode_config').delete().eq('domain_name', domain_name).execute()
             deleted_count += len(config_result.data) if config_result.data else 0
             logger.info("Deleted mode configuration", domain=domain_name, count=len(config_result.data) if config_result.data else 0)
             
             # Delete main report (this should be last to maintain referential integrity)
-            report_result = await (await self._get_client()).table('reports').delete().eq('domain_name', domain_name).execute()
+            report_result = await client.table('reports').delete().eq('domain_name', domain_name).execute()
             deleted_count += len(report_result.data) if report_result.data else 0
             logger.info("Deleted main report", domain=domain_name, count=len(report_result.data) if report_result.data else 0)
             
@@ -601,8 +611,9 @@ class DatabaseService:
         - Update provider for existing records (preserve backlinks_bulk_page_summary)
         - Return sync results
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             result = BulkDomainSyncResult(total_count=len(domains))
@@ -610,7 +621,7 @@ class DatabaseService:
             for domain_input in domains:
                 try:
                     # Check if domain exists
-                    existing = await (await self._get_client()).table('bulk_domain_analysis').select('*').eq('domain_name', domain_input.domain).execute()
+                    existing = await client.table('bulk_domain_analysis').select('*').eq('domain_name', domain_input.domain).execute()
                     
                     if existing.data and len(existing.data) > 0:
                         # Domain exists - update only if needed
@@ -628,7 +639,7 @@ class DatabaseService:
                         
                         # Only update if there's something to update
                         if len(update_data) > 1:  # More than just updated_at
-                            await (await self._get_client()).table('bulk_domain_analysis').update(update_data).eq('domain_name', domain_input.domain).execute()
+                            await client.table('bulk_domain_analysis').update(update_data).eq('domain_name', domain_input.domain).execute()
                             result.updated_count += 1
                             result.updated_domains.append(domain_input.domain)
                             logger.info("Updated bulk domain", domain=domain_input.domain, has_summary=existing_summary is not None)
@@ -642,7 +653,7 @@ class DatabaseService:
                             'provider': domain_input.provider,
                             'backlinks_bulk_page_summary': None
                         }
-                        await (await self._get_client()).table('bulk_domain_analysis').insert(new_record).execute()
+                        await client.table('bulk_domain_analysis').insert(new_record).execute()
                         result.created_count += 1
                         result.created_domains.append(domain_input.domain)
                         logger.info("Created bulk domain", domain=domain_input.domain)
@@ -666,11 +677,12 @@ class DatabaseService:
         """
         Get list of domain names that are missing backlinks_bulk_page_summary data
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
-            result = await (await self._get_client()).table('bulk_domain_analysis').select('domain_name').is_('backlinks_bulk_page_summary', 'null').execute()
+            result = await client.table('bulk_domain_analysis').select('domain_name').is_('backlinks_bulk_page_summary', 'null').execute()
             
             domains = [row['domain_name'] for row in result.data] if result.data else []
             logger.info("Found domains missing summary", count=len(domains))
@@ -690,8 +702,9 @@ class DatabaseService:
         Returns:
             List of BulkDomainAnalysis records
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             if not domain_names:
@@ -703,7 +716,7 @@ class DatabaseService:
             
             for i in range(0, len(domain_names), batch_size):
                 batch = domain_names[i:i + batch_size]
-                result = await (await self._get_client()).table('bulk_domain_analysis').select('*').in_('domain_name', batch).execute()
+                result = await client.table('bulk_domain_analysis').select('*').in_('domain_name', batch).execute()
                 
                 if result.data:
                     for row in result.data:
@@ -738,14 +751,15 @@ class DatabaseService:
         Save bulk page summary data for a domain
         Preserves other fields (provider, etc.)
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
-            result = await (await self._get_client()).table('bulk_domain_analysis').update({
+            result = client.table('bulk_domain_analysis').update({
                 'backlinks_bulk_page_summary': summary_data,
                 'updated_at': datetime.utcnow().isoformat()
-            }).eq('domain_name', domain).execute()
+            await }).eq('domain_name', domain).execute()
             
             record_id = result.data[0]['id'] if result.data else None
             logger.info("Saved bulk page summary", domain=domain, record_id=record_id)
@@ -759,8 +773,9 @@ class DatabaseService:
         """
         Get all bulk domain analysis records with sorting
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             # Validate sort_by field
@@ -772,7 +787,7 @@ class DatabaseService:
             if order not in ['asc', 'desc']:
                 order = 'desc'
             
-            query = await (await self._get_client()).table('bulk_domain_analysis').select('*')
+            query = client.table('bulk_domain_analysis').select('*')
             
             # Apply sorting
             if order == 'desc':
@@ -780,7 +795,7 @@ class DatabaseService:
             else:
                 query = query.order(sort_by, desc=False)
             
-            result = query.execute()
+            result = await query.execute()
             
             records = []
             if result.data:
@@ -816,14 +831,15 @@ class DatabaseService:
         """
         Clear all records from namecheap_domains table
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             logger.info("Starting table truncate")
             # Use a more efficient delete - delete all records
             # Supabase doesn't have TRUNCATE in the client, so we delete all
-            result = await (await self._get_client()).table('namecheap_domains').delete().neq('id', '00000000-0000-0000-0000-000000000000').execute()
+            result = await client.table('namecheap_domains').delete().neq('id', '00000000-0000-0000-0000-000000000000').execute()
             logger.info("Table truncate complete", deleted_count=len(result.data) if result.data else 0)
             return True
             
@@ -833,11 +849,11 @@ class DatabaseService:
             try:
                 logger.info("Trying alternative truncate method")
                 # Get all IDs and delete them
-                all_records = await (await self._get_client()).table('namecheap_domains').select('id').execute()
+                all_records = await client.table('namecheap_domains').select('id').execute()
                 if all_records.data:
                     ids = [r['id'] for r in all_records.data]
                     for id in ids:
-                        await (await self._get_client()).table('namecheap_domains').delete().eq('id', id).execute()
+                        await client.table('namecheap_domains').delete().eq('id', id).execute()
                 logger.info("Alternative truncate complete")
                 return True
             except Exception as e2:
@@ -849,8 +865,9 @@ class DatabaseService:
         Bulk insert Namecheap domains using batch inserts for better performance
         Returns counts: inserted, skipped (duplicates)
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             if not domains:
@@ -904,7 +921,7 @@ class DatabaseService:
                 try:
                     # Batch insert
                     logger.info("Inserting batch", batch_num=batch_num, records=len(batch_data))
-                    result = await (await self._get_client()).table('namecheap_domains').insert(batch_data).execute()
+                    result = await client.table('namecheap_domains').insert(batch_data).execute()
                     inserted_count += len(batch_data)
                     logger.info("Batch inserted successfully", batch_num=batch_num, inserted=len(batch_data), total_inserted=inserted_count)
                     
@@ -914,7 +931,7 @@ class DatabaseService:
                                  batch_num=batch_num, error=str(e), batch_start=i)
                     for idx, domain_data in enumerate(batch_data):
                         try:
-                            await (await self._get_client()).table('namecheap_domains').insert(domain_data).execute()
+                            await client.table('namecheap_domains').insert(domain_data).execute()
                             inserted_count += 1
                             if (idx + 1) % 100 == 0:
                                 logger.info("Individual insert progress", batch_num=batch_num, processed=idx+1, total=len(batch_data))
@@ -950,8 +967,9 @@ class DatabaseService:
         """
         Get all Namecheap domains with optional search, sorting, and filtering
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             # Validate sort_by field - expanded list
@@ -968,7 +986,7 @@ class DatabaseService:
             if order not in ['asc', 'desc']:
                 order = 'asc'
             
-            query = await (await self._get_client()).table('namecheap_domains').select('*')
+            query = client.table('namecheap_domains').select('*')
             
             # Apply search filter
             if search:
@@ -1009,7 +1027,7 @@ class DatabaseService:
             
             query = query.range(offset, offset + fetch_limit - 1)
             
-            result = query.execute()
+            result = await query.execute()
             
             records = []
             if result.data:
@@ -1086,11 +1104,12 @@ class DatabaseService:
         """
         Get single Namecheap domain by name field
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
-            result = await (await self._get_client()).table('namecheap_domains').select('*').eq('name', domain_name).execute()
+            result = await client.table('namecheap_domains').select('*').eq('name', domain_name).execute()
             
             if not result.data or len(result.data) == 0:
                 return None
@@ -1137,11 +1156,12 @@ class DatabaseService:
         """
         Get bulk domain analysis record by domain name
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
-            result = await (await self._get_client()).table('bulk_domain_analysis').select('*').eq('domain_name', domain_name).execute()
+            result = await client.table('bulk_domain_analysis').select('*').eq('domain_name', domain_name).execute()
             
             if not result.data or len(result.data) == 0:
                 return None
@@ -1175,12 +1195,13 @@ class DatabaseService:
     # Auctions Methods
     async def truncate_auctions(self) -> bool:
         """Truncate auctions table - skip if empty, otherwise use efficient deletion"""
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             # First, check if table is empty or small
-            count_result = await (await self._get_client()).table('auctions').select('id', count='exact').limit(1).execute()
+            count_result = await client.table('auctions').select('id', count='exact').limit(1).execute()
             total_count = count_result.count if hasattr(count_result, 'count') else None
             
             if total_count is not None and total_count == 0:
@@ -1206,7 +1227,7 @@ class DatabaseService:
                             await asyncio.sleep(5)  # Give N8N time to execute SQL
                             # Verify truncation completed
                             for attempt in range(3):  # Check up to 3 times
-                                verify_result = await (await self._get_client()).table('auctions').select('id', count='exact').limit(1).execute()
+                                verify_result = await client.table('auctions').select('id', count='exact').limit(1).execute()
                                 if verify_result.count == 0:
                                     logger.info("Auctions table truncated successfully via N8N")
                                     return True
@@ -1232,7 +1253,7 @@ class DatabaseService:
             # For smaller tables, use simple DELETE
             try:
                 # Delete all records using a simple filter
-                await (await self._get_client()).table('auctions').delete().neq('id', '00000000-0000-0000-0000-000000000000').execute()
+                await client.table('auctions').delete().neq('id', '00000000-0000-0000-0000-000000000000').execute()
                 logger.info("Auctions table truncated using DELETE")
                 return True
             except Exception as delete_error:
@@ -1256,8 +1277,9 @@ class DatabaseService:
         Returns:
             Dict with inserted, updated, skipped, total counts
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             if not auctions:
@@ -1283,10 +1305,10 @@ class DatabaseService:
                     # The unique constraint is on (domain, auction_site, expiration_date)
                     # Note: backlinks_bulk_page_summary is in bulk_domain_analysis table, not auctions
                     # So it's automatically preserved when we update auctions
-                    result = await (await self._get_client()).table('auctions').upsert(
+                    result = client.table('auctions').upsert(
                         batch,
                         on_conflict='domain,auction_site,expiration_date'
-                    ).execute()
+                    await ).execute()
                     
                     # Approximate: assume all are inserts (upsert will update if exists)
                     # For accurate counts, we'd need to check each record first, which is expensive
@@ -1303,10 +1325,10 @@ class DatabaseService:
                     logger.warning("Batch upsert failed, using individual upserts", batch_num=batch_num, error=str(e))
                     for auction_data in batch:
                         try:
-                            await (await self._get_client()).table('auctions').upsert(
+                            client.table('auctions').upsert(
                                 auction_data,
                                 on_conflict='domain,auction_site,expiration_date'
-                            ).execute()
+                            await ).execute()
                             inserted_count += 1
                         except Exception as e2:
                             if 'duplicate' in str(e2).lower() or 'unique' in str(e2).lower():
@@ -1339,12 +1361,13 @@ class DatabaseService:
         Returns:
             Number of records deleted
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             # Call the optimized RPC function which deletes in chunks (limit 10k)
-            result = await (await self._get_client()).rpc('delete_expired_auctions', {}).execute()
+            result = await client.rpc('delete_expired_auctions', {}).execute()
             
             # Verify result format (RPC returns integer directly or in data)
             deleted_count = result.data if result.data is not None else 0
@@ -1373,18 +1396,19 @@ class DatabaseService:
         Returns:
             List of auction dictionaries
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             result = (
-                await (await self._get_client()).table('auctions')
+                client.table('auctions')
                 .select('*')
                 .eq('preferred', True)
                 .eq('has_statistics', False)
                 .order('expiration_date', desc=False)
                 .limit(limit)
-                .execute()
+                await .execute()
             )
             
             auctions = result.data if result.data else []
@@ -1405,8 +1429,9 @@ class DatabaseService:
         Returns:
             Number of records updated
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             if not domain_names:
@@ -1420,10 +1445,10 @@ class DatabaseService:
                 
                 for domain_name in batch:
                     try:
-                        await (await self._get_client()).table('auctions').update({
+                        client.table('auctions').update({
                             'has_statistics': True,
                             'updated_at': datetime.utcnow().isoformat()
-                        }).eq('domain', domain_name).execute()
+                        await }).eq('domain', domain_name).execute()
                         updated_count += 1
                     except Exception as e:
                         logger.warning("Failed to mark has_statistics", domain=domain_name, error=str(e))
@@ -1457,12 +1482,13 @@ class DatabaseService:
         Returns:
             Dict with auctions list and total count
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             # Build query - always filter out records marked for deletion
-            query = await (await self._get_client()).table('auctions').select('*').eq('to_delete', False)
+            query = client.table('auctions').select('*').eq('to_delete', False)
             
             # Apply filters
             if filters:
@@ -1618,10 +1644,11 @@ class DatabaseService:
 
         When force_refresh=True, skips the missing-metrics and staleness checks (force-fills all matched domains).
         """
+        client = await self._get_client()
         from datetime import timedelta
 
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
 
             # 7-day staleness cutoff
@@ -1629,7 +1656,7 @@ class DatabaseService:
 
             # --- Build base query ---
             # Always filter out records marked for deletion
-            query = await (await self._get_client()).table('auctions').select('*').eq('to_delete', False)
+            query = client.table('auctions').select('*').eq('to_delete', False)
 
             # Always require score > 0 so we only work on domains we've evaluated
             query = query.gt('score', 0)
@@ -1676,7 +1703,7 @@ class DatabaseService:
                 # Force mode: just return top N by expiry, no missing-metrics check
                 query = query.order('expiration_date', desc=False)
                 logger.info("Executing force refresh query", filters=filters, limit=limit)
-                result = query.limit(limit).execute()
+                result = await query.limit(limit).execute()
                 candidates = result.data if result.data else []
                 logger.info("Force refresh query returned candidates", candidate_count=len(candidates), filters=filters)
                 return candidates
@@ -1743,7 +1770,7 @@ class DatabaseService:
 
                 # Execute via RPC if available, otherwise fall back to client query
                 try:
-                    result = await (await self._get_client()).rpc('exec_sql', {'sql': sql}).execute()
+                    result = await client.rpc('exec_sql', {'sql': sql}).execute()
                     candidates = result.data if result.data else []
                     logger.info("Fill Gaps SQL query executed successfully", candidate_count=len(candidates))
                 except Exception as rpc_err:
@@ -1751,7 +1778,7 @@ class DatabaseService:
                     # Fall back to the original approach but with smaller limit
                     query = query.order('expiration_date', desc=False)
                     fetch_limit = min(limit * 2, 2000)  # Reduced from 4000
-                    result = query.limit(fetch_limit).execute()
+                    result = await query.limit(fetch_limit).execute()
                     candidates = result.data if result.data else []
                     logger.info("Fill Gaps fallback query returned candidates", candidate_count=len(candidates), fetch_limit=fetch_limit)
                     # Log first candidate to understand data structure
@@ -1840,6 +1867,7 @@ class DatabaseService:
         Returns:
             True if updated, False if domain not found
         """
+        client = await self._get_client()
         try:
             client = await self._get_client()
                 
@@ -1954,7 +1982,7 @@ class DatabaseService:
                     update_data.pop('keywords_count', None)
                     if not update_data:
                         return True
-                    update_response = await (await self._get_client()).table('auctions').update(update_data).eq('domain', domain).execute()
+                    update_response = await client.table('auctions').update(update_data).eq('domain', domain).execute()
                 else:
                     logger.error("Error updating auction record", domain=domain, error=error_str)
                     return False
@@ -1972,6 +2000,7 @@ class DatabaseService:
         Update traffic data for an auction
         Aliased to update_auction_page_statistics to merge into the same JSONB column
         """
+        client = await self._get_client()
         return await self.update_auction_page_statistics(domain, traffic_data)
 
     async def get_unique_tlds(self) -> List[str]:
@@ -1981,15 +2010,16 @@ class DatabaseService:
         Returns:
             List of unique TLDs (e.g., ['.com', '.ai', '.net'])
         """
+        client = await self._get_client()
         try:
             # Fetch domains and extract TLDs
             # Note: With 1.6M+ rows, fetching all domains is a performance disaster (OOM risk)
             # We'll limit to a large enough sample of recent auctions to get the current TLDs
             result = (
-                await (await self._get_client()).table('auctions')
+                client.table('auctions')
                 .select('domain')
                 .limit(10000)  # Moderate sample for performance
-                .execute()
+                await .execute()
             )
             
             tlds = set()
@@ -2019,8 +2049,9 @@ class DatabaseService:
         Returns:
             File path in storage (relative to bucket)
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             file_size = len(file_content)
@@ -2035,7 +2066,7 @@ class DatabaseService:
             # Upload to storage with timeout handling
             # Supabase storage upload accepts bytes directly, not BytesIO
             try:
-                storage_response = await (await self._get_client()).storage.from_(bucket).upload(
+                storage_response = await client.storage.from_(bucket).upload(
                     path=filename,
                     file=file_content,  # Pass bytes directly, not BytesIO
                     file_options={
@@ -2090,15 +2121,16 @@ class DatabaseService:
         Returns:
             True if deleted successfully, False otherwise
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             logger.info("Deleting file from storage", bucket=bucket, path=path)
             
             # Supabase Storage API: remove accepts a list of paths
             # returns a list of deleted objects
-            response = (await self._get_client()).storage.from_(bucket).remove([path])
+            response = client.storage.from_(bucket).remove([path])
             
             if response and len(response) > 0:
                 logger.info("Deleted file from storage successfully", bucket=bucket, path=path)
@@ -2130,8 +2162,9 @@ class DatabaseService:
         Returns:
             File content as bytes
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             import httpx
@@ -2203,6 +2236,7 @@ class DatabaseService:
         Returns:
             Total bytes downloaded
         """
+        client = await self._get_client()
         import httpx
         import asyncio
         import time
@@ -2304,8 +2338,9 @@ class DatabaseService:
         Returns:
             Job record dictionary
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             job_data = {
@@ -2327,7 +2362,7 @@ class DatabaseService:
                 job_data['offering_type'] = offering_type
             
             try:
-                result = await (await self._get_client()).table('csv_upload_progress').insert(job_data).execute()
+                result = await client.table('csv_upload_progress').insert(job_data).execute()
                 
                 if result.data and len(result.data) > 0:
                     logger.info("Created CSV upload job", job_id=job_id, filename=filename)
@@ -2342,7 +2377,7 @@ class DatabaseService:
                     # Try to create the table
                     await self._ensure_csv_progress_table_exists()
                     # Retry the insert
-                    result = await (await self._get_client()).table('csv_upload_progress').insert(job_data).execute()
+                    result = await client.table('csv_upload_progress').insert(job_data).execute()
                     if result.data and len(result.data) > 0:
                         logger.info("Created CSV upload job after table creation", job_id=job_id, filename=filename)
                         return result.data[0]
@@ -2360,8 +2395,9 @@ class DatabaseService:
         Ensure the csv_upload_progress table exists by creating it if needed
         This is a fallback if the migration hasn't been applied yet
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             # Read the migration SQL
@@ -2460,8 +2496,9 @@ class DatabaseService:
         Returns:
             Updated job record
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             update_data: Dict[str, Any] = {}
@@ -2500,10 +2537,10 @@ class DatabaseService:
                 return await self.get_csv_upload_progress(job_id)
             
             result = (
-                await (await self._get_client()).table('csv_upload_progress')
+                client.table('csv_upload_progress')
                 .update(update_data)
                 .eq('job_id', job_id)
-                .execute()
+                await .execute()
             )
             
             if result.data and len(result.data) > 0:
@@ -2531,16 +2568,17 @@ class DatabaseService:
         Returns:
             Job progress record or None if not found
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             # Use execute() instead of single() to avoid PGRST116 error if not found
             result = (
-                await (await self._get_client()).table('csv_upload_progress')
+                client.table('csv_upload_progress')
                 .select('*')
                 .eq('job_id', job_id)
-                .execute()
+                await .execute()
             )
             
             if result.data and len(result.data) > 0:
@@ -2563,18 +2601,19 @@ class DatabaseService:
         Returns:
             Job progress record or None if no active job found
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             result = (
-                await (await self._get_client()).table('csv_upload_progress')
+                client.table('csv_upload_progress')
                 .select('*')
                 .not_.eq('status', 'completed')
                 .not_.eq('status', 'failed')
                 .order('created_at', desc=True)
                 .limit(1)
-                .execute()
+                await .execute()
             )
             
             if result.data and len(result.data) > 0:
@@ -2591,16 +2630,17 @@ class DatabaseService:
         Get the default LLM provider configuration from the database.
         Returns a dictionary with provider details and the associated API key.
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
 
             # 1. Get the default provider
-            provider_result = await (await self._get_client()).table('llm_providers')\
+            provider_result = client.table('llm_providers')\
                 .select('*')\
                 .eq('is_default', True)\
                 .limit(1)\
-                .execute()
+                await .execute()
 
             if not provider_result.data:
                 logger.warning("No default LLM provider found in llm_providers table")
@@ -2614,11 +2654,11 @@ class DatabaseService:
                 return None
 
             # 2. Get the API key
-            key_result = await (await self._get_client()).table('api_keys')\
+            key_result = client.table('api_keys')\
                 .select('*')\
                 .eq('id', api_keys_id)\
                 .limit(1)\
-                .execute()
+                await .execute()
                 
             if not key_result.data:
                 logger.error("API key record not found for default provider", api_keys_id=api_keys_id)
@@ -2641,17 +2681,18 @@ class DatabaseService:
         """
         Get the active DataForSEO credentials from the api_keys table.
         """
+        client = await self._get_client()
         try:
-            if not self.client:
+            if not client:
                 raise Exception("Supabase client not available")
             
             # Query for active DataForSEO key
-            result = await (await self._get_client()).table('api_keys')\
+            result = client.table('api_keys')\
                 .select('*')\
                 .eq('provider', 'dataforseo')\
                 .eq('is_active', True)\
                 .limit(1)\
-                .execute()
+                await .execute()
                 
             if not result.data:
                 logger.warning("No active DataForSEO key found in api_keys table")

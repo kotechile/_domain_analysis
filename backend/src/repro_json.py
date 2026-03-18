@@ -51,14 +51,14 @@ async def test_json_path():
             batch = auction_dicts[i:i + batch_size]
             staging_batch = [{k: v for k, v in r.items() if k != 'ranking'} for r in batch]
             print(f"Inserting staging_batch sample: {staging_batch[0]}")
-            db.client.table('auctions_staging').insert(staging_batch).execute()
+            await (await db._get_client()).table('auctions_staging').insert(staging_batch).execute()
         
         # Check if they are there
-        res = db.client.table('auctions_staging').select('job_id').eq('job_id', job_id).execute()
+        res = (await db._get_client()).table('auctions_staging').select('job_id').eq('job_id', job_id).execute()
         print(f"Verification: Found {len(res.data)} records with job_id {job_id}")
         
         # Cleanup
-        db.client.table('auctions_staging').delete().eq('job_id', job_id).execute()
+        await (await db._get_client()).table('auctions_staging').delete().eq('job_id', job_id).execute()
         
     except Exception as e:
         print(f"Error in repro: {e}")

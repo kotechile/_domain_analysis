@@ -73,10 +73,10 @@ async def health_check():
             else:
                 # Test with secrets table first (known to exist)
                 try:
-                    result = db.client.table('secrets').select('id').limit(1).execute()
+                    result = (await db._get_client()).table('secrets').select('id').limit(1).execute()
                     # Test reports table access
                     try:
-                        db.client.table('reports').select('id').limit(1).execute()
+                        await (await db._get_client()).table('reports').select('id').limit(1).execute()
                         services_status['database'] = 'healthy'
                         logger.info("Database connection healthy - all tables accessible")
                     except Exception as table_error:
@@ -153,7 +153,7 @@ async def readiness_check():
     try:
         # Check if all critical services are available
         db = get_database()
-        db.client.table('reports').select('id').limit(1).execute()
+        await (await db._get_client()).table('reports').select('id').limit(1).execute()
         
         return {"status": "ready", "timestamp": datetime.utcnow().isoformat()}
         
@@ -244,7 +244,7 @@ async def database_diagnostic():
     
     # Check 4: Secrets table access
     try:
-        result = db.client.table('secrets').select('id').limit(1).execute()
+        result = (await db._get_client()).table('secrets').select('id').limit(1).execute()
         diagnostic["checks"]["secrets_table"] = {
             "status": "ok",
             "records_found": len(result.data)
@@ -259,7 +259,7 @@ async def database_diagnostic():
     
     # Check 5: Reports table access
     try:
-        result = db.client.table('reports').select('id').limit(1).execute()
+        result = (await db._get_client()).table('reports').select('id').limit(1).execute()
         diagnostic["checks"]["reports_table"] = {
             "status": "ok",
             "records_found": len(result.data)
@@ -334,7 +334,7 @@ async def test_db_connection():
         # Test 1: Check csv_upload_progress
         try:
             # Try to select 1 record, if table doesn't exist it triggers error
-            db.client.table('csv_upload_progress').select('job_id').limit(1).execute()
+            await (await db._get_client()).table('csv_upload_progress').select('job_id').limit(1).execute()
             results["csv_upload_progress_exists"] = True
         except Exception as e:
             results["error"] = f"csv_upload_progress table error: {str(e)}"
@@ -342,14 +342,14 @@ async def test_db_connection():
             
         # Test 2: Check auctions
         try:
-            db.client.table('auctions').select('id').limit(1).execute()
+            await (await db._get_client()).table('auctions').select('id').limit(1).execute()
             results["auctions_exists"] = True
         except Exception as e:
              results["error"] = f"auctions table error: {str(e)}"
              
         # Test 3: Check auctions_staging
         try:
-            db.client.table('auctions_staging').select('domain').limit(1).execute()
+            await (await db._get_client()).table('auctions_staging').select('domain').limit(1).execute()
             results["auctions_staging_exists"] = True
         except Exception as e:
              results["error"] = f"auctions_staging table error: {str(e)}"
@@ -358,15 +358,15 @@ async def test_db_connection():
         try:
             import uuid
             test_id = str(uuid.uuid4())
-            db.client.table('csv_upload_progress').insert({
+            (await db._get_client()).table('csv_upload_progress').insert({
                 'job_id': f"test_{test_id}",
                 'filename': 'test_connectivity.csv',
                 'auction_site': 'test',
                 'status': 'test'
-            }).execute()
+            await }).execute()
             
             # Cleanup
-            db.client.table('csv_upload_progress').delete().eq('job_id', f"test_{test_id}").execute()
+            await (await db._get_client()).table('csv_upload_progress').delete().eq('job_id', f"test_{test_id}").execute()
             results["write_test"] = True
         except Exception as e:
             results["error"] = f"Write failed: {str(e)}"

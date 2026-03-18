@@ -18,9 +18,9 @@ async def check_constraints():
             'processed': True,
             'offer_type': 'auction'
         }
-        res = db.client.table('auctions').upsert(dummy, on_conflict='domain,auction_site,expiration_date').execute()
+        res = (await db._get_client()).table('auctions').upsert(dummy, on_conflict='domain,auction_site,expiration_date').execute()
         print("✅ Successfully upserted dummy GoDaddy record.")
-        db.client.table('auctions').delete().eq('domain', 'dummy-godaddy-upsert.com').execute()
+        await (await db._get_client()).table('auctions').delete().eq('domain', 'dummy-godaddy-upsert.com').execute()
     except Exception as e:
         print(f"❌ Failed to upsert dummy record: {e}")
 
