@@ -141,6 +141,7 @@ export class MarketplaceComponent implements OnInit {
     let count = 0;
     if (this.searchQuery()) count++;
     if (this.preferredOnly()) count++;
+    if (this.scoredOnly()) count++;
     if (this.minScore() !== null && this.minScore() !== undefined) count++;
     if (this.maxScore() !== null && this.maxScore() !== undefined) count++;
     if (this.selectedPlatforms().length > 0) count++;
@@ -409,6 +410,11 @@ export class MarketplaceComponent implements OnInit {
 
   togglePreferred() {
     this.preferredOnly.set(!this.preferredOnly());
+    this.offset.set(0);
+  }
+
+  toggleScored() {
+    this.scoredOnly.set(!this.scoredOnly());
     this.offset.set(0);
   }
 

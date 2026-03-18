@@ -1725,27 +1725,33 @@ class DatabaseService:
                 where_clause = " AND ".join(where_conditions)
 
                 # Use raw SQL via RPC for efficient filtering
-                # This checks for missing metrics at the SQL level
-                # A domain is included if ANY of the four metrics is missing:
-                # - organic_traffic (or page_statistics->>'traffic')
-                # - ranking (or page_statistics->>'rank')
-                # - backlinks (or page_statistics->>'backlinks')
-                # - backlinks_spam_score (or page_statistics->>'backlinks_spam_score')
+                # Logic: Include domain if missing ANY metric
+                # Only skip if updated recently AND has ALL metrics
+                # Note: This simplified SQL includes all domains missing metrics, plus stale domains with all metrics
+                # The exact staleness check for domains with all metrics is done in Python fallback
                 sql = f"""
                 SELECT * FROM auctions
                 WHERE {where_clause}
-                  AND (updated_at IS NULL OR updated_at < '{cutoff_7d}')
                   AND (
+                    -- Include if missing any metric (regardless of updated_at)
                     (organic_traffic IS NULL AND (page_statistics IS NULL OR (page_statistics->>'traffic') IS NULL))
                     OR (ranking IS NULL AND (page_statistics IS NULL OR (page_statistics->>'rank') IS NULL))
                     OR (backlinks IS NULL AND (page_statistics IS NULL OR (page_statistics->>'backlinks') IS NULL))
                     OR (backlinks_spam_score IS NULL AND (page_statistics IS NULL OR (page_statistics->>'backlinks_spam_score') IS NULL))
+                    -- OR include if has all metrics but is stale (>7 days)
+                    OR (
+                      organic_traffic IS NOT NULL
+                      AND ranking IS NOT NULL
+                      AND backlinks IS NOT NULL
+                      AND backlinks_spam_score IS NOT NULL
+                      AND (updated_at IS NULL OR updated_at < '{cutoff_7d}')
+                    )
                   )
                 ORDER BY expiration_date ASC NULLS LAST
                 LIMIT {limit}
                 """
 
-                logger.info("Executing Fill Gaps optimized SQL", filters=filters, limit=limit, sql_preview=sql[:200])
+                logger.info("Executing Fill Gaps optimized SQL", filters=filters, limit=limit, sql_preview=sql[:250])
 
                 # Execute via RPC if available, otherwise fall back to client query
                 try:
@@ -1766,23 +1772,12 @@ class DatabaseService:
                         logger.info("First candidate sample", domain=first.get('domain'), updated_at=first.get('updated_at'), page_statistics=first.get('page_statistics') is not None, organic_traffic=first.get('organic_traffic'), ranking=first.get('ranking'), backlinks=first.get('backlinks'), backlinks_spam_score=first.get('backlinks_spam_score'))
 
                     # In-memory filtering (fallback)
+                    # Logic: Include domain if missing ANY metric
+                    # Only skip if updated recently AND has ALL metrics
                     selected = []
-                    skipped_stale = 0
+                    skipped_stale_has_all = 0
                     skipped_has_all_metrics = 0
                     for auction in candidates:
-                        raw_updated = auction.get('updated_at')
-                        if raw_updated:
-                            try:
-                                from utils.date_utils import parse_iso_datetime
-                                last_update = parse_iso_datetime(raw_updated)
-                                if last_update and last_update.tzinfo is None:
-                                    last_update = last_update.replace(tzinfo=timezone.utc)
-                                if last_update and last_update.isoformat() > cutoff_7d:
-                                    skipped_stale += 1
-                                    continue
-                            except Exception:
-                                pass
-
                         stats = auction.get('page_statistics') or {}
                         has_traffic = (
                             auction.get('organic_traffic') is not None or
@@ -1806,14 +1801,33 @@ class DatabaseService:
                             stats.get('spam_score') is not None
                         )
 
-                        if not (has_traffic and has_rank and has_backlinks and has_spam_score):
-                            selected.append(auction)
-                            if len(selected) >= limit:
-                                break
-                        else:
+                        has_all_metrics = has_traffic and has_rank and has_backlinks and has_spam_score
+
+                        if has_all_metrics:
+                            # Domain has all metrics - check staleness
                             skipped_has_all_metrics += 1
+                            raw_updated = auction.get('updated_at')
+                            if raw_updated:
+                                try:
+                                    from utils.date_utils import parse_iso_datetime
+                                    last_update = parse_iso_datetime(raw_updated)
+                                    if last_update and last_update.tzinfo is None:
+                                        last_update = last_update.replace(tzinfo=timezone.utc)
+                                    if last_update and last_update.isoformat() > cutoff_7d:
+                                        skipped_stale_has_all += 1
+                                        continue  # Skip - has all metrics and is fresh
+                                except Exception:
+                                    pass
+                            # Has all metrics but is stale - include for refresh
+                            selected.append(auction)
+                        else:
+                            # Domain is missing at least one metric - ALWAYS include
+                            selected.append(auction)
+
+                        if len(selected) >= limit:
+                            break
                     candidates = selected
-                    logger.info("Fill Gaps fallback filtering complete", selected_count=len(candidates), skipped_stale=skipped_stale, skipped_has_all_metrics=skipped_has_all_metrics)
+                    logger.info("Fill Gaps fallback filtering complete", selected_count=len(candidates), skipped_stale_has_all=skipped_stale_has_all, skipped_has_all_metrics=skipped_has_all_metrics)
 
                 logger.info("Fill Gaps query returned candidates", candidate_count=len(candidates), filters=filters)
                 return candidates

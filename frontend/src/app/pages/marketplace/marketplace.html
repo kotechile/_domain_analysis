@@ -93,6 +93,16 @@
                 </div>
             </div>
 
+            <!-- Scored Only Toggle -->
+            <button (click)="toggleScored()"
+                class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 shrink-0"
+                [ngStyle]="{'background': scoredOnly() ? 'var(--accent-color)' : 'var(--card-bg)',
+                            'color': scoredOnly() ? 'white' : 'var(--text-color)',
+                            'border-color': 'var(--border-color)'}">
+                <i-lucide [name]="Target" class="w-4 h-4"></i-lucide>
+                <span>Scored Only</span>
+            </button>
+
             <!-- Filter Preferred Toggle -->
             <button (click)="togglePreferred()"
                 class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 shrink-0"
