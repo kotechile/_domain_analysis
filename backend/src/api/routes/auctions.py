@@ -5,7 +5,7 @@ Auctions API routes for multi-source domain auction data
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Body, BackgroundTasks, Depends
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import structlog
 import uuid
 import asyncio
@@ -397,10 +397,23 @@ async def process_csv_upload_async(
                 # Logic copied from original process_csv_upload_async
                 # ... score ...
                 # ... map types ...
-                
+
                 # Convert date types for JSON serialization (Supabase expects ISO strings)
                 start_date_iso = auction.start_date.isoformat() if auction.start_date else None
                 expiration_date = auction.expiration_date
+
+                # Filter: Skip auctions that expire more than 2 weeks in the future
+                # This helps manage large files like Namecheap_Market_Sales.csv with 1M+ records
+                if expiration_date:
+                    two_weeks_from_now = datetime.now(timezone.utc) + timedelta(days=14)
+                    if expiration_date > two_weeks_from_now:
+                        skipped_count += 1
+                        continue
+                elif auction_site.lower() == 'namecheap':
+                    # Namecheap records should have expiration dates - skip if missing
+                    logger.debug("Skipping Namecheap record without expiration date", domain=auction.domain)
+                    skipped_count += 1
+                    continue
                 
                 # NameSilo fallback
                 if not expiration_date and auction_site.lower() == 'namesilo':
@@ -3088,11 +3101,14 @@ async def get_refresh_costs(current_user = Depends(get_current_user)):
 @router.post("/auctions/bulk-refresh")
 async def trigger_bulk_refresh(
     payload: Dict[str, Any] = Body(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user = Depends(get_current_user)
 ):
     """
     'Find and Fill' — refresh up to 1,000 domains with missing metrics.
     Body: { filters: {...}, force: bool }
+
+    Returns immediately with 'in_progress' status; processing continues in background.
     """
     try:
         from services.marketplace_batch_service import MarketplaceBatchService
@@ -3102,19 +3118,22 @@ async def trigger_bulk_refresh(
         filters = payload.get("filters", payload)  # Fallback: treat whole body as filters
         force = payload.get("force", False)
 
-        result = await service.trigger_marketplace_refresh(
-            user_id=current_user.id,
+        # Extract user ID before passing to background task
+        user_id = current_user.id
+
+        # Start processing in background and return immediately
+        background_tasks.add_task(
+            service.process_marketplace_refresh,
+            user_id=user_id,
             filters=filters,
             force=force
         )
 
-        # "skipped" means nothing to do — still a success, don't raise 400
-        if not result.get("success") and not result.get("skipped"):
-            raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
-
-        return result
-    except HTTPException:
-        raise
+        return {
+            "success": True,
+            "in_progress": True,
+            "message": "Fill Gaps refresh started — processing up to 1,000 domains in the background. Results will appear shortly."
+        }
     except Exception as e:
         logger.error("Failed to trigger bulk refresh", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -3122,12 +3141,15 @@ async def trigger_bulk_refresh(
 @router.post("/auctions/force-refresh")
 async def trigger_force_refresh(
     payload: Dict[str, Any] = Body(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user = Depends(get_current_user)
 ):
     """
     Force Refresh — get fresh SEO metrics for up to 1,000 domains matching filters,
     overriding any existing metrics regardless of when they were last refreshed.
     Body: { filters: {...}, force: bool }
+
+    Returns immediately with 'in_progress' status; processing continues in background.
     """
     try:
         from services.marketplace_batch_service import MarketplaceBatchService
@@ -3136,18 +3158,22 @@ async def trigger_force_refresh(
         # Same payload format as bulk-refresh
         filters = payload.get("filters", payload)
 
-        result = await service.trigger_marketplace_refresh(
-            user_id=current_user.id,
+        # Extract user ID before passing to background task
+        user_id = current_user.id
+
+        # Start processing in background and return immediately
+        background_tasks.add_task(
+            service.process_marketplace_refresh,
+            user_id=user_id,
             filters=filters,
-            force=True  # Always force for this endpoint
+            force=True
         )
 
-        if not result.get("success") and not result.get("skipped"):
-            raise HTTPException(status_code=400, detail=result.get("error", "Unknown error"))
-
-        return result
-    except HTTPException:
-        raise
+        return {
+            "success": True,
+            "in_progress": True,
+            "message": "Force Refresh started — processing up to 1,000 domains in the background. Results will appear shortly."
+        }
     except Exception as e:
         logger.error("Failed to trigger force refresh", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))

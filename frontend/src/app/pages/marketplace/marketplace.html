@@ -36,10 +36,19 @@
             <!-- Fill Gaps Button (primary action) -->
             <div class="relative group shrink-0">
                 <button (click)="triggerBulkRefresh()"
-                    class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-20 active:scale-95 hover:bg-opacity-30 outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                    [disabled]="fillGapsInProgress()"
+                    class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-20 active:scale-95 hover:bg-opacity-30 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
                     style="background: rgba(var(--accent-color-rgb), 0.1); color: var(--accent-color); border-color: rgba(var(--accent-color-rgb), 0.25);">
-                    <i-lucide [name]="Sparkles" class="w-4 h-4"></i-lucide>
-                    <span>Fill Gaps</span>
+                    @if (fillGapsInProgress()) {
+                        <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Processing…</span>
+                    } @else {
+                        <i-lucide [name]="Sparkles" class="w-4 h-4"></i-lucide>
+                        <span>Fill Gaps</span>
+                    }
                 </button>
                 <!-- Tooltip -->
                 <div
@@ -57,10 +66,19 @@
             <!-- Force Refresh Button (secondary / premium action) -->
             <div class="relative group shrink-0">
                 <button (click)="triggerForceRefresh()"
-                    class="h-11 px-4 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 hover:opacity-80 outline-none focus-visible:ring-2"
+                    [disabled]="forceRefreshInProgress()"
+                    class="h-11 px-4 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 hover:opacity-80 outline-none focus-visible:ring-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
                     style="background: var(--card-bg); color: var(--text-color); border-color: var(--border-color);">
-                    <i-lucide [name]="Zap" class="w-4 h-4 text-amber-500"></i-lucide>
-                    <span>Force Refresh</span>
+                    @if (forceRefreshInProgress()) {
+                        <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Processing…</span>
+                    } @else {
+                        <i-lucide [name]="Zap" class="w-4 h-4 text-amber-500"></i-lucide>
+                        <span>Force Refresh</span>
+                    }
                 </button>
                 <!-- Tooltip -->
                 <div

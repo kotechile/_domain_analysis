@@ -273,7 +273,7 @@ class AnalysisService:
                 db = get_database()
                 # Query auctions table for this domain (case-insensitive)
                 # Using ilike for case-insensitivity in domain matching
-                auction_res = await db.client.table('auctions').select('*').ilike('domain', domain).execute()
+                auction_res = await db.client.table('auctions').select('*').ilike('domain', domain).eq('to_delete', False).execute()
                 if auction_res.data:
                     # Sort by processed status or just take the first one
                     auction_data = auction_res.data[0]
@@ -782,7 +782,7 @@ class AnalysisService:
                 # if the report metrics seem failed or incomplete
                 try:
                     # Use ilike for case-insensitive lookup to find the domain in the auctions table
-                    auction_res = await self.db.client.table('auctions').select('domain', 'organic_traffic', 'keywords_count').ilike('domain', report.domain_name).execute()
+                    auction_res = await self.db.client.table('auctions').select('domain', 'organic_traffic', 'keywords_count').ilike('domain', report.domain_name).eq('to_delete', False).execute()
                     if auction_res.data:
                         current_auction = auction_res.data[0]
                         # We found a match, now we check if we should preserve existing metrics

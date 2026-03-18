@@ -1469,8 +1469,8 @@ class DatabaseService:
             if not self.client:
                 raise Exception("Supabase client not available")
             
-            # Build query
-            query = self.client.table('auctions').select('*')
+            # Build query - always filter out records marked for deletion
+            query = self.client.table('auctions').select('*').eq('to_delete', False)
             
             # Apply filters
             if filters:
@@ -1640,7 +1640,8 @@ class DatabaseService:
             cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
             # --- Build base query ---
-            query = self.client.table('auctions').select('*')
+            # Always filter out records marked for deletion
+            query = self.client.table('auctions').select('*').eq('to_delete', False)
 
             # Always require score > 0 so we only work on domains we've evaluated
             query = query.gt('score', 0)
@@ -1677,74 +1678,140 @@ class DatabaseService:
                     query = query.lte('score', filters['max_score'])
                 if filters.get('auction_sites') and isinstance(filters['auction_sites'], list):
                     query = query.in_('auction_site', filters['auction_sites'])
-
-            # Sort by closest expiry first (most time-sensitive)
-            query = query.order('expiration_date', desc=False)
-
-            # Fetch a larger candidate pool so we have enough after in-memory filtering
-            fetch_limit = min(limit * 4, 5000)
-            result = query.limit(fetch_limit).execute()
-            candidates = result.data if result.data else []
-
-            selected = []
+                if filters.get('scored') is not None:
+                    if filters['scored']:
+                        query = query.not_.is_('score', 'null')
+                    else:
+                        query = query.is_('score', 'null')
 
             if force_refresh:
-                # Force mode: skip staleness and missing-metrics checks — just take top N
-                selected = candidates[:limit]
+                # Force mode: just return top N by expiry, no missing-metrics check
+                query = query.order('expiration_date', desc=False)
+                logger.info("Executing force refresh query", filters=filters, limit=limit)
+                result = query.limit(limit).execute()
+                candidates = result.data if result.data else []
+                logger.info("Force refresh query returned candidates", candidate_count=len(candidates), filters=filters)
+                return candidates
             else:
-                for auction in candidates:
-                    # --- 7-day staleness skip ---
-                    # If the domain was refreshed within the last 7 days, skip it
-                    raw_updated = auction.get('updated_at')
-                    if raw_updated:
-                        try:
-                            from utils.date_utils import parse_iso_datetime
-                            last_update = parse_iso_datetime(raw_updated)
-                            if last_update and last_update.tzinfo is None:
-                                last_update = last_update.replace(tzinfo=timezone.utc)
-                            if last_update and last_update.isoformat() > cutoff_7d:
-                                continue  # Refreshed recently — skip
-                        except Exception:
-                            pass  # If we can't parse, don't skip
+                # Fill Gaps mode: use RPC for efficient SQL filtering
+                # Build filter conditions for the SQL function
+                where_conditions = ["to_delete = FALSE", "score > 0"]
 
-                    # --- Missing metrics check ---
-                    stats = auction.get('page_statistics') or {}
+                if filters:
+                    if filters.get('preferred') is not None:
+                        where_conditions.append(f"preferred = {str(filters['preferred']).lower()}")
+                    if filters.get('auction_site'):
+                        where_conditions.append(f"auction_site = '{filters['auction_site']}'")
+                    if filters.get('tld'):
+                        tld = filters['tld']
+                        if not tld.startswith('.'):
+                            tld = '.' + tld
+                        where_conditions.append(f"domain ILIKE '%{tld}'")
+                    if filters.get('expiration_from_date'):
+                        where_conditions.append(f"expiration_date >= '{filters['expiration_from_date']}'")
+                    if filters.get('expiration_to_date'):
+                        exp_to = filters['expiration_to_date']
+                        if isinstance(exp_to, str) and len(exp_to) == 10:
+                            exp_to = f"{exp_to}T23:59:59"
+                        where_conditions.append(f"expiration_date <= '{exp_to}'")
+                    if filters.get('min_score') is not None:
+                        where_conditions.append(f"score >= {filters['min_score']}")
+                    if filters.get('max_score') is not None:
+                        where_conditions.append(f"score <= {filters['max_score']}")
+                    if filters.get('auction_sites') and isinstance(filters['auction_sites'], list):
+                        sites = ", ".join([f"'{s}'" for s in filters['auction_sites']])
+                        where_conditions.append(f"auction_site IN ({sites})")
 
-                    has_traffic = (
-                        auction.get('organic_traffic') is not None or
-                        stats.get('traffic') is not None or
-                        stats.get('etv') is not None or
-                        stats.get('organic_traffic') is not None
-                    )
-                    has_rank = (
-                        auction.get('ranking') is not None or
-                        stats.get('rank') is not None or
-                        stats.get('ranking') is not None
-                    )
-                    has_backlinks = (
-                        auction.get('backlinks') is not None or
-                        stats.get('backlinks') is not None or
-                        stats.get('total_backlinks') is not None
-                    )
-                    has_spam_score = (
-                        auction.get('backlinks_spam_score') is not None or
-                        stats.get('backlinks_spam_score') is not None or
-                        stats.get('spam_score') is not None
-                    )
+                where_clause = " AND ".join(where_conditions)
 
-                    # Include if ANY metric is missing (the "gap" to fill)
-                    if not (has_traffic and has_rank and has_backlinks and has_spam_score):
-                        selected.append(auction)
-                        if len(selected) >= limit:
-                            break
+                # Use raw SQL via RPC for efficient filtering
+                # This checks for missing metrics at the SQL level
+                # A domain is included if ANY of the four metrics is missing:
+                # - organic_traffic (or page_statistics->>'traffic')
+                # - ranking (or page_statistics->>'rank')
+                # - backlinks (or page_statistics->>'backlinks')
+                # - backlinks_spam_score (or page_statistics->>'backlinks_spam_score')
+                sql = f"""
+                SELECT * FROM auctions
+                WHERE {where_clause}
+                  AND (updated_at IS NULL OR updated_at < '{cutoff_7d}')
+                  AND (
+                    (organic_traffic IS NULL AND (page_statistics IS NULL OR (page_statistics->>'traffic') IS NULL))
+                    OR (ranking IS NULL AND (page_statistics IS NULL OR (page_statistics->>'rank') IS NULL))
+                    OR (backlinks IS NULL AND (page_statistics IS NULL OR (page_statistics->>'backlinks') IS NULL))
+                    OR (backlinks_spam_score IS NULL AND (page_statistics IS NULL OR (page_statistics->>'backlinks_spam_score') IS NULL))
+                  )
+                ORDER BY expiration_date ASC NULLS LAST
+                LIMIT {limit}
+                """
 
-            logger.info(
-                "Find-and-Fill: selected domains for refresh",
-                selected=len(selected),
-                examined=len(candidates),
-                force=force_refresh
-            )
-            return selected
+                logger.info("Executing Fill Gaps optimized SQL", filters=filters, limit=limit, sql_preview=sql[:200])
+
+                # Execute via RPC if available, otherwise fall back to client query
+                try:
+                    result = self.client.rpc('exec_sql', {'sql': sql}).execute()
+                    candidates = result.data if result.data else []
+                    logger.info("Fill Gaps SQL query executed successfully", candidate_count=len(candidates))
+                except Exception as rpc_err:
+                    logger.warning("RPC exec_sql not available, falling back to client-side filtering", error=str(rpc_err))
+                    # Fall back to the original approach but with smaller limit
+                    query = query.order('expiration_date', desc=False)
+                    fetch_limit = min(limit * 2, 2000)  # Reduced from 4000
+                    result = query.limit(fetch_limit).execute()
+                    candidates = result.data if result.data else []
+                    logger.info("Fill Gaps fallback query returned candidates", candidate_count=len(candidates), fetch_limit=fetch_limit)
+
+                    # In-memory filtering (fallback)
+                    selected = []
+                    for auction in candidates:
+                        raw_updated = auction.get('updated_at')
+                        if raw_updated:
+                            try:
+                                from utils.date_utils import parse_iso_datetime
+                                last_update = parse_iso_datetime(raw_updated)
+                                if last_update and last_update.tzinfo is None:
+                                    last_update = last_update.replace(tzinfo=timezone.utc)
+                                if last_update and last_update.isoformat() > cutoff_7d:
+                                    continue
+                            except Exception:
+                                pass
+
+                        stats = auction.get('page_statistics') or {}
+                        has_traffic = (
+                            auction.get('organic_traffic') is not None or
+                            stats.get('traffic') is not None or
+                            stats.get('etv') is not None or
+                            stats.get('organic_traffic') is not None
+                        )
+                        has_rank = (
+                            auction.get('ranking') is not None or
+                            stats.get('rank') is not None or
+                            stats.get('ranking') is not None
+                        )
+                        has_backlinks = (
+                            auction.get('backlinks') is not None or
+                            stats.get('backlinks') is not None or
+                            stats.get('total_backlinks') is not None
+                        )
+                        has_spam_score = (
+                            auction.get('backlinks_spam_score') is not None or
+                            stats.get('backlinks_spam_score') is not None or
+                            stats.get('spam_score') is not None
+                        )
+
+                        if not (has_traffic and has_rank and has_backlinks and has_spam_score):
+                            selected.append(auction)
+                            if len(selected) >= limit:
+                                break
+                    candidates = selected
+                    logger.info("Fill Gaps fallback filtering complete", selected_count=len(candidates))
+
+                logger.info("Fill Gaps query returned candidates", candidate_count=len(candidates), filters=filters)
+                return candidates
+
+        except Exception as e:
+            logger.error("Failed to get auctions missing metrics", error=str(e))
+            raise
 
         except Exception as e:
             logger.error("Failed to get auctions missing metrics", error=str(e))
@@ -1768,7 +1835,8 @@ class DatabaseService:
                 
             # First fetch existing statistics to merge
             # Using ilike for case-insensitivity to find the domain
-            response = self.client.table('auctions').select('domain', 'page_statistics').ilike('domain', domain).execute()
+            # Filter out records marked for deletion
+            response = self.client.table('auctions').select('domain', 'page_statistics').ilike('domain', domain).eq('to_delete', False).execute()
             
             if not response.data or len(response.data) == 0:
                 # logger.warning("Domain not found for statistics update", domain=domain)

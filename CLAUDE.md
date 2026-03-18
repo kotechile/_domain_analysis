@@ -75,7 +75,7 @@ _domain_analysis/
 - **Investment Memo**: Structured advantages/disadvantages with supporting metrics
 
 ### 4. Credit System
-- **Usage-Based**: Credits consumed per analysis
+- **Usage-Based**: Credits consumed per analysiswhen I click force refresh nothing happens. It should refresh from dataforseo
 - **Tiered Pricing**: Different credit costs for different analysis types
 - **Tracking**: Real-time credit balance and usage history
 

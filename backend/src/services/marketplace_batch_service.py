@@ -40,16 +40,30 @@ class MarketplaceBatchService:
             return {"bulk_refresh_1k": 50, "force_refresh_1k": 150, "individual_deep_dive": 10}
 
     async def trigger_marketplace_refresh(
-        self, 
-        user_id: UUID, 
-        filters: Dict[str, Any], 
+        self,
+        user_id: UUID,
+        filters: Dict[str, Any],
         force: bool = False
     ) -> Dict[str, Any]:
         """
-        "Find and Fill" — trigger a DataForSEO refresh for up to 1,000 domains that:
-          - Have score > 0
-          - Are missing metrics OR are stale (>7 days since last refresh)
-          - Are closest to expiry (sorted ASC)
+        Legacy synchronous method — now returns immediately with in_progress status.
+        Use process_marketplace_refresh() for background processing.
+        """
+        return {
+            "success": True,
+            "in_progress": True,
+            "message": "Refresh started — processing in background."
+        }
+
+    async def process_marketplace_refresh(
+        self,
+        user_id: UUID,
+        filters: Dict[str, Any],
+        force: bool = False
+    ):
+        """
+        Background task: "Find and Fill" — trigger a DataForSEO refresh for up to 1,000 domains.
+        This runs in the background and doesn't block the API response.
 
         force=True: Bypasses the missing-metrics and staleness checks (premium call).
         force=False: Fill-the-gaps behaviour — cheaper and idempotent.
@@ -62,9 +76,11 @@ class MarketplaceBatchService:
             description = f"{'Force' if force else 'Fill-the-Gaps'} marketplace refresh (up to 1,000 domains)"
             ref_id = f"refresh_{'force' if force else 'bulk'}_{int(datetime.utcnow().timestamp())}"
 
-            # 1. Preview — find the domains BEFORE deducting credits
-            #    This way we can tell the user "we found X domains" and avoid
-            #    deducting credits when there is nothing to do.
+            logger.info(f"[Background] Starting {'force' if force else 'bulk'} refresh",
+                       user_id=str(user_id), filters=filters, force=force)
+
+            # 1. Find the domains BEFORE deducting credits
+            logger.info(f"[Background] Finding domains with filters", filters=filters)
             domains_data = await self.auctions_service.get_auctions_missing_any_metric_with_filters(
                 filters=filters,
                 limit=1000,
@@ -72,15 +88,16 @@ class MarketplaceBatchService:
             )
             domain_names = [d['domain'] for d in domains_data]
 
+            logger.info(f"[Background] Found {len(domain_names)} domains for refresh",
+                       user_id=str(user_id), domain_count=len(domain_names), filters=filters)
+
             if not domain_names:
-                return {
-                    "success": True,
-                    "message": "No domains needed refreshing — all scored domains with your current filters already have fresh metrics.",
-                    "domain_count": 0,
-                    "skipped": True
-                }
+                logger.info(f"[Background] No domains needed refreshing - all domains have fresh metrics or match filters",
+                           user_id=str(user_id), filters=filters)
+                return
 
             # 2. Deduct credits only once we know there is work to do
+            logger.info(f"[Background] Deducting {cost} credits", user_id=str(user_id))
             success = await self.credits_service.deduct_credits(
                 user_id=user_id,
                 amount=cost,
@@ -89,15 +106,26 @@ class MarketplaceBatchService:
             )
 
             if not success:
-                return {
-                    "success": False,
-                    "error": "Insufficient credits",
-                    "required": cost,
-                    "domain_count": len(domain_names)
-                }
+                logger.error(f"[Background] Insufficient credits", user_id=str(user_id), required=cost)
+                return
 
-            # 3. Trigger DataForSEO via N8N
-            await self.n8n_service.trigger_bulk_page_summary_workflow(domain_names)
+            logger.info(f"[Background] Credits deducted successfully", user_id=str(user_id), cost=cost)
+
+            # 3. Trigger DataForSEO via N8N (in smaller batches to avoid overwhelming N8N)
+            batch_size = 100
+            total_batches = (len(domain_names) + batch_size - 1) // batch_size
+            logger.info(f"[Background] Triggering N8N for {len(domain_names)} domains in {total_batches} batches",
+                       user_id=str(user_id), domain_count=len(domain_names), batches=total_batches)
+
+            for i in range(0, len(domain_names), batch_size):
+                batch = domain_names[i:i + batch_size]
+                try:
+                    await self.n8n_service.trigger_bulk_page_summary_workflow(batch)
+                    logger.info(f"[Background] Triggered N8N batch {i//batch_size + 1}/{total_batches}",
+                               user_id=str(user_id), batch_size=len(batch), batch_num=i//batch_size + 1)
+                except Exception as n8n_err:
+                    logger.error(f"[Background] Failed to trigger N8N batch {i//batch_size + 1}",
+                                user_id=str(user_id), error=str(n8n_err))
 
             # 4. Record in refresh_history
             try:
@@ -107,26 +135,18 @@ class MarketplaceBatchService:
                     'credits_spent': cost,
                     'filters_used': filters
                 }).execute()
+                logger.info(f"[Background] Refresh history recorded", user_id=str(user_id))
             except Exception as hist_err:
-                logger.warning("Failed to write refresh history", error=str(hist_err))
+                logger.warning("[Background] Failed to write refresh history", error=str(hist_err))
 
-
-            return {
-                "success": True,
-                "triggered_count": len(domain_names),
-                "cost": cost,
-                "message": f"Refreshing metrics for {len(domain_names):,} domains — results will appear within a few minutes."
-            }
+            logger.info(f"[Background] Refresh completed successfully",
+                       user_id=str(user_id), domain_count=len(domain_names), cost=cost)
 
         except Exception as e:
-            logger.error("Failed to trigger marketplace refresh", user_id=str(user_id), error=str(e))
+            logger.error("[Background] Failed to process marketplace refresh",
+                        user_id=str(user_id), error=str(e))
             import traceback
-            with open("/tmp/refresh_debug.log", "w") as f:
-                f.write(f"Exception Type: {type(e)}\n")
-                f.write(f"Exception Str: {str(e)}\n")
-                f.write("Traceback:\n")
-                traceback.print_exc(file=f)
-            return {"success": False, "error": str(e)}
+            logger.error("[Background] Exception traceback", traceback=traceback.format_exc())
 
 
     async def get_refresh_history(self, user_id: UUID, limit: int = 50) -> List[Dict[str, Any]]:

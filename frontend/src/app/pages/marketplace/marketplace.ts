@@ -112,6 +112,10 @@ export class MarketplaceComponent implements OnInit {
   loading = signal<boolean>(true);
   totalCount = signal<number>(0);
 
+  // Background processing state
+  fillGapsInProgress = signal<boolean>(false);
+  forceRefreshInProgress = signal<boolean>(false);
+
   // Filter Signals
   searchQuery = signal<string>('');
   sortBy = signal<string>('expiration_date');
@@ -203,6 +207,12 @@ export class MarketplaceComponent implements OnInit {
   }
 
   async triggerBulkRefresh() {
+    // Prevent duplicate requests
+    if (this.fillGapsInProgress()) {
+      this.snackBar.open('⏳ Fill Gaps is already running…', 'Close', { duration: 3000 });
+      return;
+    }
+
     // Build the exact same filter set that the table currently uses
     const filters: Record<string, any> = {};
 
@@ -215,40 +225,57 @@ export class MarketplaceComponent implements OnInit {
     if (this.minScore() !== null) filters['min_score'] = this.minScore();
     if (this.maxScore() !== null) filters['max_score'] = this.maxScore();
 
-    // Snackbar loading indicator
-    const loadingSnack = this.snackBar.open(
-      '🔍 Scanning for domains with missing metrics…', '', { duration: 0 }
+    // Set processing state
+    this.fillGapsInProgress.set(true);
+
+    // Show immediate feedback (dismiss after 3 seconds, processing continues in background)
+    this.snackBar.open(
+      '🚀 Fill Gaps started — processing up to 1,000 domains in the background…',
+      'Close', { duration: 5000 }
     );
 
     try {
+      console.log('[Fill Gaps] Sending request with filters:', filters);
       const res = await firstValueFrom(this.api.triggerBulkRefresh(filters, false));
-      loadingSnack.dismiss();
+      console.log('[Fill Gaps] Response:', res);
 
-      if (res.success) {
-        if ((res as any).skipped) {
-          this.snackBar.open(
-            '✅ All scored domains already have fresh metrics — nothing to refresh!',
-            'Close', { duration: 6000 }
-          );
-        } else {
-          this.snackBar.open(
-            `🚀 Filling gaps for ${res.triggered_count?.toLocaleString() ?? '?'} domains · ${res.cost} credits deducted · Results in ~2 min`,
-            'Close', { duration: 8000 }
-          );
-          this.creditService.refreshData();
-        }
+      // API returns immediately with in_progress status
+      if (res.success && (res as any).in_progress) {
+        // Background processing started successfully
+        this.creditService.refreshData();
+
+        // Clear the processing state after a delay (give user time to see the button state)
+        setTimeout(() => {
+          this.fillGapsInProgress.set(false);
+          // Refresh the table to show any updates
+          this.fetchAuctions();
+        }, 3000);
+      } else if ((res as any).skipped) {
+        this.fillGapsInProgress.set(false);
+        this.snackBar.open(
+          '✅ All scored domains already have fresh metrics — nothing to refresh!',
+          'Close', { duration: 6000 }
+        );
       } else {
+        this.fillGapsInProgress.set(false);
         const msg = (res as any).error || 'Failed to trigger refresh';
         this.snackBar.open(`❌ ${msg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });
       }
     } catch (e: any) {
-      loadingSnack.dismiss();
+      this.fillGapsInProgress.set(false);
+      console.error('[Fill Gaps] Error:', e);
       const errorMsg = e.error?.detail || e.error?.error || 'Failed to trigger Fill-the-Gaps refresh';
       this.snackBar.open(`❌ ${errorMsg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });
     }
   }
 
   async triggerForceRefresh() {
+    // Prevent duplicate requests
+    if (this.forceRefreshInProgress()) {
+      this.snackBar.open('⏳ Force Refresh is already running…', 'Close', { duration: 3000 });
+      return;
+    }
+
     // Same filter set as the table, passed to force-refresh endpoint
     const filters: Record<string, any> = {};
     if (this.preferredOnly()) filters['preferred'] = true;
@@ -260,26 +287,37 @@ export class MarketplaceComponent implements OnInit {
     if (this.minScore() !== null) filters['min_score'] = this.minScore();
     if (this.maxScore() !== null) filters['max_score'] = this.maxScore();
 
-    const loadingSnack = this.snackBar.open(
-      '⚡ Preparing force refresh…', '', { duration: 0 }
+    // Set processing state
+    this.forceRefreshInProgress.set(true);
+
+    // Show immediate feedback
+    this.snackBar.open(
+      '⚡ Force Refresh started — processing up to 1,000 domains in the background…',
+      'Close', { duration: 5000 }
     );
 
     try {
+      console.log('[Force Refresh] Sending request with filters:', filters);
       const res = await firstValueFrom(this.api.triggerForceRefresh(filters));
-      loadingSnack.dismiss();
+      console.log('[Force Refresh] Response:', res);
 
-      if (res.success) {
-        this.snackBar.open(
-          `⚡ Force refreshing ${res.triggered_count?.toLocaleString() ?? '?'} domains · ${res.cost} credits deducted · Results in ~2 min`,
-          'Close', { duration: 8000 }
-        );
+      if (res.success && (res as any).in_progress) {
+        // Background processing started successfully
         this.creditService.refreshData();
+
+        // Clear the processing state after a delay
+        setTimeout(() => {
+          this.forceRefreshInProgress.set(false);
+          this.fetchAuctions();
+        }, 3000);
       } else {
+        this.forceRefreshInProgress.set(false);
         const msg = (res as any).error || 'Failed to trigger force refresh';
         this.snackBar.open(`❌ ${msg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });
       }
     } catch (e: any) {
-      loadingSnack.dismiss();
+      this.forceRefreshInProgress.set(false);
+      console.error('[Force Refresh] Error:', e);
       const errorMsg = e.error?.detail || e.error?.error || 'Failed to trigger force refresh';
       this.snackBar.open(`❌ ${errorMsg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });
     }
