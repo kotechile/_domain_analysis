@@ -5,6 +5,7 @@ N8N webhook endpoints for receiving workflow results
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from typing import Dict, Any, Optional
 import structlog
+import asyncio
 from pydantic import BaseModel, Field
 
 from services.database import get_database
@@ -12,6 +13,10 @@ from models.domain_analysis import DetailedAnalysisData, DetailedDataType
 
 logger = structlog.get_logger()
 router = APIRouter()
+
+# Global semaphore to limit concurrent webhook processing
+# This prevents memory issues when multiple batches arrive simultaneously
+_webhook_semaphore = asyncio.Semaphore(3)
 
 
 class N8NBacklinksWebhookRequest(BaseModel):
@@ -429,9 +434,13 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
                        total=len(result_data),
                        failed_domains=failed_domains[:10] if failed_domains else [])  # Log first 10 failed domains
 
-        import asyncio
-        asyncio.create_task(process_data())
-        
+        # Use semaphore to limit concurrent webhook processing
+        async def process_with_semaphore():
+            async with _webhook_semaphore:
+                await process_data()
+
+        asyncio.create_task(process_with_semaphore())
+
         return {
             "success": True,
             "message": "Bulk page summary data queued for saving",

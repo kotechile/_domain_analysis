@@ -112,6 +112,7 @@ class MarketplaceBatchService:
             logger.info(f"[Background] Credits deducted successfully", user_id=str(user_id), cost=cost)
 
             # 3. Trigger DataForSEO via N8N (in smaller batches to avoid overwhelming N8N)
+            import asyncio
             batch_size = 100
             total_batches = (len(domain_names) + batch_size - 1) // batch_size
             logger.info(f"[Background] Triggering N8N for {len(domain_names)} domains in {total_batches} batches",
@@ -123,6 +124,9 @@ class MarketplaceBatchService:
                     await self.n8n_service.trigger_bulk_page_summary_workflow(batch)
                     logger.info(f"[Background] Triggered N8N batch {i//batch_size + 1}/{total_batches}",
                                user_id=str(user_id), batch_size=len(batch), batch_num=i//batch_size + 1)
+                    # Add delay between batches to prevent overwhelming the system
+                    if i + batch_size < len(domain_names):
+                        await asyncio.sleep(2)
                 except Exception as n8n_err:
                     logger.error(f"[Background] Failed to trigger N8N batch {i//batch_size + 1}",
                                 user_id=str(user_id), error=str(n8n_err))
