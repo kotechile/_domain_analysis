@@ -106,7 +106,7 @@
             <!-- Filter Preferred Toggle -->
             <button (click)="togglePreferred()"
                 class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 shrink-0"
-                [ngStyle]="{'background': preferredOnly() ? 'var(--accent-color)' : 'var(--card-bg)', 
+                [ngStyle]="{'background': preferredOnly() ? 'var(--accent-color)' : 'var(--card-bg)',
                             'color': preferredOnly() ? 'white' : 'var(--text-color)',
                             'border-color': 'var(--border-color)'}">
                 <i-lucide [name]="Star" class="w-4 h-4" [class.fill-current]="preferredOnly()"></i-lucide>
@@ -114,6 +114,61 @@
             </button>
         </div>
     </div>
+
+    <!-- Progress Bars -->
+    @if (fillGapsInProgress() || forceRefreshInProgress()) {
+    <div class="space-y-3">
+        <!-- Fill Gaps Progress -->
+        @if (fillGapsInProgress()) {
+        <div class="p-4 rounded-xl border border-opacity-10"
+            style="background: rgba(var(--accent-color-rgb), 0.05); border-color: var(--border-color)">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center space-x-2">
+                    <svg class="animate-spin w-4 h-4 text-accent-color" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-sm font-semibold" style="color: var(--accent-color)">Fill Gaps in Progress</span>
+                </div>
+                <span class="text-xs font-bold" style="color: var(--accent-color)">
+                    {{ fillGapsProgress()?.percent || 0 }}%
+                </span>
+            </div>
+            <div class="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-500"
+                    style="background: var(--accent-color); width: {{ fillGapsProgress()?.percent || 0 }}%">
+                </div>
+            </div>
+            <p class="text-xs opacity-60 mt-2">{{ fillGapsProgress()?.message || 'Processing...' }}</p>
+        </div>
+        }
+
+        <!-- Force Refresh Progress -->
+        @if (forceRefreshInProgress()) {
+        <div class="p-4 rounded-xl border border-opacity-10"
+            style="background: rgba(245, 158, 11, 0.05); border-color: rgba(245, 158, 11, 0.2)">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center space-x-2">
+                    <svg class="animate-spin w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-sm font-semibold text-amber-500">Force Refresh in Progress</span>
+                </div>
+                <span class="text-xs font-bold text-amber-500">
+                    {{ forceRefreshProgress()?.percent || 0 }}%
+                </span>
+            </div>
+            <div class="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-500 bg-amber-500"
+                    style="width: {{ forceRefreshProgress()?.percent || 0 }}%">
+                </div>
+            </div>
+            <p class="text-xs opacity-60 mt-2">{{ forceRefreshProgress()?.message || 'Processing...' }}</p>
+        </div>
+        }
+    </div>
+    }
 
     <!-- Advanced Filters Panel -->
     @if (showFilters()) {

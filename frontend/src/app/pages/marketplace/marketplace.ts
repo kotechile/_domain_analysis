@@ -1,4 +1,4 @@
-import { Component, inject, signal, computed, effect, OnInit, untracked } from '@angular/core';
+import { Component, inject, signal, computed, effect, OnInit, untracked, OnDestroy } from '@angular/core';
 import { CommonModule, TitleCasePipe, DatePipe, DecimalPipe } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -6,7 +6,8 @@ import { ApiService } from '../../services/api';
 import { LucideAngularModule, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Sparkles, TrendingUp, History, ShieldCheck, Star, Target, Zap } from 'lucide-angular';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { CreditService } from '../../services/credit';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, interval, Subscription } from 'rxjs';
+import { switchMap, takeWhile } from 'rxjs/operators';
 import { Auction } from '../../models/domain.model';
 
 @Component({
@@ -87,7 +88,7 @@ import { Auction } from '../../models/domain.model';
     }
   `]
 })
-export class MarketplaceComponent implements OnInit {
+export class MarketplaceComponent implements OnInit, OnDestroy {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
@@ -114,7 +115,14 @@ export class MarketplaceComponent implements OnInit {
 
   // Background processing state
   fillGapsInProgress = signal<boolean>(false);
+  fillGapsJobId = signal<string | null>(null);
+  fillGapsProgress = signal<{ percent: number; message: string } | null>(null);
+
   forceRefreshInProgress = signal<boolean>(false);
+  forceRefreshJobId = signal<string | null>(null);
+  forceRefreshProgress = signal<{ percent: number; message: string } | null>(null);
+
+  private progressSubscriptions = new Map<string, Subscription>();
 
   // Filter Signals
   searchQuery = signal<string>('');
@@ -158,6 +166,122 @@ export class MarketplaceComponent implements OnInit {
     effect(() => {
       this.fetchAuctions();
     });
+  }
+
+  ngOnDestroy() {
+    // Clean up progress polling subscriptions
+    this.progressSubscriptions.forEach(sub => sub.unsubscribe());
+    this.progressSubscriptions.clear();
+  }
+
+  /**
+   * Start polling for job progress
+   */
+  private startProgressPolling(jobId: string, type: 'fill_gaps' | 'force_refresh') {
+    // Stop any existing polling for this job
+    this.stopProgressPolling(jobId);
+
+    // Poll every 5 seconds (increased from 3 to reduce server load)
+    const sub = interval(5000)
+      .pipe(
+        switchMap(() => this.api.getRefreshStatus(jobId)),
+        takeWhile((status: any) => {
+          // Continue polling while running, but also let completed/failed through
+          return status?.status === 'running';
+        }, true),
+        // Stop after 5 minutes (60 polls * 5 seconds) to prevent infinite polling
+        take(60)
+      )
+      .subscribe({
+        next: (status: any) => {
+          if (!status) {
+            console.warn('No status returned from API');
+            return;
+          }
+
+          const progress = {
+            percent: status.progress_percent || 0,
+            message: status.message || 'Processing...'
+          };
+
+          if (type === 'fill_gaps') {
+            this.fillGapsProgress.set(progress);
+          } else {
+            this.forceRefreshProgress.set(progress);
+          }
+
+          // If completed, stop polling and refresh
+          if (status.status === 'completed' || status.status === 'failed') {
+            this.stopProgressPolling(jobId);
+
+            if (type === 'fill_gaps') {
+              this.fillGapsInProgress.set(false);
+              this.fillGapsJobId.set(null);
+              const msg = status.status === 'completed'
+                ? `✅ ${status.message || 'Fill Gaps completed!'}`
+                : `❌ ${status.message || 'Fill Gaps failed'}`;
+              this.snackBar.open(msg, 'Close', { duration: 8000 });
+            } else {
+              this.forceRefreshInProgress.set(false);
+              this.forceRefreshJobId.set(null);
+              const msg = status.status === 'completed'
+                ? `✅ ${status.message || 'Force Refresh completed!'}`
+                : `❌ ${status.message || 'Force Refresh failed'}`;
+              this.snackBar.open(msg, 'Close', { duration: 8000 });
+            }
+
+            // Refresh the auction list
+            this.fetchAuctions();
+            this.creditService.refreshData();
+          }
+        },
+        error: (err) => {
+          console.error('Progress polling error:', err);
+          this.stopProgressPolling(jobId);
+
+          // Only clear state if it's a real error (not 404 for job not found yet)
+          if (err.status !== 404) {
+            if (type === 'fill_gaps') {
+              this.fillGapsInProgress.set(false);
+              this.fillGapsJobId.set(null);
+              this.fillGapsProgress.set(null);
+            } else {
+              this.forceRefreshInProgress.set(false);
+              this.forceRefreshJobId.set(null);
+              this.forceRefreshProgress.set(null);
+            }
+          }
+        },
+        complete: () => {
+          // Polling completed naturally (max polls reached)
+          console.log('Progress polling completed (max duration reached)');
+          this.stopProgressPolling(jobId);
+
+          // Clear the progress state
+          if (type === 'fill_gaps') {
+            this.fillGapsInProgress.set(false);
+            this.fillGapsJobId.set(null);
+            this.fillGapsProgress.set(null);
+          } else {
+            this.forceRefreshInProgress.set(false);
+            this.forceRefreshJobId.set(null);
+            this.forceRefreshProgress.set(null);
+          }
+        }
+      });
+
+    this.progressSubscriptions.set(jobId, sub);
+  }
+
+  /**
+   * Stop polling for a specific job
+   */
+  private stopProgressPolling(jobId: string) {
+    const sub = this.progressSubscriptions.get(jobId);
+    if (sub) {
+      sub.unsubscribe();
+      this.progressSubscriptions.delete(jobId);
+    }
   }
 
   ngOnInit() {
@@ -228,6 +352,7 @@ export class MarketplaceComponent implements OnInit {
 
     // Set processing state
     this.fillGapsInProgress.set(true);
+    this.fillGapsProgress.set({ percent: 0, message: 'Starting...' });
 
     // Show immediate feedback (dismiss after 3 seconds, processing continues in background)
     this.snackBar.open(
@@ -240,30 +365,27 @@ export class MarketplaceComponent implements OnInit {
       const res = await firstValueFrom(this.api.triggerBulkRefresh(filters, false));
       console.log('[Fill Gaps] Response:', res);
 
-      // API returns immediately with in_progress status
-      if (res.success && (res as any).in_progress) {
-        // Background processing started successfully
-        this.creditService.refreshData();
-
-        // Clear the processing state after a delay (give user time to see the button state)
-        setTimeout(() => {
-          this.fillGapsInProgress.set(false);
-          // Refresh the table to show any updates
-          this.fetchAuctions();
-        }, 3000);
+      // API returns immediately with in_progress status and job_id
+      if (res.success && res.in_progress && res.job_id) {
+        this.fillGapsJobId.set(res.job_id);
+        // Start polling for progress
+        this.startProgressPolling(res.job_id, 'fill_gaps');
       } else if ((res as any).skipped) {
         this.fillGapsInProgress.set(false);
+        this.fillGapsProgress.set(null);
         this.snackBar.open(
           '✅ All scored domains already have fresh metrics — nothing to refresh!',
           'Close', { duration: 6000 }
         );
       } else {
         this.fillGapsInProgress.set(false);
+        this.fillGapsProgress.set(null);
         const msg = (res as any).error || 'Failed to trigger refresh';
         this.snackBar.open(`❌ ${msg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });
       }
     } catch (e: any) {
       this.fillGapsInProgress.set(false);
+      this.fillGapsProgress.set(null);
       console.error('[Fill Gaps] Error:', e);
       const errorMsg = e.error?.detail || e.error?.error || 'Failed to trigger Fill-the-Gaps refresh';
       this.snackBar.open(`❌ ${errorMsg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });
@@ -290,6 +412,7 @@ export class MarketplaceComponent implements OnInit {
 
     // Set processing state
     this.forceRefreshInProgress.set(true);
+    this.forceRefreshProgress.set({ percent: 0, message: 'Starting...' });
 
     // Show immediate feedback
     this.snackBar.open(
@@ -302,22 +425,19 @@ export class MarketplaceComponent implements OnInit {
       const res = await firstValueFrom(this.api.triggerForceRefresh(filters));
       console.log('[Force Refresh] Response:', res);
 
-      if (res.success && (res as any).in_progress) {
-        // Background processing started successfully
-        this.creditService.refreshData();
-
-        // Clear the processing state after a delay
-        setTimeout(() => {
-          this.forceRefreshInProgress.set(false);
-          this.fetchAuctions();
-        }, 3000);
+      if (res.success && res.in_progress && res.job_id) {
+        this.forceRefreshJobId.set(res.job_id);
+        // Start polling for progress
+        this.startProgressPolling(res.job_id, 'force_refresh');
       } else {
         this.forceRefreshInProgress.set(false);
+        this.forceRefreshProgress.set(null);
         const msg = (res as any).error || 'Failed to trigger force refresh';
         this.snackBar.open(`❌ ${msg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });
       }
     } catch (e: any) {
       this.forceRefreshInProgress.set(false);
+      this.forceRefreshProgress.set(null);
       console.error('[Force Refresh] Error:', e);
       const errorMsg = e.error?.detail || e.error?.error || 'Failed to trigger force refresh';
       this.snackBar.open(`❌ ${errorMsg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });

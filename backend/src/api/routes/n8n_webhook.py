@@ -357,27 +357,30 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
                    first_item_keys=list(result_data[0].keys()) if isinstance(result_data, list) and len(result_data) > 0 and isinstance(result_data[0], dict) else None)
         
         # Process each result asynchronously to avoid N8N HTTP timeouts
+        # Use a semaphore to limit concurrent processing and prevent memory issues
+        import asyncio
+        _webhook_semaphore = asyncio.Semaphore(3)  # Max 3 concurrent webhook processes (reduced from 5)
+
         async def process_data():
-            import asyncio
             db = get_database()
             processed_count = 0
             failed_count = 0
             failed_domains = []
-            
+
             for result_item in result_data:
                 try:
                     if not isinstance(result_item, dict):
                         logger.warning("Invalid result item format", item_type=type(result_item).__name__)
                         failed_count += 1
                         continue
-                    
+
                     # DataForSEO returns "url" field, but we also support "target" for compatibility
                     target = result_item.get("target") or result_item.get("url")
                     if not target:
                         logger.warning("Result item missing target/url field", item=result_item)
                         failed_count += 1
                         continue
-                    
+
                     # Normalize domain (remove protocol if present, extract domain from URL)
                     if isinstance(target, str):
                         # Remove http:// or https:// if present
@@ -386,47 +389,47 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
                         target = target.split("/")[0]
                         # Remove www. if present
                         target = target.replace("www.", "")
-                    
+
                     # Update page_statistics in auctions table
                     success = False
                     try:
                         success = await db.update_auction_page_statistics(domain=target, page_statistics=result_item)
                         if success:
                             logger.debug("Updated page_statistics in auctions table", domain=target)
-                            
+
                             # Mark queue item as completed if it exists in queue
                             try:
                                 await db.mark_queue_items_completed([target])
                             except Exception as queue_error:
                                 # Not critical if queue item doesn't exist (might be admin-triggered batch)
-                                logger.debug("Failed to mark queue item as completed (may not be in queue)", 
+                                logger.debug("Failed to mark queue item as completed (may not be in queue)",
                                            domain=target, error=str(queue_error))
                         else:
                             logger.debug("Domain not found in auctions table", domain=target)
                     except Exception as e:
                         # Not critical if domain doesn't exist in auctions table
                         logger.debug("Failed to update page_statistics in auctions table", domain=target, error=str(e))
-                    
+
                     if success:
                         processed_count += 1
-                        logger.info("Updated page_statistics in auctions table", 
+                        logger.info("Updated page_statistics in auctions table",
                                    domain=target,
                                    rank=result_item.get("rank"),
                                    backlinks=result_item.get("backlinks"))
                     else:
                         failed_count += 1
                         failed_domains.append(target)
-                        logger.warning("Failed to update page_statistics - domain not found in auctions table", 
+                        logger.warning("Failed to update page_statistics - domain not found in auctions table",
                                      domain=target)
-                    
+
                 except Exception as e:
-                    logger.error("Failed to process result item", 
+                    logger.error("Failed to process result item",
                                target=result_item.get("target") if isinstance(result_item, dict) else None,
                                error=str(e))
                     failed_count += 1
                     if isinstance(result_item, dict) and result_item.get("target"):
                         failed_domains.append(result_item.get("target"))
-            
+
             logger.info("Bulk page summary webhook processed in background",
                        request_id=request.request_id,
                        processed=processed_count,
@@ -439,11 +442,12 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
             async with _webhook_semaphore:
                 await process_data()
 
+        # Start processing in background and return immediately
         asyncio.create_task(process_with_semaphore())
 
         return {
             "success": True,
-            "message": "Bulk page summary data queued for saving",
+            "message": "Bulk page summary data queued for processing",
             "request_id": request.request_id,
             "items_queued": len(result_data)
         }

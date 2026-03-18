@@ -8,6 +8,7 @@ from services.database import get_database
 from services.credits_service import CreditsService
 from services.n8n_service import N8NService
 from services.auctions_service import AuctionsService
+from services.progress_tracker import ProgressTracker
 
 logger = structlog.get_logger()
 
@@ -59,7 +60,8 @@ class MarketplaceBatchService:
         self,
         user_id: UUID,
         filters: Dict[str, Any],
-        force: bool = False
+        force: bool = False,
+        job_id: Optional[str] = None
     ):
         """
         Background task: "Find and Fill" — trigger a DataForSEO refresh for up to 1,000 domains.
@@ -77,7 +79,7 @@ class MarketplaceBatchService:
             ref_id = f"refresh_{'force' if force else 'bulk'}_{int(datetime.utcnow().timestamp())}"
 
             logger.info(f"[Background] Starting {'force' if force else 'bulk'} refresh",
-                       user_id=str(user_id), filters=filters, force=force)
+                       user_id=str(user_id), filters=filters, force=force, job_id=job_id)
 
             # 1. Find the domains BEFORE deducting credits
             logger.info(f"[Background] Finding domains with filters", filters=filters)
@@ -94,7 +96,22 @@ class MarketplaceBatchService:
             if not domain_names:
                 logger.info(f"[Background] No domains needed refreshing - all domains have fresh metrics or match filters",
                            user_id=str(user_id), filters=filters)
+                if job_id:
+                    await ProgressTracker.complete_job(
+                        job_id,
+                        success=True,
+                        message="No domains need refreshing - all have fresh metrics"
+                    )
                 return
+
+            # Create/update progress job
+            if job_id:
+                await ProgressTracker.update_progress(
+                    job_id,
+                    processed_items=0,
+                    total_batches=(len(domain_names) + 24) // 25,
+                    message=f"Found {len(domain_names)} domains. Deducting {cost} credits..."
+                )
 
             # 2. Deduct credits only once we know there is work to do
             logger.info(f"[Background] Deducting {cost} credits", user_id=str(user_id))
@@ -107,29 +124,72 @@ class MarketplaceBatchService:
 
             if not success:
                 logger.error(f"[Background] Insufficient credits", user_id=str(user_id), required=cost)
+                if job_id:
+                    await ProgressTracker.complete_job(
+                        job_id,
+                        success=False,
+                        message="Insufficient credits"
+                    )
                 return
 
             logger.info(f"[Background] Credits deducted successfully", user_id=str(user_id), cost=cost)
 
             # 3. Trigger DataForSEO via N8N (in smaller batches to avoid overwhelming N8N)
             import asyncio
-            batch_size = 100
+            batch_size = 20  # Reduced from 25 to prevent overwhelming N8N
             total_batches = (len(domain_names) + batch_size - 1) // batch_size
             logger.info(f"[Background] Triggering N8N for {len(domain_names)} domains in {total_batches} batches",
                        user_id=str(user_id), domain_count=len(domain_names), batches=total_batches)
 
+            if job_id:
+                await ProgressTracker.update_progress(
+                    job_id,
+                    processed_items=0,
+                    total_batches=total_batches,
+                    current_batch=0,
+                    message=f"Processing {len(domain_names)} domains in {total_batches} batches..."
+                )
+
+            processed_count = 0
+            failed_count = 0
+
             for i in range(0, len(domain_names), batch_size):
+                batch_num = i // batch_size + 1
                 batch = domain_names[i:i + batch_size]
                 try:
                     await self.n8n_service.trigger_bulk_page_summary_workflow(batch)
-                    logger.info(f"[Background] Triggered N8N batch {i//batch_size + 1}/{total_batches}",
-                               user_id=str(user_id), batch_size=len(batch), batch_num=i//batch_size + 1)
-                    # Add delay between batches to prevent overwhelming the system
+                    processed_count += len(batch)
+                    logger.info(f"[Background] Triggered N8N batch {batch_num}/{total_batches}",
+                               user_id=str(user_id), batch_size=len(batch), batch_num=batch_num)
+
+                    # Update progress
+                    if job_id:
+                        await ProgressTracker.update_progress(
+                            job_id,
+                            processed_items=processed_count,
+                            failed_items=failed_count,
+                            current_batch=batch_num,
+                            total_batches=total_batches,
+                            message=f"Batch {batch_num}/{total_batches} sent to N8N ({processed_count}/{len(domain_names)} domains)"
+                        )
+
+                    # Add longer delay between batches to prevent overwhelming the system
+                    # and allow webhook processing to complete before next batch
                     if i + batch_size < len(domain_names):
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(8)  # Increased from 5s to 8s to give N8N more time
                 except Exception as n8n_err:
-                    logger.error(f"[Background] Failed to trigger N8N batch {i//batch_size + 1}",
+                    failed_count += len(batch)
+                    logger.error(f"[Background] Failed to trigger N8N batch {batch_num}",
                                 user_id=str(user_id), error=str(n8n_err))
+                    if job_id:
+                        await ProgressTracker.update_progress(
+                            job_id,
+                            processed_items=processed_count,
+                            failed_items=failed_count,
+                            current_batch=batch_num,
+                            total_batches=total_batches,
+                            message=f"Batch {batch_num} failed: {str(n8n_err)[:50]}"
+                        )
 
             # 4. Record in refresh_history
             try:
@@ -143,14 +203,29 @@ class MarketplaceBatchService:
             except Exception as hist_err:
                 logger.warning("[Background] Failed to write refresh history", error=str(hist_err))
 
+            # Mark job as complete
+            if job_id:
+                await ProgressTracker.complete_job(
+                    job_id,
+                    success=True,
+                    message=f"Completed! {processed_count} domains refreshed, {failed_count} failed. Credits used: {cost}"
+                )
+
             logger.info(f"[Background] Refresh completed successfully",
-                       user_id=str(user_id), domain_count=len(domain_names), cost=cost)
+                       user_id=str(user_id), domain_count=len(domain_names), cost=cost,
+                       processed=processed_count, failed=failed_count)
 
         except Exception as e:
             logger.error("[Background] Failed to process marketplace refresh",
-                        user_id=str(user_id), error=str(e))
+                        user_id=str(user_id), error=str(e), job_id=job_id)
             import traceback
             logger.error("[Background] Exception traceback", traceback=traceback.format_exc())
+            if job_id:
+                await ProgressTracker.complete_job(
+                    job_id,
+                    success=False,
+                    message=f"Failed: {str(e)[:100]}"
+                )
 
 
     async def get_refresh_history(self, user_id: UUID, limit: int = 50) -> List[Dict[str, Any]]:

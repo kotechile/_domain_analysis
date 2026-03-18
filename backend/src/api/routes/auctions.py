@@ -3148,6 +3148,7 @@ async def trigger_bulk_refresh(
     """
     try:
         from services.marketplace_batch_service import MarketplaceBatchService
+        from services.progress_tracker import ProgressTracker
         service = MarketplaceBatchService()
 
         # The Angular client wraps filters in { filters: {...}, force: bool }
@@ -3157,17 +3158,27 @@ async def trigger_bulk_refresh(
         # Extract user ID before passing to background task
         user_id = current_user.id
 
+        # Create a progress job (will be updated once domains are found)
+        job_id = await ProgressTracker.create_job(
+            user_id=str(user_id),
+            job_type="bulk_refresh",
+            total_items=1000,  # Will be updated when actual count is known
+            metadata={"filters": filters, "force": False}
+        )
+
         # Start processing in background and return immediately
         background_tasks.add_task(
             service.process_marketplace_refresh,
             user_id=user_id,
             filters=filters,
-            force=force
+            force=False,
+            job_id=job_id
         )
 
         return {
             "success": True,
             "in_progress": True,
+            "job_id": job_id,
             "message": "Fill Gaps refresh started — processing up to 1,000 domains in the background. Results will appear shortly."
         }
     except Exception as e:
@@ -3189,6 +3200,7 @@ async def trigger_force_refresh(
     """
     try:
         from services.marketplace_batch_service import MarketplaceBatchService
+        from services.progress_tracker import ProgressTracker
         service = MarketplaceBatchService()
 
         # Same payload format as bulk-refresh
@@ -3197,21 +3209,73 @@ async def trigger_force_refresh(
         # Extract user ID before passing to background task
         user_id = current_user.id
 
+        # Create a progress job (will be updated once domains are found)
+        job_id = await ProgressTracker.create_job(
+            user_id=str(user_id),
+            job_type="force_refresh",
+            total_items=1000,  # Will be updated when actual count is known
+            metadata={"filters": filters, "force": True}
+        )
+
         # Start processing in background and return immediately
         background_tasks.add_task(
             service.process_marketplace_refresh,
             user_id=user_id,
             filters=filters,
-            force=True
+            force=True,
+            job_id=job_id
         )
 
         return {
             "success": True,
             "in_progress": True,
+            "job_id": job_id,
             "message": "Force Refresh started — processing up to 1,000 domains in the background. Results will appear shortly."
         }
     except Exception as e:
         logger.error("Failed to trigger force refresh", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/auctions/refresh-status/{job_id}")
+async def get_refresh_status(
+    job_id: str,
+    current_user = Depends(get_current_user)
+):
+    """
+    Get the status of a running refresh job.
+    Returns progress information including percent complete and current status.
+    """
+    try:
+        from services.progress_tracker import ProgressTracker
+
+        status = await ProgressTracker.get_job_status(job_id)
+
+        if not status:
+            raise HTTPException(status_code=404, detail="Job not found or expired")
+
+        # Verify user owns this job
+        if status.get("user_id") != str(current_user.id):
+            raise HTTPException(status_code=403, detail="Not authorized to view this job")
+
+        return {
+            "success": True,
+            "job_id": job_id,
+            "status": status.get("status"),
+            "progress_percent": status.get("progress_percent", 0),
+            "total_items": status.get("total_items", 0),
+            "processed_items": status.get("processed_items", 0),
+            "failed_items": status.get("failed_items", 0),
+            "current_batch": status.get("current_batch", 0),
+            "total_batches": status.get("total_batches", 0),
+            "message": status.get("message", ""),
+            "started_at": status.get("started_at"),
+            "completed_at": status.get("completed_at")
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get refresh status", error=str(e), job_id=job_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 

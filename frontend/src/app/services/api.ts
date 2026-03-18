@@ -115,18 +115,35 @@ export class ApiService {
     );
   }
 
-  triggerBulkRefresh(filters: any, force: boolean = false): Observable<{ success: boolean; message: string; triggered_count: number; cost: number }> {
-    return this.http.post<{ success: boolean; message: string; triggered_count: number; cost: number }>(
+  triggerBulkRefresh(filters: any, force: boolean = false): Observable<{ success: boolean; message: string; job_id: string; in_progress: boolean }> {
+    return this.http.post<{ success: boolean; message: string; job_id: string; in_progress: boolean }>(
       `${this.baseUrl}/auctions/bulk-refresh`,
       { filters, force }
     );
   }
 
-  triggerForceRefresh(filters: any): Observable<{ success: boolean; message: string; triggered_count: number; cost: number }> {
-    return this.http.post<{ success: boolean; message: string; triggered_count: number; cost: number }>(
+  triggerForceRefresh(filters: any): Observable<{ success: boolean; message: string; job_id: string; in_progress: boolean }> {
+    return this.http.post<{ success: boolean; message: string; job_id: string; in_progress: boolean }>(
       `${this.baseUrl}/auctions/force-refresh`,
       { filters }
     );
+  }
+
+  getRefreshStatus(jobId: string): Observable<{
+    success: boolean;
+    job_id: string;
+    status: string;
+    progress_percent: number;
+    total_items: number;
+    processed_items: number;
+    failed_items: number;
+    current_batch: number;
+    total_batches: number;
+    message: string;
+    started_at: string;
+    completed_at: string | null;
+  }> {
+    return this.http.get<any>(`${this.baseUrl}/auctions/refresh-status/${jobId}`);
   }
 
   getRefreshPreview(filters: any, force: boolean = false): Observable<{ success: boolean; domain_count: number; would_refresh: boolean; message: string }> {
