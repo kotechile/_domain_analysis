@@ -1760,9 +1760,15 @@ class DatabaseService:
                     result = query.limit(fetch_limit).execute()
                     candidates = result.data if result.data else []
                     logger.info("Fill Gaps fallback query returned candidates", candidate_count=len(candidates), fetch_limit=fetch_limit)
+                    # Log first candidate to understand data structure
+                    if candidates:
+                        first = candidates[0]
+                        logger.info("First candidate sample", domain=first.get('domain'), updated_at=first.get('updated_at'), page_statistics=first.get('page_statistics') is not None, organic_traffic=first.get('organic_traffic'), ranking=first.get('ranking'), backlinks=first.get('backlinks'), backlinks_spam_score=first.get('backlinks_spam_score'))
 
                     # In-memory filtering (fallback)
                     selected = []
+                    skipped_stale = 0
+                    skipped_has_all_metrics = 0
                     for auction in candidates:
                         raw_updated = auction.get('updated_at')
                         if raw_updated:
@@ -1772,6 +1778,7 @@ class DatabaseService:
                                 if last_update and last_update.tzinfo is None:
                                     last_update = last_update.replace(tzinfo=timezone.utc)
                                 if last_update and last_update.isoformat() > cutoff_7d:
+                                    skipped_stale += 1
                                     continue
                             except Exception:
                                 pass
@@ -1803,8 +1810,10 @@ class DatabaseService:
                             selected.append(auction)
                             if len(selected) >= limit:
                                 break
+                        else:
+                            skipped_has_all_metrics += 1
                     candidates = selected
-                    logger.info("Fill Gaps fallback filtering complete", selected_count=len(candidates))
+                    logger.info("Fill Gaps fallback filtering complete", selected_count=len(candidates), skipped_stale=skipped_stale, skipped_has_all_metrics=skipped_has_all_metrics)
 
                 logger.info("Fill Gaps query returned candidates", candidate_count=len(candidates), filters=filters)
                 return candidates
