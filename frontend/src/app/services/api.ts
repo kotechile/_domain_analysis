@@ -129,6 +129,13 @@ export class ApiService {
     );
   }
 
+  getRefreshPreview(filters: any, force: boolean = false): Observable<{ success: boolean; domain_count: number; would_refresh: boolean; message: string }> {
+    return this.http.post<{ success: boolean; domain_count: number; would_refresh: boolean; message: string }>(
+      `${this.baseUrl}/auctions/refresh-preview`,
+      { filters, force }
+    );
+  }
+
   togglePreferredAuction(id: string, preferred: boolean): Observable<{ success: boolean }> {
     return this.http.post<{ success: boolean }>(
       `${this.baseUrl}/auctions/${id}/preferred`,

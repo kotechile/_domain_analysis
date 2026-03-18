@@ -3098,6 +3098,42 @@ async def get_refresh_costs(current_user = Depends(get_current_user)):
         logger.error("Failed to get refresh costs", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/auctions/refresh-preview")
+async def get_refresh_preview(
+    payload: Dict[str, Any] = Body(...),
+    current_user = Depends(get_current_user)
+):
+    """
+    Preview how many domains would be refreshed with the given filters.
+    Body: { filters: {...}, force: bool }
+
+    Returns: { domain_count: int, would_refresh: bool, filters: {...} }
+    """
+    try:
+        from services.auctions_service import AuctionsService
+        service = AuctionsService()
+
+        filters = payload.get("filters", payload)
+        force = payload.get("force", False)
+
+        domains_data = await service.get_auctions_missing_any_metric_with_filters(
+            filters=filters,
+            limit=1000,
+            force_refresh=force
+        )
+
+        return {
+            "success": True,
+            "domain_count": len(domains_data),
+            "would_refresh": len(domains_data) > 0,
+            "filters": filters,
+            "force": force,
+            "message": f"Found {len(domains_data)} domains that would be refreshed" if domains_data else "No domains need refreshing - all have fresh metrics"
+        }
+    except Exception as e:
+        logger.error("Failed to get refresh preview", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/auctions/bulk-refresh")
 async def trigger_bulk_refresh(
     payload: Dict[str, Any] = Body(...),
