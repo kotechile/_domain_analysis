@@ -17,7 +17,7 @@ class CreditsService:
     async def get_balance(self, user_id: UUID) -> float:
         """Get current credit balance for a user"""
         try:
-            response = await (await self.db._get_client()).table('user_credits').select('balance').eq('user_id', str(user_id)).execute()
+            await response = await (await self.db._get_client()).table('user_credits').select('balance').eq('user_id', str(user_id)).execute()
             if response.data:
                 return float(response.data[0]['balance'])
             
@@ -59,7 +59,7 @@ class CreditsService:
                 'p_dollar_amount': float(dollar_amount)
             }
             
-            response = await (await self.db._get_client()).rpc('deduct_credits', params).execute()
+            await response = await (await self.db._get_client()).rpc('deduct_credits', params).execute()
             
             if response.data:
                 success = response.data.get('success', False)
@@ -121,12 +121,12 @@ class CreditsService:
 
     async def get_pricing_plans(self) -> List[Dict[str, Any]]:
         """Get active pricing plans"""
-        response = await (await self.db._get_client()).table('pricing_plans').select('*').eq('is_active', True).execute()
+        await response = await (await self.db._get_client()).table('pricing_plans').select('*').eq('is_active', True).execute()
         return response.data
 
     async def get_global_settings(self) -> Dict[str, Any]:
         """Get all global settings as a dictionary"""
-        response = await (await self.db._get_client()).table('global_settings').select('*').execute()
+        await response = await (await self.db._get_client()).table('global_settings').select('*').execute()
         settings = {}
         for row in response.data:
             settings[row['key']] = row['value']
@@ -138,7 +138,7 @@ class CreditsService:
         Checks last_reset_at and updates it if more than 30 days have passed.
         """
         try:
-            response = await (await self.db._get_client()).table('user_credits').select('*').eq('user_id', str(user_id)).execute()
+            await response = await (await self.db._get_client()).table('user_credits').select('*').eq('user_id', str(user_id)).execute()
             if not response.data:
                 # Initialize credits if not exists
                 await (await self.db._get_client()).table('user_credits').insert({
@@ -179,11 +179,6 @@ class CreditsService:
 
     async def get_transactions(self, user_id: UUID, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
         """Get transaction history"""
-        response = await (await self.db._get_client()).table('credit_transactions')\
-            .select('*')\
-            .eq('user_id', str(user_id))\
-            .order('created_at', desc=True)\
-            .range(offset, offset + limit - 1)\
-            await .execute()
+        response = await (await self.db._get_client()).table('credit_transactions')\.select('*')\.eq('user_id', str(user_id))\.order('created_at', desc=True)\.range(offset, offset + limit - 1)\.execute()
             
         return response.data

@@ -18,7 +18,7 @@ async def debug_schema():
         print("✅ Successfully inserted test record with job_id")
         
         # Verify it has the job_id
-        res_check = (await db._get_client()).table('auctions_staging').select('job_id').eq('domain', 'test-isolation.com').execute()
+        await res_check = (await db._get_client()).table('auctions_staging').select('job_id').eq('domain', 'test-isolation.com').execute()
         print("Verification result:", res_check.data)
         
         # Cleanup

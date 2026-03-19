@@ -73,7 +73,7 @@ async def health_check():
             else:
                 # Test with secrets table first (known to exist)
                 try:
-                    result = (await db._get_client()).table('secrets').select('id').limit(1).execute()
+                    await result = (await db._get_client()).table('secrets').select('id').limit(1).execute()
                     # Test reports table access
                     try:
                         await (await db._get_client()).table('reports').select('id').limit(1).execute()
@@ -244,7 +244,7 @@ async def database_diagnostic():
     
     # Check 4: Secrets table access
     try:
-        result = (await db._get_client()).table('secrets').select('id').limit(1).execute()
+        await result = (await db._get_client()).table('secrets').select('id').limit(1).execute()
         diagnostic["checks"]["secrets_table"] = {
             "status": "ok",
             "records_found": len(result.data)
@@ -259,7 +259,7 @@ async def database_diagnostic():
     
     # Check 5: Reports table access
     try:
-        result = (await db._get_client()).table('reports').select('id').limit(1).execute()
+        await result = (await db._get_client()).table('reports').select('id').limit(1).execute()
         diagnostic["checks"]["reports_table"] = {
             "status": "ok",
             "records_found": len(result.data)

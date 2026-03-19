@@ -35,7 +35,7 @@ class PricingService:
                 return
 
             # 1. Fetch multiplier
-            settings_resp = (await self.db._get_client()).table('system_settings').select('value').eq('key', 'cost_multiplier').execute()
+            await settings_resp = (await self.db._get_client()).table('system_settings').select('value').eq('key', 'cost_multiplier').execute()
             if settings_resp.data:
                 try:
                     self._multiplier_cache = float(settings_resp.data[0]['value'])
@@ -43,7 +43,7 @@ class PricingService:
                     logger.error("Invalid cost_multiplier in settings", value=settings_resp.data[0]['value'])
 
             # 2. Fetch all active legacy rates
-            rates_resp = (await self.db._get_client()).table('pricing_rates').select('*').eq('is_active', True).execute()
+            await rates_resp = (await self.db._get_client()).table('pricing_rates').select('*').eq('is_active', True).execute()
             if rates_resp.data:
                 new_rates = {}
                 for rate in rates_resp.data:
@@ -64,7 +64,7 @@ class PricingService:
             
             # 3. Fetch Action Rates (Tiering System)
             try:
-                actions_resp = (await self.db._get_client()).table('action_rates').select('*').execute()
+                await actions_resp = (await self.db._get_client()).table('action_rates').select('*').execute()
                 if actions_resp.data:
                     self._action_rates_cache = {r['action_name']: r for r in actions_resp.data}
             except Exception as ae:
@@ -72,7 +72,7 @@ class PricingService:
 
             # 4. Fetch Tiers
             try:
-                tiers_resp = (await self.db._get_client()).table('subscription_tiers').select('*').execute()
+                await tiers_resp = (await self.db._get_client()).table('subscription_tiers').select('*').execute()
                 if tiers_resp.data:
                     self._tiers_cache = {t['id']: t for t in tiers_resp.data}
             except Exception as te:
@@ -107,7 +107,7 @@ class PricingService:
     async def get_user_subscription(self, user_id: str) -> Dict[str, Any]:
         """Get user's current subscription details"""
         try:
-            resp = (await self.db._get_client()).table('user_subscriptions').select('*, subscription_tiers(*)').eq('user_id', user_id).execute()
+            await resp = (await self.db._get_client()).table('user_subscriptions').select('*, subscription_tiers(*)').eq('user_id', user_id).execute()
             if resp.data:
                 return resp.data[0]
             

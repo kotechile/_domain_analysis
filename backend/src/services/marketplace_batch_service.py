@@ -137,7 +137,7 @@ class MarketplaceBatchService:
             # 3. Trigger DataForSEO via N8N (in smaller batches to avoid overwhelming N8N)
             import asyncio
             batch_size = 20  # Reduced from 25 to prevent overwhelming N8N
-            total_batches = (len(domain_names) + batch_size - 1) // batch_size
+            total_batches = await (len(domain_names) + batch_size - 1) // batch_size
             logger.info(f"[Background] Triggering N8N for {len(domain_names)} domains in {total_batches} batches",
                        user_id=str(user_id), domain_count=len(domain_names), batches=total_batches)
 
@@ -230,12 +230,7 @@ class MarketplaceBatchService:
 
     async def get_refresh_history(self, user_id: UUID, limit: int = 50) -> List[Dict[str, Any]]:
         """Get the refresh history for a user"""
-        response = (await self.db._get_client()).table('refresh_history')\
-            .select('*')\
-            .eq('user_id', str(user_id))\
-            .order('refreshed_at', desc=True)\
-            .limit(limit)\
-            await .execute()
+        response = (await self.db._get_client()).table('refresh_history')\.select('*')\.eq('user_id', str(user_id))\.order('refreshed_at', desc=True)\.limit(limit)\.execute()
         return response.data
 
     async def refresh_single_domain(self, user_id: UUID, domain: str) -> Dict:

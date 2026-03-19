@@ -56,7 +56,7 @@ async def get_filters(
         else:
             result = result.is_('user_id', 'null')
         
-        result = await result.limit(1).execute()
+        await result = await result.limit(1).execute()
         
         if result.data and len(result.data) > 0:
             filter_data = result.data[0]
@@ -133,7 +133,7 @@ async def update_filters(
         else:
             query = query.is_('user_id', 'null')
         
-        existing = await query.limit(1).execute()
+        await existing = await query.limit(1).execute()
         
         filter_data = {
             "preferred": filter_settings.preferred,
@@ -161,11 +161,11 @@ async def update_filters(
         if existing.data and len(existing.data) > 0:
             # Update existing filter
             filter_id = existing.data[0]['id']
-            result = (await db._get_client()).table('filters').update(filter_data).eq('id', filter_id).execute()
+            await result = (await db._get_client()).table('filters').update(filter_data).eq('id', filter_id).execute()
             logger.info("Updated filter settings", filter_id=filter_id, user_id=user_id)
         else:
             # Create new filter
-            result = (await db._get_client()).table('filters').insert(filter_data).execute()
+            await result = (await db._get_client()).table('filters').insert(filter_data).execute()
             logger.info("Created new filter settings", user_id=user_id)
         
         return {

@@ -44,7 +44,7 @@ class AuctionScoringService:
                 raise Exception("Supabase client not available")
             
             # Call the optimized PostgreSQL function
-            result = (await self.db_service._get_client()).rpc(
+            result = await (await self.db_service._get_client()).rpc(
                 'filter_and_pre_score_auctions',
                 {
                     'p_batch_limit': batch_size,
@@ -311,7 +311,7 @@ class AuctionScoringService:
             
             # Fallback to standard approach
             logger.info("Using standard ranking recalculation")
-            result = (await self.db_service._get_client()).rpc('recalculate_auction_rankings').execute()
+            await result = (await self.db_service._get_client()).rpc('recalculate_auction_rankings').execute()
             
             if result.data:
                 logger.info("Recalculated rankings", result=result.data)
@@ -431,31 +431,21 @@ class AuctionScoringService:
             
             # Query unprocessed count
             unprocessed_result = (
-                (await self.db_service._get_client()).table('auctions')
-                .select('id', count='exact')
-                .eq('processed', False)
-                await .execute()
+                (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', False).execute()
             )
             
             unprocessed_count = unprocessed_result.count if hasattr(unprocessed_result, 'count') else 0
             
             # Query processed count
-            processed_result = (
-                (await self.db_service._get_client()).table('auctions')
-                .select('id', count='exact')
-                .eq('processed', True)
-                await .execute()
+            processed_result = await (
+                (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).execute()
             )
             
             processed_count = processed_result.count if hasattr(processed_result, 'count') else 0
             
             # Query scored count (processed with non-null score)
-            scored_result = (
-                (await self.db_service._get_client()).table('auctions')
-                .select('id', count='exact')
-                .eq('processed', True)
-                .not_.is_('score', 'null')
-                await .execute()
+            scored_result = await (
+                (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).not_.is_('score', 'null').execute()
             )
             
             scored_count = scored_result.count if hasattr(scored_result, 'count') else 0

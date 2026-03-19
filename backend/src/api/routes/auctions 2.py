@@ -30,7 +30,7 @@ async def _clear_staging_chunked(db, auction_site: str, job_id: str):
     total_cleared = 0
     while True:
         # Fetch domains for this site
-        clear_res = (await db._get_client()).table('auctions_staging').select('domain').eq('auction_site', auction_site).limit(5000).execute()
+        await clear_res = (await db._get_client()).table('auctions_staging').select('domain').eq('auction_site', auction_site).limit(5000).execute()
         if not clear_res.data:
             break
         
@@ -58,7 +58,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
     
     while True:
         # 1. Fetch a batch of records from staging
-        result = (await db._get_client()).table('auctions_staging').select('*').eq('auction_site', auction_site).limit(5000).execute()
+        await result = (await db._get_client()).table('auctions_staging').select('*').eq('auction_site', auction_site).limit(5000).execute()
         records = result.data
         
         if not records:
@@ -858,7 +858,7 @@ async def process_csv_upload_async(
             if auction_site.lower() == 'namesilo':
                 logger.info("Cleaning up NameSilo records marked for deletion", job_id=job_id)
                 try:
-                    delete_result = (await db._get_client()).table('auctions').delete().eq('auction_site', 'namesilo').eq('deletion_flag', True).execute()
+                    await delete_result = (await db._get_client()).table('auctions').delete().eq('auction_site', 'namesilo').eq('deletion_flag', True).execute()
                     deleted_count = len(delete_result.data) if delete_result.data else 0
                 except Exception as e:
                     logger.error("Failed to cleanup NameSilo", job_id=job_id, error=str(e))
@@ -2512,7 +2512,7 @@ async def process_dataforseo_queue():
         # Get 100 pending domains ordered by expiration_date ASC (closest to NOW first)
         queue_result = (await db._get_client()).table('dataforseo_queue').select(
             'id,domain,expiration_date'
-        ).eq('status', 'pending').order('expiration_date', desc= await False).limit(100).execute()
+        ).eq('status', 'pending').order('expiration_date', desc= False).limit(100).execute()
         
         if not queue_result.data or len(queue_result.data) < 100:
             logger.info("Queue does not have 100 domains yet", count=len(queue_result.data) if queue_result.data else 0)
@@ -2601,12 +2601,12 @@ async def queue_domain_for_dataforseo(domain: str):
             }
         
         # Check if domain is already in queue
-        queue_check = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
+        await queue_check = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
         if queue_check.data and len(queue_check.data) > 0:
             queue_item = queue_check.data[0]
             if queue_item['status'] == 'pending':
                 # Get position in queue
-                position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
+                await position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
                 position = None
                 if position_result.data:
                     for idx, item in enumerate(position_result.data, 1):
@@ -2632,7 +2632,7 @@ async def queue_domain_for_dataforseo(domain: str):
             'auction_id': auction.get('id')
         }
         
-        result = (await db._get_client()).table('dataforseo_queue').insert(queue_data).execute()
+        await result = (await db._get_client()).table('dataforseo_queue').insert(queue_data).execute()
         
         # Get queue count
         queue_count = await get_queue_count()
@@ -2643,7 +2643,7 @@ async def queue_domain_for_dataforseo(domain: str):
             asyncio.create_task(process_dataforseo_queue())
         
         # Get position in queue (ordered by expiration_date ASC)
-        position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
+        await position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
         position = None
         if position_result.data:
             for idx, item in enumerate(position_result.data, 1):
@@ -2695,10 +2695,10 @@ async def get_dataforseo_queue_status(domain: Optional[str] = Query(None, descri
         
         # If domain provided, check position
         if domain:
-            queue_item = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).eq('status', 'pending').limit(1).execute()
+            await queue_item = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).eq('status', 'pending').limit(1).execute()
             if queue_item.data and len(queue_item.data) > 0:
                 # Calculate position
-                position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
+                await position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
                 position = None
                 if position_result.data:
                     for idx, item in enumerate(position_result.data, 1):
@@ -2736,7 +2736,7 @@ async def cancel_domain_queue_request(domain: str):
             raise HTTPException(status_code=503, detail="Database connection not available")
         
         # Check if domain is in queue
-        queue_check = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
+        await queue_check = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
         
         if not queue_check.data or len(queue_check.data) == 0:
             return {
@@ -2756,7 +2756,7 @@ async def cancel_domain_queue_request(domain: str):
             }
         
         # Delete from queue
-        result = (await db._get_client()).table('dataforseo_queue').delete().eq('id', queue_item['id']).execute()
+        await result = (await db._get_client()).table('dataforseo_queue').delete().eq('id', queue_item['id']).execute()
         
         logger.info("Domain removed from DataForSEO queue", domain=domain)
         
