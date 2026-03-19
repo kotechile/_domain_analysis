@@ -1237,8 +1237,8 @@ class DatabaseService:
                     query = query.lte('score', filters['max_score'])
             
             # Default: only show auctions that haven't expired yet
-            # ) Apply this if no expiration_from_date filter is provided (either filters is None or key missing
-            if not filters or not filters.get('expiration_from_date'):
+            # Apply this if no expiration_from_date filter is provided AND user is NOT searching for a specific domain
+            if not filters or not (filters.get('expiration_from_date') or filters.get('search')):
                 # Use current UTC time
                 now = datetime.now(timezone.utc).isoformat()
                 query = query.gte('expiration_date', now)
@@ -1388,11 +1388,17 @@ class DatabaseService:
                         where_conditions.append(f"domain ILIKE '%{tld}'")
                     if filters.get('expiration_from_date'):
                         where_conditions.append(f"expiration_date >= '{filters['expiration_from_date']}'")
+                    else:
+                        # Default: only pick domains that haven't expired yet
+                        now = datetime.now(timezone.utc).isoformat()
+                        where_conditions.append(f"expiration_date >= '{now}'")
+                        
                     if filters.get('expiration_to_date'):
                         exp_to = filters['expiration_to_date']
                         if isinstance(exp_to, str) and len(exp_to) == 10:
                             exp_to = f"{exp_to}T23:59:59"
                         where_conditions.append(f"expiration_date <= '{exp_to}'")
+                        
                     if filters.get('min_score') is not None:
                         where_conditions.append(f"score >= {filters['min_score']}")
                     if filters.get('max_score') is not None:
