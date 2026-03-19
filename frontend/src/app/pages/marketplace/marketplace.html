@@ -352,8 +352,9 @@
                                     [class.fill-current]="item.preferred"></i-lucide>
                             </button>
                             <div class="flex flex-col">
-                                <span class="font-semibold text-lg group-hover:text-accent-color transition-colors"
-                                    style="color: var(--text-color)">{{ item.domain }}</span>
+                                <a [href]="'https://web.archive.org/web/*/' + item.domain" target="_blank" rel="noopener noreferrer"
+                                    class="font-semibold text-lg hover:underline group-hover:text-accent-color transition-colors"
+                                    style="color: var(--text-color)">{{ item.domain }}</a>
                                 <div class="flex items-center space-x-2 mt-1">
                                     @if (item.has_analysis) {
                                     <span

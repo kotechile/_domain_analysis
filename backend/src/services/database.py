@@ -1583,6 +1583,11 @@ class DatabaseService:
             spam_score = get_metric(updated_stats, ['backlinks_spam_score', 'spam_score'])
             if spam_score is not None:
                 update_data['backlinks_spam_score'] = spam_score
+                
+            # First Seen
+            first_seen = get_metric(updated_stats, ['first_seen', 'date_first_seen'])
+            if first_seen is not None:
+                update_data['first_seen'] = first_seen
             
             # ) Domain Rating - handle normalization (DataForSEO rank is 0-1000, we want 0-100
             dr_raw = get_metric(updated_stats, ['domain_rating_dr', 'domain_rating', 'calculated_dr', 'rank'])
