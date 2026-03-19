@@ -41,7 +41,7 @@ class SecretsService:
                 return self._cache[service_name]
             
             # Query Supabase for the secret
-            result = await (await self.db._get_client()).table('secrets').select('credentials').eq('service_name', service_name).execute()
+            result = (await self.await db._get_client()).table('secrets').select('credentials').eq('service_name', service_name).execute()
             
             if not result.data:
                 logger.warning("Secret not found in database", service=service_name)
@@ -63,7 +63,7 @@ class SecretsService:
     async def get_dataforseo_credentials(self) -> Optional[Dict[str, str]]:
         """Get DataForSEO credentials from api_keys table"""
         # Retrieve from database which queries api_keys table directly
-        credentials = await self.db.get_dataforseo_key()
+        credentials = self.await db.get_dataforseo_key()
         if not credentials:
             return None
             
@@ -80,24 +80,19 @@ class SecretsService:
                 
             login, password = decoded.split(':', 1)
             
-            return {
-                'login': login,
-                'password': password,
-                'api_url': credentials.get('base_url', 'https://api.dataforseo.com/v3')
-            }
+            return { 'login': login, 'password': password, 'api_url': credentials.get('base_url', 'https://api.dataforseo.com/v3') }
         except Exception as e:
             logger.error("Failed to decode DataForSEO credentials", error=str(e))
             return None
 
     async def get_active_llm_config(self) -> Optional[Dict[str, Any]]:
         """
-        Get the currently active LLM provider configuration.
-        """
-        return await self.db.get_default_llm_provider()
+        Get the currently active LLM provider configuration. """
+        return await self.await db.get_default_llm_provider()
     
     async def get_gemini_credentials(self) -> Optional[str]:
         """Get Gemini API key"""
-        credentials = await self.get_secret('gemini')
+        credentials = self.get_secret('gemini')
         if not credentials:
             return None
         
@@ -105,7 +100,7 @@ class SecretsService:
     
     async def get_openai_credentials(self) -> Optional[str]:
         """Get OpenAI API key"""
-        credentials = await self.get_secret('openai')
+        credentials = self.get_secret('openai')
         if not credentials:
             return None
         
@@ -113,19 +108,15 @@ class SecretsService:
     
     async def get_wayback_machine_config(self) -> Dict[str, str]:
         """Get Wayback Machine configuration"""
-        credentials = await self.get_secret('wayback_machine')
+        credentials = self.get_secret('wayback_machine')
         if not credentials:
-            return {
-                'api_url': 'http://web.archive.org/cdx/search/cdx'
-            }
+            return { 'api_url': 'http://web.archive.org/cdx/search/cdx' }
         
-        return {
-            'api_url': credentials.get('api_url', 'http://web.archive.org/cdx/search/cdx')
-        }
+        return { 'api_url': credentials.get('api_url', 'http://web.archive.org/cdx/search/cdx') }
     
     async def get_google_trends_credentials(self) -> Optional[str]:
         """Get Google Trends API key"""
-        credentials = await self.get_secret('google_trends')
+        credentials = self.get_secret('google_trends')
         if not credentials:
             return None
         
@@ -139,7 +130,7 @@ class SecretsService:
             logger.error("Invalid affiliate network", network=network)
             return None
         
-        credentials = await self.get_secret(network)
+        credentials = self.get_secret(network)
         if not credentials:
             return None
         
@@ -153,7 +144,7 @@ class SecretsService:
             logger.error("Invalid social media platform", platform=platform)
             return None
         
-        credentials = await self.get_secret(platform)
+        credentials = self.get_secret(platform)
         if not credentials:
             return None
         
@@ -167,7 +158,7 @@ class SecretsService:
             logger.error("Invalid content optimization service", service=service)
             return None
         
-        credentials = await self.get_secret(service)
+        credentials = self.get_secret(service)
         if not credentials:
             return None
         
@@ -181,7 +172,7 @@ class SecretsService:
             logger.error("Invalid export platform", platform=platform)
             return None
         
-        credentials = await self.get_secret(platform)
+        credentials = self.get_secret(platform)
         if not credentials:
             return None
         
@@ -189,7 +180,7 @@ class SecretsService:
     
     async def get_linkup_credentials(self) -> Optional[str]:
         """Get LinkUp API credentials"""
-        credentials = await self.get_secret('linkup')
+        credentials = self.get_secret('linkup')
         if not credentials:
             return None
         
@@ -228,12 +219,7 @@ class SecretsService:
             True if successful, False otherwise
         """
         try:
-            result = (await self.db._get_client()).table('secrets').upsert({
-                'service_name': service_name,
-                'credentials': credentials,
-                'is_active': True,
-                'updated_at': datetime.utcnow().isoformat()
-            }).execute()
+            result = (await self.await db._get_client()).table('secrets').upsert({ 'service_name': service_name, 'credentials': credentials, 'is_active': True, 'updated_at': datetime.utcnow().isoformat() }).execute()
             
             if result.data:
                 # Clear cache for this service

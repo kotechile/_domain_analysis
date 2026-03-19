@@ -22,9 +22,7 @@ class AuctionsService:
     
     def load_auctions_from_csv(self, csv_content: str, auction_site: str, filename: str = '', is_file: bool = False) -> Iterator[AuctionInput]:
         """
-        Load auctions from CSV content using the appropriate parser.
-        Returns an iterator to support streaming large files.
-        """
+        Load auctions from CSV content using the appropriate parser. Returns an iterator to support streaming large files. """
         parser = CSVParserService()
         try:
             # parser.parse_csv now returns a generator
@@ -83,7 +81,7 @@ class AuctionsService:
             
             # Step 1: Truncate table
             logger.info("Step 1: Truncating auctions table")
-            await self.db.truncate_auctions()
+            await self.await db.truncate_auctions()
             logger.info("Table truncated successfully")
             
             # Step 2: Convert to Auction objects and prepare for database
@@ -92,18 +90,8 @@ class AuctionsService:
             for auction_input in auctions:
                 try:
                     auction = auction_input.to_auction()
-                    auction_dict = {
-                        'domain': auction.domain,
-                        'start_date': auction.start_date.isoformat() if auction.start_date else None,
-                        'expiration_date': auction.expiration_date.isoformat(),
-                        'auction_site': auction.auction_site,
-                        'current_bid': auction.current_bid,
-                        'source_data': auction.source_data,
-                        'link': auction.link,  # Direct link to auction listing (e.g., GoDaddy auction URL)
-                        'preferred': False,
-                        'has_statistics': False,
-                        'processed': False  # New records are unprocessed
-                    }
+                    auction_dict = { 'domain': auction.domain, 'start_date': auction.start_date.isoformat() if auction.start_date else None, 'expiration_date': auction.expiration_date.isoformat(), 'auction_site': auction.auction_site, 'current_bid': auction.current_bid, 'source_data': auction.source_data, 'link': auction.link,  # Direct link to auction listing (e.g., GoDaddy auction URL)
+                        'preferred': False, 'has_statistics': False, 'processed': False  # New records are unprocessed }
                     auction_dicts.append(auction_dict)
                 except Exception as e:
                     logger.warning("Failed to convert auction", domain=auction_input.domain, error=str(e))
@@ -111,16 +99,10 @@ class AuctionsService:
             
             # Step 3: Bulk insert
             logger.info("Step 3: Starting bulk insert", total=len(auction_dicts))
-            result = await self.db.bulk_insert_auctions(auction_dicts)
+            result = self.await db.bulk_insert_auctions(auction_dicts)
             logger.info("Bulk insert complete", inserted=result['inserted'], skipped=result['skipped'])
             
-            return {
-                "success": True,
-                "message": f"Loaded {result['inserted']} auctions, skipped {result['skipped']} duplicates",
-                "loaded_count": result['inserted'],
-                "skipped_count": result['skipped'],
-                "total_count": result['total']
-            }
+            return { "success": True, "message": f"Loaded {result['inserted']} auctions, skipped {result['skipped']} duplicates", "loaded_count": result['inserted'], "skipped_count": result['skipped'], "total_count": result['total'] }
             
         except Exception as e:
             logger.error("Failed to truncate and load auctions", error=str(e))
@@ -136,7 +118,7 @@ class AuctionsService:
         Returns:
             List of auction dictionaries
         """
-        return await self.db.get_preferred_auctions_without_stats(limit=limit)
+        return await self.await db.get_preferred_auctions_without_stats(limit=limit)
     
     async def get_scored_auctions_without_page_statistics(self, limit: int = 100) -> List[Dict[str, Any]]:
         """
@@ -220,16 +202,9 @@ class AuctionsService:
         Returns:
             Number of records updated
         """
-        return await self.db.mark_has_statistics(domain_names)
+        return await self.await db.mark_has_statistics(domain_names)
     
-    async def get_auctions_report(
-        self,
-        filters: Optional[Dict[str, Any]] = None,
-        sort_by: str = 'expiration_date',
-        order: str = 'asc',
-        limit: int = 100,
-        offset: int = 0
-    ) -> Dict[str, Any]:
+    async def get_auctions_report( self, filters: Optional[Dict[str, Any]] = None, sort_by: str = 'expiration_date', order: str = 'asc', limit: int = 100, offset: int = 0 ) -> Dict[str, Any]:
         """
         Get auctions report with page_statistics from auctions table
         
@@ -243,22 +218,9 @@ class AuctionsService:
         Returns:
             Dict with auctions list, total count, and pagination info
         """
-        return await self.db.get_auctions_with_statistics(
-            filters=filters,
-            sort_by=sort_by,
-            order=order,
-            limit=limit,
-            offset=offset
-        )
+        return await self.await db.get_auctions_with_statistics( filters=filters, sort_by=sort_by, order=order, limit=limit, offset=offset )
     
-    async def get_auctions_missing_any_metric_with_filters(
-        self,
-        filters: Optional[Dict[str, Any]] = None,
-        sort_by: str = 'expiration_date',
-        sort_order: str = 'asc',
-        limit: int = 1000,
-        force_refresh: bool = False
-    ) -> List[Dict[str, Any]]:
+    async def get_auctions_missing_any_metric_with_filters( self, filters: Optional[Dict[str, Any]] = None, sort_by: str = 'expiration_date', sort_order: str = 'asc', limit: int = 1000, force_refresh: bool = False ) -> List[Dict[str, Any]]:
         """
         Get auctions matching filters that are missing ANY of the four DataForSEO metrics
         
@@ -271,13 +233,7 @@ class AuctionsService:
         Returns:
             List of auction dictionaries with domain, expiration_date, and id
         """
-        return await self.db.get_auctions_missing_any_metric_with_filters(
-            filters=filters,
-            sort_by=sort_by,
-            sort_order=sort_order,
-            limit=limit,
-            force_refresh=force_refresh
-        )
+        return await self.await db.get_auctions_missing_any_metric_with_filters( filters=filters, sort_by=sort_by, sort_order=sort_order, limit=limit, force_refresh=force_refresh )
     
 
     

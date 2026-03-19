@@ -50,13 +50,12 @@ async def health_check():
                 logger.error("SUPABASE_URL is not set in environment variables")
             elif 'sb_domain' in supabase_url and 'sbdomain' not in supabase_url:
                 # Warn about potential URL mismatch (underscore vs no underscore)
-                logger.warning("SUPABASE_URL contains 'sb_domain' - verify this matches your actual server URL", 
-                            url=supabase_url)
+                logger.warning("SUPABASE_URL contains 'sb_domain' - verify this matches your actual server URL", url=supabase_url)
             
             # Try to get or initialize database
             # If init_database fails due to table creation, that's okay - we just need the client
             try:
-                db = await init_database()
+                db = init_database()
             except Exception as init_error:
                 # If init fails, try to get existing instance or create a new one
                 logger.debug("init_database failed, trying to get existing instance", error=str(init_error))
@@ -73,7 +72,7 @@ async def health_check():
             else:
                 # Test with secrets table first (known to exist)
                 try:
-                    result = await (await db._get_client()).table('secrets').select('id').limit(1).execute()
+                    result = (await db._get_client()).table('secrets').select('id').limit(1).execute()
                     # Test reports table access
                     try:
                         await (await db._get_client()).table('reports').select('id').limit(1).execute()
@@ -84,8 +83,7 @@ async def health_check():
                         error_type = type(table_error).__name__
                         # Check for connection pool or server availability issues
                         if 'no available server' in error_msg.lower() or '503' in error_msg:
-                            logger.warning("Database connection pool exhausted or server unavailable", 
-                                        error=error_msg, error_type=error_type)
+                            logger.warning("Database connection pool exhausted or server unavailable", error=error_msg, error_type=error_type)
                             services_status['database'] = 'degraded'  # Temporary connection issue
                         else:
                             logger.warning("Reports table not accessible", error=error_msg, error_type=error_type)
@@ -95,8 +93,7 @@ async def health_check():
                     error_type = type(secrets_error).__name__
                     # Check for connection pool or server availability issues
                     if 'no available server' in error_msg.lower() or '503' in error_msg:
-                        logger.warning("Database connection pool exhausted or server unavailable", 
-                                    error=error_msg, error_type=error_type)
+                        logger.warning("Database connection pool exhausted or server unavailable", error=error_msg, error_type=error_type)
                         services_status['database'] = 'degraded'  # Temporary connection issue, not completely unhealthy
                     else:
                         logger.warning("Secrets table not accessible", error=error_msg, error_type=error_type)
@@ -121,23 +118,14 @@ async def health_check():
             await service.health_check()
         
         # Run external API checks in parallel with timeouts
-        services_status['dataforseo'] = await check_service_with_timeout(
-            'DataForSEO', check_dataforseo, timeout=5.0
-        )
-        services_status['wayback_machine'] = await check_service_with_timeout(
-            'Wayback Machine', check_wayback, timeout=10.0
-        )
-        services_status['llm'] = await check_service_with_timeout(
-            'LLM', check_llm, timeout=5.0
-        )
+        services_status['dataforseo'] = check_service_with_timeout( 'DataForSEO', check_dataforseo, timeout=5.0 )
+        services_status['wayback_machine'] = check_service_with_timeout( 'Wayback Machine', check_wayback, timeout=10.0 )
+        services_status['llm'] = check_service_with_timeout( 'LLM', check_llm, timeout=5.0 )
         
         # Determine overall status
         overall_status = 'healthy' if all(status == 'healthy' for status in services_status.values()) else 'degraded'
         
-        return HealthResponse(
-            status=overall_status,
-            services=services_status
-        )
+        return HealthResponse( status=overall_status, services=services_status )
         
     except Exception as e:
         logger.error("Health check failed", error=str(e))
@@ -178,98 +166,53 @@ async def database_diagnostic():
     Returns detailed information about database connection issues
     """
     import os
-    diagnostic = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "checks": {}
-    }
+    diagnostic = { "timestamp": datetime.utcnow().isoformat(), "checks": {} }
     
     # Check 1: Environment variables
     try:
         from utils.config import get_settings
         settings = get_settings()
         env_url = os.environ.get('SUPABASE_URL', 'NOT SET IN ENV')
-        diagnostic["checks"]["environment"] = {
-            "status": "ok",
-            "supabase_url_set": bool(settings.SUPABASE_URL),
-            "supabase_url_preview": settings.SUPABASE_URL[:50] + "..." if settings.SUPABASE_URL else None,
-            "supabase_url_full": settings.SUPABASE_URL if settings.SUPABASE_URL else None,
-            "supabase_url_from_env_var": env_url[:50] + "..." if env_url != 'NOT SET IN ENV' else env_url,
-            "supabase_key_set": bool(settings.SUPABASE_KEY),
-            "supabase_key_length": len(settings.SUPABASE_KEY) if settings.SUPABASE_KEY else 0,
-            "supabase_service_role_key_set": bool(settings.SUPABASE_SERVICE_ROLE_KEY),
-            "supabase_verify_ssl": getattr(settings, 'SUPABASE_VERIFY_SSL', True)
-        }
+        diagnostic["checks"]["environment"] = { "status": "ok", "supabase_url_set": bool(settings.SUPABASE_URL), "supabase_url_preview": settings.SUPABASE_URL[:50] + "..." if settings.SUPABASE_URL else None, "supabase_url_full": settings.SUPABASE_URL if settings.SUPABASE_URL else None, "supabase_url_from_env_var": env_url[:50] + "..." if env_url != 'NOT SET IN ENV' else env_url, "supabase_key_set": bool(settings.SUPABASE_KEY), "supabase_key_length": len(settings.SUPABASE_KEY) if settings.SUPABASE_KEY else 0, "supabase_service_role_key_set": bool(settings.SUPABASE_SERVICE_ROLE_KEY), "supabase_verify_ssl": getattr(settings, 'SUPABASE_VERIFY_SSL', True) }
     except Exception as e:
-        diagnostic["checks"]["environment"] = {
-            "status": "error",
-            "error": str(e),
-            "error_type": type(e).__name__
-        }
+        diagnostic["checks"]["environment"] = { "status": "error", "error": str(e), "error_type": type(e).__name__ }
         return diagnostic
     
     # Check 2: Database service initialization
     try:
         from services.database import DatabaseService
         db = DatabaseService()
-        diagnostic["checks"]["client_initialization"] = {
-            "status": "ok" if db.client is not None else "failed",
-            "client_is_none": db.client is None
-        }
+        diagnostic["checks"]["client_initialization"] = { "status": "ok" if db.client is not None else "failed", "client_is_none": db.client is None }
         if db.client is None:
             return diagnostic
     except Exception as e:
-        diagnostic["checks"]["client_initialization"] = {
-            "status": "error",
-            "error": str(e),
-            "error_type": type(e).__name__
-        }
+        diagnostic["checks"]["client_initialization"] = { "status": "error", "error": str(e), "error_type": type(e).__name__ }
         return diagnostic
     
     # Check 3: Async init
     try:
-        db = await init_database()
-        diagnostic["checks"]["async_init"] = {
-            "status": "ok" if db.client is not None else "failed",
-            "client_is_none": db.client is None
-        }
+        db = init_database()
+        diagnostic["checks"]["async_init"] = { "status": "ok" if db.client is not None else "failed", "client_is_none": db.client is None }
         if db.client is None:
             return diagnostic
     except Exception as e:
-        diagnostic["checks"]["async_init"] = {
-            "status": "error",
-            "error": str(e),
-            "error_type": type(e).__name__
-        }
+        diagnostic["checks"]["async_init"] = { "status": "error", "error": str(e), "error_type": type(e).__name__ }
         return diagnostic
     
     # Check 4: Secrets table access
     try:
-        result = await (await db._get_client()).table('secrets').select('id').limit(1).execute()
-        diagnostic["checks"]["secrets_table"] = {
-            "status": "ok",
-            "records_found": len(result.data)
-        }
+        result = (await db._get_client()).table('secrets').select('id').limit(1).execute()
+        diagnostic["checks"]["secrets_table"] = { "status": "ok", "records_found": len(result.data) }
     except Exception as e:
-        diagnostic["checks"]["secrets_table"] = {
-            "status": "error",
-            "error": str(e),
-            "error_type": type(e).__name__
-        }
+        diagnostic["checks"]["secrets_table"] = { "status": "error", "error": str(e), "error_type": type(e).__name__ }
         return diagnostic
     
     # Check 5: Reports table access
     try:
-        result = await (await db._get_client()).table('reports').select('id').limit(1).execute()
-        diagnostic["checks"]["reports_table"] = {
-            "status": "ok",
-            "records_found": len(result.data)
-        }
+        result = (await db._get_client()).table('reports').select('id').limit(1).execute()
+        diagnostic["checks"]["reports_table"] = { "status": "ok", "records_found": len(result.data) }
     except Exception as e:
-        diagnostic["checks"]["reports_table"] = {
-            "status": "error",
-            "error": str(e),
-            "error_type": type(e).__name__
-        }
+        diagnostic["checks"]["reports_table"] = { "status": "error", "error": str(e), "error_type": type(e).__name__ }
     
     return diagnostic
 
@@ -292,11 +235,7 @@ async def clear_credentials_cache():
         # will be cleared automatically on the next request
         
         logger.info("Credentials cache cleared successfully")
-        return {
-            "status": "success",
-            "message": "Credentials cache cleared. New credentials will be fetched on next request.",
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        return { "status": "success", "message": "Credentials cache cleared. New credentials will be fetched on next request.", "timestamp": datetime.utcnow().isoformat() }
         
     except Exception as e:
         logger.error("Failed to clear credentials cache", error=str(e))
@@ -309,15 +248,7 @@ async def test_db_connection():
     Test database connection by checking critical tables
     Specifically checks csv_upload_progress and auctions access
     """
-    results = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "connection": "unknown",
-        "csv_upload_progress_exists": False,
-        "auctions_exists": False,
-        "auctions_staging_exists": False,
-        "write_test": False,
-        "error": None
-    }
+    results = { "timestamp": datetime.utcnow().isoformat(), "connection": "unknown", "csv_upload_progress_exists": False, "auctions_exists": False, "auctions_staging_exists": False, "write_test": False, "error": None }
     
     try:
         db = get_database()
@@ -358,12 +289,7 @@ async def test_db_connection():
         try:
             import uuid
             test_id = str(uuid.uuid4())
-            (await db._get_client()).table('csv_upload_progress').insert({
-                'job_id': f"test_{test_id}",
-                'filename': 'test_connectivity.csv',
-                'auction_site': 'test',
-                'status': 'test'
-            }).execute()
+            (await db._get_client()).table('csv_upload_progress').insert({ 'job_id': f"test_{test_id}", 'filename': 'test_connectivity.csv', 'auction_site': 'test', 'status': 'test' }).execute()
             
             # Cleanup
             await (await db._get_client()).table('csv_upload_progress').delete().eq('job_id', f"test_{test_id}").execute()

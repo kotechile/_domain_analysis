@@ -12,8 +12,7 @@ logger = structlog.get_logger()
 def parse_iso_datetime(dt_str: Union[str, datetime.datetime]) -> Optional[datetime.datetime]:
     """
     Robustly parse ISO datetime strings, handling variable fractional seconds
-    and timezone offsets that Python 3.10's fromisoformat might struggle with.
-    """
+    and timezone offsets that Python 3.10's fromisoformat might struggle with. """
     if dt_str is None:
         return None
         

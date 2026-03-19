@@ -257,16 +257,7 @@ class DomainScoringService:
         passed, reason = self._stage1_filter(domain)
         
         if not passed:
-            return ScoredDomain(
-                domain=domain,
-                filter_status='FAIL',
-                filter_reason=reason,
-                total_meaning_score=None,
-                age_score=None,
-                lexical_frequency_score=None,
-                semantic_value_score=None,
-                rank=None
-            )
+            return ScoredDomain( domain=domain, filter_status='FAIL', filter_reason=reason, total_meaning_score=None, age_score=None, lexical_frequency_score=None, semantic_value_score=None, rank=None )
         
         # Stage 2: Scoring
         age_score = self._calculate_age_score(domain)
@@ -276,16 +267,7 @@ class DomainScoringService:
         # Total Meaning Score
         total_score = (age_score * 0.40) + (lfs_score * 0.30) + (sv_score * 0.30)
         
-        return ScoredDomain(
-            domain=domain,
-            filter_status='PASS',
-            filter_reason=None,
-            total_meaning_score=round(total_score, 2),
-            age_score=round(age_score, 2),
-            lexical_frequency_score=round(lfs_score, 2),
-            semantic_value_score=round(sv_score, 2),
-            rank=None  # Will be set after sorting
-        )
+        return ScoredDomain( domain=domain, filter_status='PASS', filter_reason=None, total_meaning_score=round(total_score, 2), age_score=round(age_score, 2), lexical_frequency_score=round(lfs_score, 2), semantic_value_score=round(sv_score, 2), rank=None  # Will be set after sorting )
     
     def score_domains(self, domains: List[NamecheapDomain]) -> List[ScoredDomain]:
         """
@@ -311,22 +293,11 @@ class DomainScoringService:
             except Exception as e:
                 logger.error("Failed to score domain", domain=domain.name, error=str(e))
                 # Create FAIL entry for error case
-                scored_domains.append(ScoredDomain(
-                    domain=domain,
-                    filter_status='FAIL',
-                    filter_reason=f"Scoring error: {str(e)}",
-                    total_meaning_score=None,
-                    age_score=None,
-                    lexical_frequency_score=None,
-                    semantic_value_score=None,
-                    rank=None
-                ))
+                scored_domains.append(ScoredDomain( domain=domain, filter_status='FAIL', filter_reason=f"Scoring error: {str(e)}", total_meaning_score=None, age_score=None, lexical_frequency_score=None, semantic_value_score=None, rank=None ))
         
         # Sort by score (PASS domains first, then by score DESC)
-        scored_domains.sort(key=lambda x: (
-            x.filter_status != 'PASS',  # PASS first
-            -(x.total_meaning_score or 0)  # Higher score first
-        ))
+        scored_domains.sort(key=lambda x: ( x.filter_status != 'PASS',  # PASS first
+            -(x.total_meaning_score or 0)  # Higher score first ))
         
         # Assign ranks
         rank = 1
@@ -336,10 +307,7 @@ class DomainScoringService:
                 rank += 1
         
         passed_count = sum(1 for s in scored_domains if s.filter_status == 'PASS')
-        logger.info("Domain scoring complete", 
-                   total=len(domains),
-                   passed=passed_count,
-                   failed=len(domains) - passed_count)
+        logger.info("Domain scoring complete", total=len(domains), passed=passed_count, failed=len(domains) - passed_count)
         
         return scored_domains
 

@@ -31,10 +31,7 @@ class N8NService:
         """
         Trigger N8N workflow to fetch backlink data
         
-        This method triggers the N8N webhook and returns immediately.
-        The actual data will be received via the webhook callback endpoint.
-        
-        Returns:
+        This method triggers the N8N webhook and returns immediately. The actual data will be received via the webhook callback endpoint. Returns:
             Dict with request_id if successful, None if failed
         """
         if not self.enabled:
@@ -50,42 +47,19 @@ class N8NService:
                 return None
             
             # Prepare webhook payload
-            payload = {
-                "domain": domain,
-                "limit": limit,
-                "callback_url": callback_url,
-                "request_id": request_id,
-                "type": "detailed"  # Indicate this is a detailed request
-            }
+            payload = { "domain": domain, "limit": limit, "callback_url": callback_url, "request_id": request_id, "type": "detailed"  # Indicate this is a detailed request }
             
-            logger.info("Triggering N8N workflow for backlinks", 
-                       domain=domain, 
-                       request_id=request_id,
-                       webhook_url=self.settings.N8N_WEBHOOK_URL)
+            logger.info("Triggering N8N workflow for backlinks", domain=domain, request_id=request_id, webhook_url=self.settings.N8N_WEBHOOK_URL)
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    self.settings.N8N_WEBHOOK_URL,
-                    json=payload
-                )
+                response = client.post( self.settings.N8N_WEBHOOK_URL, json=payload )
                 
                 if response.status_code in [200, 201, 202]:
-                    logger.info("N8N workflow triggered successfully", 
-                               domain=domain, 
-                               request_id=request_id,
-                               status_code=response.status_code)
-                    return {
-                        "request_id": request_id,
-                        "domain": domain,
-                        "status": "triggered"
-                    }
+                    logger.info("N8N workflow triggered successfully", domain=domain, request_id=request_id, status_code=response.status_code)
+                    return { "request_id": request_id, "domain": domain, "status": "triggered" }
                 else:
                     error_text = response.text[:500] if response.text else "No response body"
-                    logger.error("N8N workflow trigger failed", 
-                               domain=domain,
-                               status_code=response.status_code,
-                               response=error_text,
-                               webhook_url=self.settings.N8N_WEBHOOK_URL)
+                    logger.error("N8N workflow trigger failed", domain=domain, status_code=response.status_code, response=error_text, webhook_url=self.settings.N8N_WEBHOOK_URL)
                     return None
                     
         except httpx.TimeoutException:
@@ -106,7 +80,7 @@ class N8NService:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 # Try to access N8N base URL (without webhook path)
                 base_url = self.settings.N8N_WEBHOOK_URL.rsplit('/', 1)[0] if '/' in self.settings.N8N_WEBHOOK_URL else self.settings.N8N_WEBHOOK_URL
-                response = await client.get(f"{base_url}/healthz", follow_redirects=True)
+                response = client.get(f"{base_url}/healthz", follow_redirects=True)
                 return response.status_code in [200, 404]  # 404 is OK, means N8N is running
         except Exception as e:
             logger.warning("N8N health check failed", error=str(e))
@@ -125,10 +99,7 @@ class N8NService:
         """
         Trigger N8N workflow to fetch backlinks summary data
         
-        This method triggers the N8N webhook and returns immediately.
-        The actual data will be received via the webhook callback endpoint.
-        
-        Returns:
+        This method triggers the N8N webhook and returns immediately. The actual data will be received via the webhook callback endpoint. Returns:
             Dict with request_id if successful, None if failed
         """
         if not self.is_enabled_for_summary():
@@ -150,39 +121,18 @@ class N8NService:
                 summary_callback_url = f"{callback_url}-summary"
             
             # Prepare webhook payload
-            payload = {
-                "domain": domain,
-                "callback_url": summary_callback_url,
-                "request_id": request_id,
-                "type": "summary"  # Indicate this is a summary request
-            }
+            payload = { "domain": domain, "callback_url": summary_callback_url, "request_id": request_id, "type": "summary"  # Indicate this is a summary request }
             
-            logger.info("Triggering N8N workflow for backlinks summary", 
-                       domain=domain, 
-                       request_id=request_id,
-                       webhook_url=self.settings.N8N_WEBHOOK_URL_SUMMARY)
+            logger.info("Triggering N8N workflow for backlinks summary", domain=domain, request_id=request_id, webhook_url=self.settings.N8N_WEBHOOK_URL_SUMMARY)
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    self.settings.N8N_WEBHOOK_URL_SUMMARY,
-                    json=payload
-                )
+                response = client.post( self.settings.N8N_WEBHOOK_URL_SUMMARY, json=payload )
                 
                 if response.status_code in [200, 201, 202]:
-                    logger.info("N8N summary workflow triggered successfully", 
-                               domain=domain, 
-                               request_id=request_id,
-                               status_code=response.status_code)
-                    return {
-                        "request_id": request_id,
-                        "domain": domain,
-                        "status": "triggered"
-                    }
+                    logger.info("N8N summary workflow triggered successfully", domain=domain, request_id=request_id, status_code=response.status_code)
+                    return { "request_id": request_id, "domain": domain, "status": "triggered" }
                 else:
-                    logger.error("N8N summary workflow trigger failed", 
-                               domain=domain,
-                               status_code=response.status_code,
-                               response=response.text[:200])
+                    logger.error("N8N summary workflow trigger failed", domain=domain, status_code=response.status_code, response=response.text[:200])
                     return None
                     
         except httpx.TimeoutException:
@@ -207,8 +157,7 @@ class N8NService:
         # Remove protocol
         domain = domain.replace("http://", "").replace("https://", "")
         
-        # Remove www.
-        if domain.startswith("www."):
+        # Remove www. if domain.startswith("www."):
             domain = domain[4:]
         
         # Remove trailing slash and any path
@@ -221,13 +170,7 @@ class N8NService:
     
     async def trigger_bulk_page_summary_workflow(self, domains: List[str]) -> Optional[Dict[str, Any]]:
         """
-        Trigger N8N workflow to fetch bulk page summary data for multiple domains.
-
-        Fire-and-forget: we POST to the webhook and return immediately.
-        N8N is async — it will process and call back independently.
-        The response status is logged but does NOT block the API response.
-
-        Args:
+        Trigger N8N workflow to fetch bulk page summary data for multiple domains. Fire-and-forget: we POST to the webhook and return immediately. N8N is async — it will process and call back independently. The response status is logged but does NOT block the API response. Args:
             domains: List of domain names to analyze (will be normalized)
 
         Returns:
@@ -266,55 +209,24 @@ class N8NService:
                 logger.error("N8N bulk webhook URL not configured")
                 return None
 
-            # The DataForSEO Bulk Pages Summary API maxes out at 100 unique domains per request.
-            # We chunk the domains into batches of 100 and fire a webhook for each batch.
-            # The backend stores them individually by domain, so sharing request_id is perfectly fine.
-            chunk_size = 100
+            # The DataForSEO Bulk Pages Summary API maxes out at 100 unique domains per request. # We chunk the domains into batches of 100 and fire a webhook for each batch. # The backend stores them individually by domain, so sharing request_id is perfectly fine. chunk_size = 100
             domain_chunks = [normalized_domains[i:i + chunk_size] for i in range(0, len(normalized_domains), chunk_size)]
 
-            logger.info(
-                "Firing N8N bulk page summary webhooks (fire-and-forget)",
-                total_domains=len(normalized_domains),
-                chunks=len(domain_chunks),
-                request_id=request_id,
-                webhook_url=webhook_url
-            )
+            logger.info( "Firing N8N bulk page summary webhooks (fire-and-forget)", total_domains=len(normalized_domains), chunks=len(domain_chunks), request_id=request_id, webhook_url=webhook_url )
 
             # Fire-and-forget: spawn a background task so the API returns immediately
             async def _fire():
                 import asyncio
                 try:
-                    # Short timeout: 10s just to get the connection accepted.
-                    async with httpx.AsyncClient(
-                        timeout=httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=5.0)
-                    ) as client:
+                    # Short timeout: 10s just to get the connection accepted. async with httpx.AsyncClient( timeout=httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=5.0) ) as client:
                         for chunk_idx, chunk in enumerate(domain_chunks):
-                            payload = {
-                                "domains": chunk,
-                                "callback_url": bulk_callback_url,
-                                "request_id": request_id, 
-                                "type": "bulk_summary",
-                                "chunk_index": chunk_idx + 1,
-                                "total_chunks": len(domain_chunks)
-                            }
+                            payload = { "domains": chunk, "callback_url": bulk_callback_url, "request_id": request_id, "type": "bulk_summary", "chunk_index": chunk_idx + 1, "total_chunks": len(domain_chunks) }
                             
-                            resp = await client.post(webhook_url, json=payload)
+                            resp = client.post(webhook_url, json=payload)
                             if resp.status_code in [200, 201, 202]:
-                                logger.info(
-                                    "N8N bulk webhook accepted for chunk",
-                                    request_id=request_id,
-                                    chunk_index=chunk_idx + 1,
-                                    chunk_size=len(chunk),
-                                    status=resp.status_code
-                                )
+                                logger.info( "N8N bulk webhook accepted for chunk", request_id=request_id, chunk_index=chunk_idx + 1, chunk_size=len(chunk), status=resp.status_code )
                             else:
-                                logger.error(
-                                    "N8N bulk webhook rejected for chunk",
-                                    request_id=request_id,
-                                    chunk_index=chunk_idx + 1,
-                                    status=resp.status_code,
-                                    body=resp.text[:300]
-                                )
+                                logger.error( "N8N bulk webhook rejected for chunk", request_id=request_id, chunk_index=chunk_idx + 1, status=resp.status_code, body=resp.text[:300] )
                             
                             # Brief pause to avoid flooding N8N with concurrent parallel workflow starts at the exact millisecond
                             if chunk_idx < len(domain_chunks) - 1:
@@ -329,12 +241,7 @@ class N8NService:
             asyncio.create_task(_fire())
 
             # Return immediately — don't wait for N8N
-            return {
-                "request_id": request_id,
-                "domain_count": len(normalized_domains),
-                "chunks": len(domain_chunks),
-                "status": "queued"
-            }
+            return { "request_id": request_id, "domain_count": len(normalized_domains), "chunks": len(domain_chunks), "status": "queued" }
 
         except Exception as e:
             logger.error("Failed to queue N8N bulk summary workflow", domain_count=len(domains), error=str(e))
@@ -345,10 +252,7 @@ class N8NService:
         """
         Trigger N8N workflow to fetch bulk rank data for multiple domains (up to 1000)
         
-        This method triggers the N8N webhook with a list of domains and returns immediately.
-        The actual data will be received via the webhook callback endpoint.
-        
-        Args:
+        This method triggers the N8N webhook with a list of domains and returns immediately. The actual data will be received via the webhook callback endpoint. Args:
             domains: List of domain names to analyze (will be normalized, up to 1000)
             
         Returns:
@@ -372,9 +276,7 @@ class N8NService:
             
             # Limit to 1000 domains (DataForSEO bulk rank endpoint limit)
             if len(normalized_domains) > 1000:
-                logger.warning("Domain list exceeds 1000, truncating", 
-                             original_count=len(normalized_domains),
-                             truncated_count=1000)
+                logger.warning("Domain list exceeds 1000, truncating", original_count=len(normalized_domains), truncated_count=1000)
                 normalized_domains = normalized_domains[:1000]
             
             request_id = str(uuid.uuid4())
@@ -391,12 +293,8 @@ class N8NService:
                 bulk_rank_callback_url = f"{callback_url}/backlinks-bulk-rank"
             
             # Prepare webhook payload
-            payload = {
-                "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_rank_callback_url,
-                "request_id": request_id,
-                "type": "bulk_rank"  # Indicate this is a bulk rank request
-            }
+            payload = { "domains": normalized_domains,  # Array of clean domain strings
+                "callback_url": bulk_rank_callback_url, "request_id": request_id, "type": "bulk_rank"  # Indicate this is a bulk rank request }
             
             # Use configured bulk rank webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_RANK
@@ -405,36 +303,17 @@ class N8NService:
                 logger.error("N8N bulk rank webhook URL not configured")
                 return None
             
-            logger.info("Triggering N8N workflow for bulk rank", 
-                       domain_count=len(normalized_domains),
-                       original_count=len(domains),
-                       request_id=request_id,
-                       webhook_url=webhook_url)
+            logger.info("Triggering N8N workflow for bulk rank", domain_count=len(normalized_domains), original_count=len(domains), request_id=request_id, webhook_url=webhook_url)
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    webhook_url,
-                    json=payload
-                )
+                response = client.post( webhook_url, json=payload )
                 
                 if response.status_code in [200, 201, 202]:
-                    logger.info("N8N bulk rank workflow triggered successfully", 
-                               domain_count=len(normalized_domains),
-                               request_id=request_id,
-                               status_code=response.status_code)
-                    return {
-                        "request_id": request_id,
-                        "domains": normalized_domains,
-                        "domain_count": len(normalized_domains),
-                        "status": "triggered"
-                    }
+                    logger.info("N8N bulk rank workflow triggered successfully", domain_count=len(normalized_domains), request_id=request_id, status_code=response.status_code)
+                    return { "request_id": request_id, "domains": normalized_domains, "domain_count": len(normalized_domains), "status": "triggered" }
                 else:
                     error_text = response.text[:500] if response.text else "No response body"
-                    logger.error("N8N bulk rank workflow trigger failed", 
-                               domain_count=len(domains),
-                               status_code=response.status_code,
-                               response=error_text,
-                               webhook_url=webhook_url)
+                    logger.error("N8N bulk rank workflow trigger failed", domain_count=len(domains), status_code=response.status_code, response=error_text, webhook_url=webhook_url)
                     return None
                     
         except httpx.TimeoutException:
@@ -448,10 +327,7 @@ class N8NService:
         """
         Trigger N8N workflow for bulk backlinks analysis (1000 domains max)
         
-        This method triggers the N8N webhook for DataForSEO bulk backlink stats.
-        The actual data will be received via the webhook callback endpoint.
-        
-        Args:
+        This method triggers the N8N webhook for DataForSEO bulk backlink stats. The actual data will be received via the webhook callback endpoint. Args:
             domains: List of domain names (will be normalized and limited to 1000)
             
         Returns:
@@ -478,9 +354,7 @@ class N8NService:
             
             # Limit to 1000 domains (DataForSEO bulk backlinks limit)
             if len(normalized_domains) > 1000:
-                logger.warning("Domain list exceeds 1000, truncating", 
-                             original_count=len(normalized_domains),
-                             truncated_count=1000)
+                logger.warning("Domain list exceeds 1000, truncating", original_count=len(normalized_domains), truncated_count=1000)
                 normalized_domains = normalized_domains[:1000]
             
             request_id = str(uuid.uuid4())
@@ -497,12 +371,8 @@ class N8NService:
                 bulk_backlinks_callback_url = f"{callback_url}/backlinks-bulk-backlinks"
             
             # Prepare webhook payload
-            payload = {
-                "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_backlinks_callback_url,
-                "request_id": request_id,
-                "type": "bulk_backlinks"  # Indicate this is a bulk backlinks request
-            }
+            payload = { "domains": normalized_domains,  # Array of clean domain strings
+                "callback_url": bulk_backlinks_callback_url, "request_id": request_id, "type": "bulk_backlinks"  # Indicate this is a bulk backlinks request }
             
             # Use configured bulk backlinks webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_BACKLINKS
@@ -511,36 +381,17 @@ class N8NService:
                 logger.error("N8N bulk backlinks webhook URL not configured")
                 return None
             
-            logger.info("Triggering N8N workflow for bulk backlinks", 
-                       domain_count=len(normalized_domains),
-                       original_count=len(domains),
-                       request_id=request_id,
-                       webhook_url=webhook_url)
+            logger.info("Triggering N8N workflow for bulk backlinks", domain_count=len(normalized_domains), original_count=len(domains), request_id=request_id, webhook_url=webhook_url)
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    webhook_url,
-                    json=payload
-                )
+                response = client.post( webhook_url, json=payload )
                 
                 if response.status_code in [200, 201, 202]:
-                    logger.info("N8N bulk backlinks workflow triggered successfully", 
-                               domain_count=len(normalized_domains),
-                               request_id=request_id,
-                               status_code=response.status_code)
-                    return {
-                        "request_id": request_id,
-                        "domains": normalized_domains,
-                        "domain_count": len(normalized_domains),
-                        "status": "triggered"
-                    }
+                    logger.info("N8N bulk backlinks workflow triggered successfully", domain_count=len(normalized_domains), request_id=request_id, status_code=response.status_code)
+                    return { "request_id": request_id, "domains": normalized_domains, "domain_count": len(normalized_domains), "status": "triggered" }
                 else:
                     error_text = response.text[:500] if response.text else "No response body"
-                    logger.error("N8N bulk backlinks workflow trigger failed", 
-                               domain_count=len(domains),
-                               status_code=response.status_code,
-                               response=error_text,
-                               webhook_url=webhook_url)
+                    logger.error("N8N bulk backlinks workflow trigger failed", domain_count=len(domains), status_code=response.status_code, response=error_text, webhook_url=webhook_url)
                     return None
                     
         except httpx.TimeoutException:
@@ -554,10 +405,7 @@ class N8NService:
         """
         Trigger N8N workflow to fetch bulk traffic data for multiple domains
         
-        This method triggers the N8N webhook with a list of domains and returns immediately.
-        The actual data will be received via the webhook callback endpoint.
-        
-        Args:
+        This method triggers the N8N webhook with a list of domains and returns immediately. The actual data will be received via the webhook callback endpoint. Args:
             domains: List of domain names to analyze (will be normalized)
             
         Returns:
@@ -594,12 +442,8 @@ class N8NService:
             
             # Prepare webhook payload
             # Send domains as an array - n8n will map this to DataForSEO's "targets" field
-            payload = {
-                "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_callback_url,
-                "request_id": request_id,
-                "type": "bulk_traffic"  # Indicate this is a bulk traffic request
-            }
+            payload = { "domains": normalized_domains,  # Array of clean domain strings
+                "callback_url": bulk_callback_url, "request_id": request_id, "type": "bulk_traffic"  # Indicate this is a bulk traffic request }
             
             # Use configured bulk traffic webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_TRAFFIC
@@ -608,36 +452,17 @@ class N8NService:
                 logger.error("N8N bulk traffic webhook URL not configured")
                 return None
             
-            logger.info("Triggering N8N workflow for bulk traffic batch", 
-                       domain_count=len(normalized_domains),
-                       original_count=len(domains),
-                       request_id=request_id,
-                       webhook_url=webhook_url)
+            logger.info("Triggering N8N workflow for bulk traffic batch", domain_count=len(normalized_domains), original_count=len(domains), request_id=request_id, webhook_url=webhook_url)
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    webhook_url,
-                    json=payload
-                )
+                response = client.post( webhook_url, json=payload )
                 
                 if response.status_code in [200, 201, 202]:
-                    logger.info("N8N bulk traffic workflow triggered successfully", 
-                               domain_count=len(normalized_domains),
-                               request_id=request_id,
-                               status_code=response.status_code)
-                    return {
-                        "request_id": request_id,
-                        "domains": normalized_domains,
-                        "domain_count": len(normalized_domains),
-                        "status": "triggered"
-                    }
+                    logger.info("N8N bulk traffic workflow triggered successfully", domain_count=len(normalized_domains), request_id=request_id, status_code=response.status_code)
+                    return { "request_id": request_id, "domains": normalized_domains, "domain_count": len(normalized_domains), "status": "triggered" }
                 else:
                     error_text = response.text[:500] if response.text else "No response body"
-                    logger.error("N8N bulk traffic workflow trigger failed", 
-                               domain_count=len(domains),
-                               status_code=response.status_code,
-                               response=error_text,
-                               webhook_url=webhook_url)
+                    logger.error("N8N bulk traffic workflow trigger failed", domain_count=len(domains), status_code=response.status_code, response=error_text, webhook_url=webhook_url)
                     return None
                     
         except httpx.TimeoutException:
@@ -651,10 +476,7 @@ class N8NService:
         """
         Trigger N8N workflow for bulk spam score analysis (1000 domains max)
         
-        This method triggers the N8N webhook for DataForSEO bulk spam scores.
-        The actual data will be received via the webhook callback endpoint.
-        
-        Args:
+        This method triggers the N8N webhook for DataForSEO bulk spam scores. The actual data will be received via the webhook callback endpoint. Args:
             domains: List of domain names (will be normalized and limited to 1000)
             
         Returns:
@@ -681,9 +503,7 @@ class N8NService:
             
             # Limit to 1000 domains (DataForSEO bulk spam score limit)
             if len(normalized_domains) > 1000:
-                logger.warning("Domain list exceeds 1000, truncating", 
-                             original_count=len(normalized_domains),
-                             truncated_count=1000)
+                logger.warning("Domain list exceeds 1000, truncating", original_count=len(normalized_domains), truncated_count=1000)
                 normalized_domains = normalized_domains[:1000]
             
             request_id = str(uuid.uuid4())
@@ -700,12 +520,8 @@ class N8NService:
                 bulk_spam_score_callback_url = f"{callback_url}/backlinks-bulk-spam-score"
             
             # Prepare webhook payload
-            payload = {
-                "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_spam_score_callback_url,
-                "request_id": request_id,
-                "type": "bulk_spam_score"  # Indicate this is a bulk spam score request
-            }
+            payload = { "domains": normalized_domains,  # Array of clean domain strings
+                "callback_url": bulk_spam_score_callback_url, "request_id": request_id, "type": "bulk_spam_score"  # Indicate this is a bulk spam score request }
             
             # Use configured bulk spam score webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_SPAM_SCORE
@@ -714,36 +530,17 @@ class N8NService:
                 logger.error("N8N bulk spam score webhook URL not configured")
                 return None
             
-            logger.info("Triggering N8N workflow for bulk spam score", 
-                       domain_count=len(normalized_domains),
-                       original_count=len(domains),
-                       request_id=request_id,
-                       webhook_url=webhook_url)
+            logger.info("Triggering N8N workflow for bulk spam score", domain_count=len(normalized_domains), original_count=len(domains), request_id=request_id, webhook_url=webhook_url)
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    webhook_url,
-                    json=payload
-                )
+                response = client.post( webhook_url, json=payload )
                 
                 if response.status_code in [200, 201, 202]:
-                    logger.info("N8N bulk spam score workflow triggered successfully", 
-                               domain_count=len(normalized_domains),
-                               request_id=request_id,
-                               status_code=response.status_code)
-                    return {
-                        "request_id": request_id,
-                        "domains": normalized_domains,
-                        "domain_count": len(normalized_domains),
-                        "status": "triggered"
-                    }
+                    logger.info("N8N bulk spam score workflow triggered successfully", domain_count=len(normalized_domains), request_id=request_id, status_code=response.status_code)
+                    return { "request_id": request_id, "domains": normalized_domains, "domain_count": len(normalized_domains), "status": "triggered" }
                 else:
                     error_text = response.text[:500] if response.text else "No response body"
-                    logger.error("N8N bulk spam score workflow trigger failed", 
-                               domain_count=len(domains),
-                               status_code=response.status_code,
-                               response=error_text,
-                               webhook_url=webhook_url)
+                    logger.error("N8N bulk spam score workflow trigger failed", domain_count=len(domains), status_code=response.status_code, response=error_text, webhook_url=webhook_url)
                     return None
                     
         except httpx.TimeoutException:
@@ -757,10 +554,7 @@ class N8NService:
         """
         Trigger N8N workflow to truncate the auctions table using SQL
         
-        This method triggers an N8N webhook that executes SQL to truncate the table.
-        Much faster than REST API deletions for large tables.
-        
-        Returns:
+        This method triggers an N8N webhook that executes SQL to truncate the table. Much faster than REST API deletions for large tables. Returns:
             Dict with request_id if successful, None if failed
         """
         if not self.enabled:
@@ -782,37 +576,19 @@ class N8NService:
                     return None
             
             # Prepare webhook payload
-            payload = {
-                "table": "auctions",
-                "action": "truncate",
-                "request_id": request_id
-            }
+            payload = { "table": "auctions", "action": "truncate", "request_id": request_id }
             
-            logger.info("Triggering N8N workflow to truncate auctions table", 
-                       request_id=request_id,
-                       webhook_url=webhook_url)
+            logger.info("Triggering N8N workflow to truncate auctions table", request_id=request_id, webhook_url=webhook_url)
             
             async with httpx.AsyncClient(timeout=120.0) as client:  # Longer timeout for truncate
-                response = await client.post(
-                    webhook_url,
-                    json=payload
-                )
+                response = client.post( webhook_url, json=payload )
                 
                 if response.status_code in [200, 201, 202]:
-                    logger.info("N8N truncate workflow triggered successfully", 
-                               request_id=request_id,
-                               status_code=response.status_code)
-                    return {
-                        "request_id": request_id,
-                        "status": "triggered",
-                        "table": "auctions"
-                    }
+                    logger.info("N8N truncate workflow triggered successfully", request_id=request_id, status_code=response.status_code)
+                    return { "request_id": request_id, "status": "triggered", "table": "auctions" }
                 else:
                     error_text = response.text[:500] if response.text else "No response body"
-                    logger.error("N8N truncate workflow trigger failed", 
-                               status_code=response.status_code,
-                               response=error_text,
-                               webhook_url=webhook_url)
+                    logger.error("N8N truncate workflow trigger failed", status_code=response.status_code, response=error_text, webhook_url=webhook_url)
                     return None
                     
         except httpx.TimeoutException:
@@ -860,45 +636,22 @@ class N8NService:
                     return None
             
             # Include Supabase credentials in payload (N8N blocks env var access)
-            payload = {
-                "file_path": file_path,
-                "auction_site": auction_site,
-                "request_id": request_id,
-                "supabase_url": self.settings.SUPABASE_URL,
-                "supabase_service_role_key": self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY
-            }
+            payload = { "file_path": file_path, "auction_site": auction_site, "request_id": request_id, "supabase_url": self.settings.SUPABASE_URL, "supabase_service_role_key": self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY }
             
             if config_id:
                 payload["config_id"] = config_id
             
-            logger.info("Triggering N8N workflow for auction scoring", 
-                       request_id=request_id,
-                       file_path=file_path,
-                       auction_site=auction_site,
-                       webhook_url=webhook_url)
+            logger.info("Triggering N8N workflow for auction scoring", request_id=request_id, file_path=file_path, auction_site=auction_site, webhook_url=webhook_url)
             
             async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    webhook_url,
-                    json=payload
-                )
+                response = client.post( webhook_url, json=payload )
                 
                 if response.status_code in [200, 201, 202]:
-                    logger.info("N8N auction scoring workflow triggered successfully", 
-                               request_id=request_id,
-                               status_code=response.status_code)
-                    return {
-                        "request_id": request_id,
-                        "status": "triggered",
-                        "file_path": file_path,
-                        "auction_site": auction_site
-                    }
+                    logger.info("N8N auction scoring workflow triggered successfully", request_id=request_id, status_code=response.status_code)
+                    return { "request_id": request_id, "status": "triggered", "file_path": file_path, "auction_site": auction_site }
                 else:
                     error_text = response.text[:500] if response.text else "No response body"
-                    logger.error("N8N auction scoring workflow trigger failed", 
-                               status_code=response.status_code,
-                               response=error_text,
-                               webhook_url=webhook_url)
+                    logger.error("N8N auction scoring workflow trigger failed", status_code=response.status_code, response=error_text, webhook_url=webhook_url)
                     return None
                     
         except httpx.TimeoutException:

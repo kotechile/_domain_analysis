@@ -16,9 +16,7 @@ async def test_json_path():
     
     # Mock some data that looks like GoDaddy JSON
     # GoDaddy JSON typically has a list of objects
-    mock_data = [
-        {"domainName": "repro-test-1.com", "endTime": "2025-12-31T23:59:59Z", "price": 100},
-        {"domainName": "repro-test-2.com", "endTime": "2025-12-31T23:59:59Z", "price": 200}
+    mock_data = [ {"domainName": "repro-test-1.com", "endTime": "2025-12-31T23:59:59Z", "price": 100}, {"domainName": "repro-test-2.com", "endTime": "2025-12-31T23:59:59Z", "price": 200}
     ]
     
     temp_json = Path("repro_test.json")
@@ -30,17 +28,9 @@ async def test_json_path():
         
         # We need to mock a few things if it fails but let's try calling it
         # Actually, let's just simulate the insertion logic from auctions.py manually
-        # as it's easier than mocking all services.
-        
-        auction_dicts = []
+        # as it's easier than mocking all services. auction_dicts = []
         for i, item in enumerate(mock_data):
-            auction_dict = {
-                'domain': item['domainName'],
-                'expiration_date': item['endTime'],
-                'auction_site': 'godaddy',
-                'job_id': job_id,
-                'offer_type': 'auction'
-            }
+            auction_dict = { 'domain': item['domainName'], 'expiration_date': item['endTime'], 'auction_site': 'godaddy', 'job_id': job_id, 'offer_type': 'auction' }
             auction_dicts.append(auction_dict)
             
         print(f"Prepared {len(auction_dicts)} records. First one: {auction_dicts[0]}")
@@ -54,7 +44,7 @@ async def test_json_path():
             await (await db._get_client()).table('auctions_staging').insert(staging_batch).execute()
         
         # Check if they are there
-        res = await (await db._get_client()).table('auctions_staging').select('job_id').eq('job_id', job_id).execute()
+        res = (await db._get_client()).table('auctions_staging').select('job_id').eq('job_id', job_id).execute()
         print(f"Verification: Found {len(res.data)} records with job_id {job_id}")
         
         # Cleanup

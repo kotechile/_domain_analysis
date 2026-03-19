@@ -35,24 +35,12 @@ async def get_report(domain: str):
         if report.status != "completed":
             # Include error message if report failed
             if report.status == "failed" and report.error_message:
-                return ReportResponse(
-                    success=False,
-                    message=f"Analysis failed: {report.error_message}",
-                    report=report  # Include report so frontend can access error_message
-                )
-            return ReportResponse(
-                success=False,
-                message=f"Report not ready. Status: {report.status}",
-                report=report  # Include report even if not completed so frontend can check status
-            )
+                return ReportResponse( success=False, message=f"Analysis failed: {report.error_message}", report=report  # Include report so frontend can access error_message )
+            return ReportResponse( success=False, message=f"Report not ready. Status: {report.status}", report=report  # Include report even if not completed so frontend can check status )
         
         logger.info("Report retrieved successfully", domain=domain)
         
-        return ReportResponse(
-            success=True,
-            report=report,
-            message="Report retrieved successfully"
-        )
+        return ReportResponse( success=True, report=report, message="Report retrieved successfully" )
         
     except HTTPException:
         raise
@@ -84,11 +72,7 @@ async def get_page_summary(domain: str):
         
         logger.info("Page summary retrieved successfully", domain=domain)
         
-        return {
-            "success": True,
-            "data": backlinks_summary,
-            "message": "Page summary retrieved successfully"
-        }
+        return { "success": True, "data": backlinks_summary, "message": "Page summary retrieved successfully" }
         
     except HTTPException:
         raise
@@ -104,7 +88,7 @@ async def get_domain_history(domain: str):
     """
     try:
         service = AnalysisService()
-        history = await service.get_or_fetch_historical_data(domain)
+        history = service.get_or_fetch_historical_data(domain)
         
         if not history:
              raise HTTPException(status_code=404, detail="Historical data not available")
@@ -118,11 +102,7 @@ async def get_domain_history(domain: str):
 
 
 @router.get("/reports", response_model=List[DomainAnalysisReport])
-async def list_reports(
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    status: Optional[str] = Query(None)
-):
+async def list_reports( limit: int = Query(10, ge=1, le=100), offset: int = Query(0, ge=0), status: Optional[str] = Query(None) ):
     """
     List domain analysis reports with pagination
     """
@@ -130,9 +110,7 @@ async def list_reports(
         db = get_database()
         
         # Build query - only select necessary fields to improve performance (avoid fetching heavy JSONB fields like historical_data)
-        query = (await db._get_client()).table('reports').select(
-            'id, domain_name, status, analysis_timestamp, processing_time_seconds, error_message, analysis_phase, analysis_mode, data_for_seo_metrics, detailed_data_available, created_at'
-        )
+        query = (await db._get_client()).table('reports').select( 'id, domain_name, status, analysis_timestamp, processing_time_seconds, error_message, analysis_phase, analysis_mode, data_for_seo_metrics, detailed_data_available, created_at' )
         
         if status:
             query = query.eq('status', status)
@@ -156,8 +134,7 @@ async def list_reports(
                         from models.domain_analysis import BulkPageSummaryResult
                         backlinks_page_summary = BulkPageSummaryResult(**report_data['backlinks_page_summary'])
                     except Exception as e:
-                        logger.debug("Failed to parse backlinks_page_summary in list_reports", 
-                                   domain=report_data.get('domain_name'), error=str(e))
+                        logger.debug("Failed to parse backlinks_page_summary in list_reports", domain=report_data.get('domain_name'), error=str(e))
                 
                 # Parse analysis_timestamp
                 analysis_timestamp = parse_iso_datetime(report_data.get('analysis_timestamp'))
@@ -170,9 +147,7 @@ async def list_reports(
                 try:
                     status = AnalysisStatus(status_value)
                 except (ValueError, TypeError):
-                    logger.debug("Invalid status value, defaulting to pending", 
-                               domain=report_data.get('domain_name'), 
-                               status=status_value)
+                    logger.debug("Invalid status value, defaulting to pending", domain=report_data.get('domain_name'), status=status_value)
                     status = AnalysisStatus.PENDING
                 
                 # Parse analysis_phase - handle old reports
@@ -182,9 +157,7 @@ async def list_reports(
                     try:
                         analysis_phase = AnalysisPhase(analysis_phase)
                     except (ValueError, TypeError):
-                        logger.debug("Invalid analysis_phase, using default", 
-                                   domain=report_data.get('domain_name'), 
-                                   phase=analysis_phase)
+                        logger.debug("Invalid analysis_phase, using default", domain=report_data.get('domain_name'), phase=analysis_phase)
                         analysis_phase = AnalysisPhase.ESSENTIAL
                 else:
                     analysis_phase = AnalysisPhase.ESSENTIAL
@@ -196,44 +169,21 @@ async def list_reports(
                     try:
                         analysis_mode = AnalysisMode(analysis_mode)
                     except (ValueError, TypeError):
-                        logger.debug("Invalid analysis_mode, using default", 
-                                   domain=report_data.get('domain_name'), 
-                                   mode=analysis_mode)
+                        logger.debug("Invalid analysis_mode, using default", domain=report_data.get('domain_name'), mode=analysis_mode)
                         analysis_mode = AnalysisMode.LEGACY
                 else:
                     analysis_mode = AnalysisMode.LEGACY
                 
-                report = DomainAnalysisReport(
-                    domain_name=report_data['domain_name'],
-                    analysis_timestamp=analysis_timestamp,
-                    status=status,
-                    data_for_seo_metrics=report_data.get('data_for_seo_metrics'),
-                    wayback_machine_summary=report_data.get('wayback_machine_summary'),
-                    llm_analysis=report_data.get('llm_analysis'),
-                    raw_data_links=report_data.get('raw_data_links'),
-                    detailed_data_available=report_data.get('detailed_data_available', {}),
-                    analysis_phase=analysis_phase,
-                    analysis_mode=analysis_mode,
-                    processing_time_seconds=report_data.get('processing_time_seconds'),
-                    error_message=report_data.get('error_message'),
-                    backlinks_page_summary=backlinks_page_summary
-                )
+                report = DomainAnalysisReport( domain_name=report_data['domain_name'], analysis_timestamp=analysis_timestamp, status=status, data_for_seo_metrics=report_data.get('data_for_seo_metrics'), wayback_machine_summary=report_data.get('wayback_machine_summary'), llm_analysis=report_data.get('llm_analysis'), raw_data_links=report_data.get('raw_data_links'), detailed_data_available=report_data.get('detailed_data_available', {}), analysis_phase=analysis_phase, analysis_mode=analysis_mode, processing_time_seconds=report_data.get('processing_time_seconds'), error_message=report_data.get('error_message'), backlinks_page_summary=backlinks_page_summary )
                 reports.append(report)
             except Exception as e:
-                logger.error("Failed to parse report in list", 
-                           domain=report_data.get('domain_name'), 
-                           error=str(e),
-                           error_type=type(e).__name__,
-                           report_keys=list(report_data.keys()) if isinstance(report_data, dict) else None,
-                           exc_info=True)
+                logger.error("Failed to parse report in list", domain=report_data.get('domain_name'), error=str(e), error_type=type(e).__name__, report_keys=list(report_data.keys()) if isinstance(report_data, dict) else None, exc_info=True)
                 # Skip this report but continue with others
                 continue
         
         if not reports and result.data:
             # If we have data but no reports were parsed, log a warning
-            logger.warning("No reports could be parsed from database results", 
-                         total_records=len(result.data),
-                         first_domain=result.data[0].get('domain_name') if result.data else None)
+            logger.warning("No reports could be parsed from database results", total_records=len(result.data), first_domain=result.data[0].get('domain_name') if result.data else None)
         
         logger.info("Reports listed successfully", count=len(reports), limit=limit, offset=offset)
         
@@ -245,11 +195,7 @@ async def list_reports(
 
 
 @router.get("/reports/{domain}/keywords")
-async def get_domain_keywords(
-    domain: str,
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0)
-):
+async def get_domain_keywords( domain: str, limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0) ):
     """
     Get detailed keywords data for a domain (on-demand from DataForSEO)
     """
@@ -290,12 +236,7 @@ async def get_domain_keywords(
             url_lower = url.lower()
             
             # Filter out sample/test data from DataForSEO
-            if any(test_domain in url_lower for test_domain in [
-                'dataforseo.com',
-                'example.com',
-                'test.com',
-                'sample.com',
-                'demo.com'
+            if any(test_domain in url_lower for test_domain in [ 'dataforseo.com', 'example.com', 'test.com', 'sample.com', 'demo.com'
             ]):
                 logger.debug("Filtered out sample keyword", domain=domain, keyword=keyword_text, url=url)
                 continue
@@ -313,13 +254,7 @@ async def get_domain_keywords(
         # Apply pagination to valid keywords
         paginated_keywords = valid_keywords[offset:offset + limit]
         
-        return {
-            "domain": domain,
-            "total_count": total_count,
-            "limit": limit,
-            "offset": offset,
-            "keywords": paginated_keywords
-        }
+        return { "domain": domain, "total_count": total_count, "limit": limit, "offset": offset, "keywords": paginated_keywords }
         
     except HTTPException:
         raise
@@ -350,11 +285,7 @@ async def export_domain_keywords(domain: str):
         # Extract all keywords from the saved data
         keywords = detailed_data.json_data.get("items", [])
         
-        return {
-            "domain": domain,
-            "total_count": len(keywords),
-            "keywords": keywords
-        }
+        return { "domain": domain, "total_count": len(keywords), "keywords": keywords }
         
     except HTTPException:
         raise
@@ -364,11 +295,7 @@ async def export_domain_keywords(domain: str):
 
 
 @router.get("/reports/{domain}/backlinks")
-async def get_domain_backlinks(
-    domain: str,
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0)
-):
+async def get_domain_backlinks( domain: str, limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0) ):
     """
     Get detailed backlinks data for a domain (on-demand from DataForSEO)
     """
@@ -394,25 +321,12 @@ async def get_domain_backlinks(
         # Map DataForSEO response to frontend interface
         mapped_backlinks = []
         for item in raw_backlinks:
-            mapped_backlinks.append({
-                "domain": item.get("domain_from", ""),
-                "domain_rank": item.get("domain_from_rank", 0),
-                "anchor_text": item.get("anchor", ""),
-                "backlinks_count": item.get("links_count", 0),
-                "first_seen": item.get("first_seen", ""),
-                "last_seen": item.get("last_seen", "")
-            })
+            mapped_backlinks.append({ "domain": item.get("domain_from", ""), "domain_rank": item.get("domain_from_rank", 0), "anchor_text": item.get("anchor", ""), "backlinks_count": item.get("links_count", 0), "first_seen": item.get("first_seen", ""), "last_seen": item.get("last_seen", "") })
         
         # Apply pagination
         paginated_backlinks = mapped_backlinks[offset:offset + limit]
         
-        return {
-            "domain": domain,
-            "total_count": total_count,
-            "limit": limit,
-            "offset": offset,
-            "backlinks": paginated_backlinks
-        }
+        return { "domain": domain, "total_count": total_count, "limit": limit, "offset": offset, "backlinks": paginated_backlinks }
         
     except HTTPException:
         raise
@@ -446,62 +360,11 @@ async def export_domain_backlinks(domain: str):
         # Map DataForSEO response to frontend interface with comprehensive data
         mapped_backlinks = []
         for item in raw_backlinks:
-            mapped_backlinks.append({
-                "domain": item.get("domain_from", ""),
-                "domain_rank": item.get("domain_from_rank", 0),
-                "anchor_text": item.get("anchor", ""),
-                "backlinks_count": item.get("links_count", 0),
-                "first_seen": item.get("first_seen", ""),
-                "last_seen": item.get("last_seen", ""),
-                # Additional comprehensive fields from DataForSEO
-                "url_from": item.get("url_from", ""),
-                "url_to": item.get("url_to", ""),
-                "link_type": item.get("type", ""),
-                "link_attributes": item.get("attributes", ""),
-                "page_from_title": item.get("page_from_title", ""),
-                "page_from_rank": item.get("page_from_rank", 0),
-                "page_from_internal_links_count": item.get("page_from_internal_links", 0),
-                "page_from_external_links_count": item.get("page_from_external_links", 0),
-                "page_from_rank_absolute": item.get("rank", 0),
-                # Additional useful fields
-                "dofollow": item.get("dofollow", False),
-                "is_new": item.get("is_new", False),
-                "is_lost": item.get("is_lost", False),
-                "is_broken": item.get("is_broken", False),
-                "url_from_https": item.get("url_from_https", False),
-                "url_to_https": item.get("url_to_https", False),
-                "page_from_status_code": item.get("page_from_status_code", 0),
-                "url_to_status_code": item.get("url_to_status_code", 0),
-                "backlink_spam_score": item.get("backlink_spam_score", 0),
-                "url_to_spam_score": item.get("url_to_spam_score", 0),
-                "page_from_size": item.get("page_from_size", 0),
-                "page_from_encoding": item.get("page_from_encoding", ""),
-                "page_from_language": item.get("page_from_language", ""),
-                "domain_from_ip": item.get("domain_from_ip", ""),
-                "domain_from_country": item.get("domain_from_country", ""),
-                "domain_from_platform_type": item.get("domain_from_platform_type", []),
-                "semantic_location": item.get("semantic_location", ""),
-                "alt": item.get("alt", ""),
-                "image_url": item.get("image_url", ""),
-                "text_pre": item.get("text_pre", ""),
-                "text_post": item.get("text_post", ""),
-                "tld_from": item.get("tld_from", ""),
-                "domain_to": item.get("domain_to", ""),
-                "is_indirect_link": item.get("is_indirect_link", False),
-                "indirect_link_path": item.get("indirect_link_path", ""),
-                "url_to_redirect_target": item.get("url_to_redirect_target", ""),
-                "prev_seen": item.get("prev_seen", ""),
-                "group_count": item.get("group_count", 0),
-                "original": item.get("original", False),
-                "item_type": item.get("item_type", ""),
-                "domain_from_is_ip": item.get("domain_from_is_ip", False)
-            })
+            mapped_backlinks.append({ "domain": item.get("domain_from", ""), "domain_rank": item.get("domain_from_rank", 0), "anchor_text": item.get("anchor", ""), "backlinks_count": item.get("links_count", 0), "first_seen": item.get("first_seen", ""), "last_seen": item.get("last_seen", ""), # Additional comprehensive fields from DataForSEO
+                "url_from": item.get("url_from", ""), "url_to": item.get("url_to", ""), "link_type": item.get("type", ""), "link_attributes": item.get("attributes", ""), "page_from_title": item.get("page_from_title", ""), "page_from_rank": item.get("page_from_rank", 0), "page_from_internal_links_count": item.get("page_from_internal_links", 0), "page_from_external_links_count": item.get("page_from_external_links", 0), "page_from_rank_absolute": item.get("rank", 0), # Additional useful fields
+                "dofollow": item.get("dofollow", False), "is_new": item.get("is_new", False), "is_lost": item.get("is_lost", False), "is_broken": item.get("is_broken", False), "url_from_https": item.get("url_from_https", False), "url_to_https": item.get("url_to_https", False), "page_from_status_code": item.get("page_from_status_code", 0), "url_to_status_code": item.get("url_to_status_code", 0), "backlink_spam_score": item.get("backlink_spam_score", 0), "url_to_spam_score": item.get("url_to_spam_score", 0), "page_from_size": item.get("page_from_size", 0), "page_from_encoding": item.get("page_from_encoding", ""), "page_from_language": item.get("page_from_language", ""), "domain_from_ip": item.get("domain_from_ip", ""), "domain_from_country": item.get("domain_from_country", ""), "domain_from_platform_type": item.get("domain_from_platform_type", []), "semantic_location": item.get("semantic_location", ""), "alt": item.get("alt", ""), "image_url": item.get("image_url", ""), "text_pre": item.get("text_pre", ""), "text_post": item.get("text_post", ""), "tld_from": item.get("tld_from", ""), "domain_to": item.get("domain_to", ""), "is_indirect_link": item.get("is_indirect_link", False), "indirect_link_path": item.get("indirect_link_path", ""), "url_to_redirect_target": item.get("url_to_redirect_target", ""), "prev_seen": item.get("prev_seen", ""), "group_count": item.get("group_count", 0), "original": item.get("original", False), "item_type": item.get("item_type", ""), "domain_from_is_ip": item.get("domain_from_is_ip", False) })
         
-        return {
-            "domain": domain,
-            "total_count": len(mapped_backlinks),
-            "backlinks": mapped_backlinks
-        }
+        return { "domain": domain, "total_count": len(mapped_backlinks), "backlinks": mapped_backlinks }
         
     except HTTPException:
         raise
@@ -514,10 +377,7 @@ async def export_domain_backlinks(domain: str):
 
 
 @router.post("/reports/{domain}/reanalyze")
-async def reanalyze_domain_ai(
-    domain: str,
-    request: dict
-):
+async def reanalyze_domain_ai( domain: str, request: dict ):
     """
     Re-run AI analysis with additional detailed data
     """
@@ -554,29 +414,8 @@ async def reanalyze_domain_ai(
                 additional_data["referring_domains"] = referring_domains_data.json_data.get("items", [])
         
         # Get existing data in the format expected by enhanced LLM service
-        existing_data = {
-            "domain": domain,
-            "essential_metrics": {
-                "domain_rating": report.data_for_seo_metrics.domain_rating_dr if report.data_for_seo_metrics else 0,  # This is actually DataForSEO domain rank
-                "organic_traffic": report.data_for_seo_metrics.organic_traffic_est if report.data_for_seo_metrics else 0,
-                "total_keywords": report.data_for_seo_metrics.total_keywords if report.data_for_seo_metrics else 0
-            },
-            "detailed_data": {
-                "backlinks": {
-                    "total_count": len(additional_data.get("backlinks", [])),
-                    "items": additional_data.get("backlinks", [])
-                },
-                "keywords": {
-                    "total_count": len(additional_data.get("keywords", [])),
-                    "items": additional_data.get("keywords", [])
-                },
-                "referring_domains": {
-                    "total_count": len(additional_data.get("referring_domains", [])),
-                    "items": additional_data.get("referring_domains", [])
-                }
-            },
-            "wayback_data": report.wayback_machine_summary.dict() if report.wayback_machine_summary else {}
-        }
+        existing_data = { "domain": domain, "essential_metrics": { "domain_rating": report.data_for_seo_metrics.domain_rating_dr if report.data_for_seo_metrics else 0,  # This is actually DataForSEO domain rank
+                "organic_traffic": report.data_for_seo_metrics.organic_traffic_est if report.data_for_seo_metrics else 0, "total_keywords": report.data_for_seo_metrics.total_keywords if report.data_for_seo_metrics else 0 }, "detailed_data": { "backlinks": { "total_count": len(additional_data.get("backlinks", [])), "items": additional_data.get("backlinks", []) }, "keywords": { "total_count": len(additional_data.get("keywords", [])), "items": additional_data.get("keywords", []) }, "referring_domains": { "total_count": len(additional_data.get("referring_domains", [])), "items": additional_data.get("referring_domains", []) } }, "wayback_data": report.wayback_machine_summary.dict() if report.wayback_machine_summary else {} }
         
         # Use the combined data
         combined_data = existing_data
@@ -585,10 +424,7 @@ async def reanalyze_domain_ai(
         from services.external_apis import LLMService
         llm_service = LLMService()
         
-        logger.info("Re-analyzing with data", domain=domain, 
-                   data_keys=list(combined_data.keys()),
-                   include_backlinks=include_backlinks,
-                   include_keywords=include_keywords)
+        logger.info("Re-analyzing with data", domain=domain, data_keys=list(combined_data.keys()), include_backlinks=include_backlinks, include_keywords=include_keywords)
         
         # Use enhanced LLM analysis directly - no fallback
         logger.info("Using enhanced LLM analysis for domain buyer insights", domain=domain)
@@ -596,10 +432,7 @@ async def reanalyze_domain_ai(
         # Set a timeout for LLM service
         import asyncio
         try:
-            llm_data = await asyncio.wait_for(
-                llm_service.generate_enhanced_analysis(domain, combined_data),
-                timeout=120.0  # 2 minute timeout for enhanced analysis
-            )
+            llm_data = asyncio.wait_for( llm_service.generate_enhanced_analysis(domain, combined_data), timeout=120.0  # 2 minute timeout for enhanced analysis )
         except asyncio.TimeoutError:
             logger.error("LLM service timed out during enhanced analysis", domain=domain)
             raise HTTPException(status_code=500, detail="LLM service timed out. Enhanced analysis requires more time.")
@@ -618,14 +451,9 @@ async def reanalyze_domain_ai(
         report.llm_analysis = new_llm_analysis
         await db.save_report(report)
         
-        logger.info("AI analysis updated successfully", domain=domain, 
-                   include_backlinks=include_backlinks, include_keywords=include_keywords)
+        logger.info("AI analysis updated successfully", domain=domain, include_backlinks=include_backlinks, include_keywords=include_keywords)
         
-        return {
-            "success": True, 
-            "message": "AI analysis updated successfully",
-            "llm_analysis": new_llm_analysis.dict()
-        }
+        return { "success": True, "message": "AI analysis updated successfully", "llm_analysis": new_llm_analysis.dict() }
         
     except HTTPException:
         raise
@@ -654,19 +482,14 @@ def _generate_fallback_analysis(domain: str, data: dict, include_backlinks: bool
     if backlinks_items:
         high_authority_count = sum(1 for b in backlinks_items if b.get("domain_from_rank", 0) >= 70)
         dofollow_count = sum(1 for b in backlinks_items if b.get("dofollow", False))
-        backlink_analysis = [
-            f"Found {len(backlinks_items)} detailed backlinks",
-            f"{high_authority_count} from high-authority domains (DR≥70)",
-            f"{dofollow_count} dofollow links"
+        backlink_analysis = [ f"Found {len(backlinks_items)} detailed backlinks", f"{high_authority_count} from high-authority domains (DR≥70)", f"{dofollow_count} dofollow links"
         ]
     
     # Analyze keywords if available
     keyword_analysis = []
     if keywords_items:
         top_keywords = [k.get("keyword", "") for k in keywords_items[:5]]
-        keyword_analysis = [
-            f"Analyzed {total_keywords} keywords",
-            f"Top keywords: {', '.join(top_keywords[:3])}"
+        keyword_analysis = [ f"Analyzed {total_keywords} keywords", f"Top keywords: {', '.join(top_keywords[:3])}"
         ]
     
     # Generate domain buyer-focused summary
@@ -723,12 +546,7 @@ def _generate_fallback_analysis(domain: str, data: dict, include_backlinks: bool
     major_concerns.append("LLM service unavailable - advanced AI insights not available")
     
     # Generate content strategy for domain buyers
-    content_strategy = {
-        "primary_niche": "General content strategy",
-        "secondary_niches": [],
-        "first_articles": [],
-        "target_keywords": []
-    }
+    content_strategy = { "primary_niche": "General content strategy", "secondary_niches": [], "first_articles": [], "target_keywords": [] }
     
     if keywords_items:
         # Extract common themes from keywords for content strategy
@@ -751,83 +569,29 @@ def _generate_fallback_analysis(domain: str, data: dict, include_backlinks: bool
             content_strategy["primary_niche"] = "Content optimization based on keyword data"
         
         content_strategy["target_keywords"] = top_keywords[:5]
-        content_strategy["first_articles"] = [
-            f"How to optimize for {top_keywords[0]}" if top_keywords else "Content strategy article",
-            f"Complete guide to {top_keywords[1]}" if len(top_keywords) > 1 else "SEO optimization guide",
-            f"Best practices for {top_keywords[2]}" if len(top_keywords) > 2 else "Digital marketing tips"
+        content_strategy["first_articles"] = [ f"How to optimize for {top_keywords[0]}" if top_keywords else "Content strategy article", f"Complete guide to {top_keywords[1]}" if len(top_keywords) > 1 else "SEO optimization guide", f"Best practices for {top_keywords[2]}" if len(top_keywords) > 2 else "Digital marketing tips"
         ]
     else:
-        content_strategy = {
-            "primary_niche": "Content strategy development",
-            "secondary_niches": ["SEO optimization", "Digital marketing"],
-            "first_articles": [
-                "Content strategy for new website",
-                "SEO optimization guide",
-                "Digital marketing best practices"
-            ],
-            "target_keywords": ["content strategy", "SEO", "digital marketing"]
-        }
+        content_strategy = { "primary_niche": "Content strategy development", "secondary_niches": ["SEO optimization", "Digital marketing"], "first_articles": [ "Content strategy for new website", "SEO optimization guide", "Digital marketing best practices"
+            ], "target_keywords": ["content strategy", "SEO", "digital marketing"] }
     
     # Generate pros and cons for domain buyers
     pros_and_cons = []
     if include_backlinks and backlinks_items:
-        pros_and_cons.append({
-            "type": "pro",
-            "description": f"Strong backlink foundation with {len(backlinks_items)} analyzed backlinks",
-            "impact": "high" if len(backlinks_items) > 100 else "medium",
-            "example": f"Sample includes {high_authority_count} high-DR domains"
-        })
+        pros_and_cons.append({ "type": "pro", "description": f"Strong backlink foundation with {len(backlinks_items)} analyzed backlinks", "impact": "high" if len(backlinks_items) > 100 else "medium", "example": f"Sample includes {high_authority_count} high-DR domains" })
         if high_authority_count < 5:
-            pros_and_cons.append({
-                "type": "con",
-                "description": "Limited high-authority backlinks",
-                "impact": "medium",
-                "example": f"Only {high_authority_count} domains with DR 70+"
-            })
+            pros_and_cons.append({ "type": "con", "description": "Limited high-authority backlinks", "impact": "medium", "example": f"Only {high_authority_count} domains with DR 70+" })
     
     if include_keywords and keywords_items:
-        pros_and_cons.append({
-            "type": "pro",
-            "description": f"Established keyword presence with {total_keywords} tracked keywords",
-            "impact": "high" if total_keywords > 50 else "medium",
-            "example": f"Top keywords: {', '.join([k.get('keyword', '') for k in keywords_items[:3]])}"
-        })
+        pros_and_cons.append({ "type": "pro", "description": f"Established keyword presence with {total_keywords} tracked keywords", "impact": "high" if total_keywords > 50 else "medium", "example": f"Top keywords: {', '.join([k.get('keyword', '') for k in keywords_items[:3]])}" })
     
     # Generate action plan for domain buyers
-    action_plan = {
-        "immediate_actions": [
-            "Set up website with proper SEO structure",
-            "Create content calendar based on keyword analysis",
-            "Set up Google Analytics and Search Console"
-        ],
-        "first_month": [
-            "Publish first 5 articles targeting identified keywords",
-            "Begin outreach to high-DR referring domains",
-            "Monitor backlink profile for any toxic links"
-        ],
-        "long_term_strategy": [
-            "Develop comprehensive content strategy",
-            "Build relationships with referring domains",
-            "Regular SEO monitoring and optimization"
-        ]
-    }
+    action_plan = { "immediate_actions": [ "Set up website with proper SEO structure", "Create content calendar based on keyword analysis", "Set up Google Analytics and Search Console"
+        ], "first_month": [ "Publish first 5 articles targeting identified keywords", "Begin outreach to high-DR referring domains", "Monitor backlink profile for any toxic links"
+        ], "long_term_strategy": [ "Develop comprehensive content strategy", "Build relationships with referring domains", "Regular SEO monitoring and optimization"
+        ] }
     
-    return {
-        "buy_recommendation": {
-            "recommendation": buy_recommendation,
-            "confidence": 0.7,
-            "reasoning": reasoning,
-            "risk_level": risk_level,
-            "potential_value": potential_value
-        },
-        "valuable_assets": valuable_assets,
-        "major_concerns": major_concerns,
-        "content_strategy": content_strategy,
-        "action_plan": action_plan,
-        "pros_and_cons": pros_and_cons,
-        "summary": f"Domain analysis for {domain} - {buy_recommendation} recommendation based on {total_backlinks} backlinks and {total_keywords} keywords",
-        "confidence_score": 0.7
-    }
+    return { "buy_recommendation": { "recommendation": buy_recommendation, "confidence": 0.7, "reasoning": reasoning, "risk_level": risk_level, "potential_value": potential_value }, "valuable_assets": valuable_assets, "major_concerns": major_concerns, "content_strategy": content_strategy, "action_plan": action_plan, "pros_and_cons": pros_and_cons, "summary": f"Domain analysis for {domain} - {buy_recommendation} recommendation based on {total_backlinks} backlinks and {total_keywords} keywords", "confidence_score": 0.7 }
 
 
 @router.get("/reports/{domain}/pdf")
@@ -843,12 +607,7 @@ async def export_report_pdf(domain: str):
             raise HTTPException(status_code=404, detail="Report not found")
         
         # Convert report to dictionary for PDF generation
-        report_data = {
-            "domain": domain,
-            "data_for_seo_metrics": report.data_for_seo_metrics.dict() if report.data_for_seo_metrics else {},
-            "wayback_machine_summary": report.wayback_machine_summary.dict() if report.wayback_machine_summary else {},
-            "llm_analysis": report.llm_analysis.dict() if report.llm_analysis else {}
-        }
+        report_data = { "domain": domain, "data_for_seo_metrics": report.data_for_seo_metrics.dict() if report.data_for_seo_metrics else {}, "wayback_machine_summary": report.wayback_machine_summary.dict() if report.wayback_machine_summary else {}, "llm_analysis": report.llm_analysis.dict() if report.llm_analysis else {} }
         
         # Generate PDF
         pdf_service = PDFService()
@@ -857,13 +616,7 @@ async def export_report_pdf(domain: str):
         # Create streaming response
         pdf_stream = io.BytesIO(pdf_bytes)
         
-        return StreamingResponse(
-            io.BytesIO(pdf_bytes),
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f"attachment; filename=domain_analysis_{domain}.pdf"
-            }
-        )
+        return StreamingResponse( io.BytesIO(pdf_bytes), media_type="application/pdf", headers={ "Content-Disposition": f"attachment; filename=domain_analysis_{domain}.pdf" } )
         
     except Exception as e:
         logger.error("Failed to export PDF", domain=domain, error=str(e))
@@ -896,16 +649,10 @@ async def delete_report(domain: str):
         
         if success:
             logger.info("Report deleted successfully", domain=domain)
-            return {
-                "success": True,
-                "message": "Report deleted successfully"
-            }
+            return { "success": True, "message": "Report deleted successfully" }
         else:
             logger.warning("No records found to delete", domain=domain)
-            return {
-                "success": True,
-                "message": "No records found to delete"
-            }
+            return { "success": True, "message": "No records found to delete" }
         
     except HTTPException:
         raise

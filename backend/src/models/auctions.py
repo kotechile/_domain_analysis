@@ -45,9 +45,7 @@ class Auction(BaseModel):
         return v.lower().strip()
     
     class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat() if v else None
-        }
+        json_encoders = { datetime: lambda v: v.isoformat() if v else None }
 
 
 class AuctionInput(BaseModel):
@@ -76,15 +74,7 @@ class AuctionInput(BaseModel):
         if not exp_date:
             raise ValueError('expiration_date or end_date is required')
         
-        return Auction(
-            domain=self.domain,
-            start_date=self.start_date,
-            expiration_date=exp_date,
-            auction_site=self.auction_site,
-            current_bid=self.current_bid,
-            source_data=self.source_data,
-            link=self.link
-        )
+        return Auction( domain=self.domain, start_date=self.start_date, expiration_date=exp_date, auction_site=self.auction_site, current_bid=self.current_bid, source_data=self.source_data, link=self.link )
 
 
 class AuctionReportItem(BaseModel):
@@ -114,9 +104,7 @@ class AuctionReportItem(BaseModel):
     updated_at: Optional[datetime] = None
     
     class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat() if v else None
-        }
+        json_encoders = { datetime: lambda v: v.isoformat() if v else None }
 
 
 

@@ -36,25 +36,17 @@ class AutoTriggerService:
                 return set()
             
             # Query database for existing domains (check if they have summary data)
-            existing_domains = await self.db.get_bulk_domains_by_names(domain_names)
+            existing_domains = self.await db.get_bulk_domains_by_names(domain_names)
             existing_set = {d.domain_name for d in existing_domains if d.backlinks_bulk_page_summary is not None}
             
-            logger.info("Checked existing domains", 
-                       checked=len(domain_names),
-                       existing=len(existing_set))
+            logger.info("Checked existing domains", checked=len(domain_names), existing=len(existing_set))
             return existing_set
             
         except Exception as e:
             logger.error("Failed to check existing domains", error=str(e))
             return set()
     
-    async def auto_trigger_analysis(
-        self,
-        ranked_domains: List[ScoredDomain],
-        top_3000_domains: List[str],
-        top_n: int = None,
-        top_rank_threshold: int = None
-    ) -> Dict[str, Any]:
+    async def auto_trigger_analysis( self, ranked_domains: List[ScoredDomain], top_3000_domains: List[str], top_n: int = None, top_rank_threshold: int = None ) -> Dict[str, Any]:
         """
         Auto-trigger DataForSEO analysis for top domains that meet criteria
         
@@ -83,72 +75,36 @@ class AutoTriggerService:
             
             if not top_domains:
                 logger.info("No domains to trigger", reason="No passed domains")
-                return {
-                    "success": True,
-                    "triggered_count": 0,
-                    "skipped_count": 0,
-                    "domains": [],
-                    "message": "No domains passed filtering"
-                }
+                return { "success": True, "triggered_count": 0, "skipped_count": 0, "domains": [], "message": "No domains passed filtering" }
             
             # Extract domain names
             top_domain_names = [s.domain.name for s in top_domains]
             
             # Check which domains exist in database
-            existing_domains = await self.check_existing_domains(top_domain_names)
+            existing_domains = self.check_existing_domains(top_domain_names)
             
             # Filter: not in DB AND in top 3000
             top_3000_set = set(top_3000_domains)
-            domains_to_trigger = [
-                name for name in top_domain_names
+            domains_to_trigger = [ name for name in top_domain_names
                 if name not in existing_domains and name in top_3000_set
             ]
             
             if not domains_to_trigger:
-                logger.info("No domains to trigger", 
-                           reason="All domains either exist in DB or not in top 3000",
-                           checked=len(top_domain_names),
-                           existing=len(existing_domains),
-                           in_top_3000=len([n for n in top_domain_names if n in top_3000_set]))
-                return {
-                    "success": True,
-                    "triggered_count": 0,
-                    "skipped_count": len(top_domain_names),
-                    "domains": [],
-                    "message": "No domains need analysis (all exist in DB or not in top 3000)"
-                }
+                logger.info("No domains to trigger", reason="All domains either exist in DB or not in top 3000", checked=len(top_domain_names), existing=len(existing_domains), in_top_3000=len([n for n in top_domain_names if n in top_3000_set]))
+                return { "success": True, "triggered_count": 0, "skipped_count": len(top_domain_names), "domains": [], "message": "No domains need analysis (all exist in DB or not in top 3000)" }
             
             # Trigger DataForSEO bulk pages summary
             logger.info("Triggering DataForSEO analysis", domain_count=len(domains_to_trigger))
-            trigger_result = await self.bulk_service.trigger_bulk_data_collection(domains_to_trigger)
+            trigger_result = self.bulk_service.trigger_bulk_data_collection(domains_to_trigger)
             
             if trigger_result.get("success"):
-                return {
-                    "success": True,
-                    "triggered_count": len(domains_to_trigger),
-                    "skipped_count": len(top_domain_names) - len(domains_to_trigger),
-                    "domains": domains_to_trigger,
-                    "request_id": trigger_result.get("request_id"),
-                    "message": f"Triggered analysis for {len(domains_to_trigger)} domains"
-                }
+                return { "success": True, "triggered_count": len(domains_to_trigger), "skipped_count": len(top_domain_names) - len(domains_to_trigger), "domains": domains_to_trigger, "request_id": trigger_result.get("request_id"), "message": f"Triggered analysis for {len(domains_to_trigger)} domains" }
             else:
-                return {
-                    "success": False,
-                    "triggered_count": 0,
-                    "skipped_count": len(top_domain_names),
-                    "domains": domains_to_trigger,
-                    "message": trigger_result.get("message", "Failed to trigger analysis")
-                }
+                return { "success": False, "triggered_count": 0, "skipped_count": len(top_domain_names), "domains": domains_to_trigger, "message": trigger_result.get("message", "Failed to trigger analysis") }
                 
         except Exception as e:
             logger.error("Failed to auto-trigger analysis", error=str(e))
-            return {
-                "success": False,
-                "triggered_count": 0,
-                "skipped_count": 0,
-                "domains": [],
-                "message": f"Error: {str(e)}"
-            }
+            return { "success": False, "triggered_count": 0, "skipped_count": 0, "domains": [], "message": f"Error: {str(e)}" }
 
 
 

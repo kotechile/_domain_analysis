@@ -26,9 +26,7 @@ class NamecheapService:
         Parse CSV content into list of NamecheapDomain objects
         
         Expected CSV format with header:
-        url,name,startDate,endDate,price,startPrice,renewPrice,bidCount,ahrefsDomainRating,...
-        
-        Args:
+        url,name,startDate,endDate,price,startPrice,renewPrice,bidCount,ahrefsDomainRating,... Args:
             file_content: Raw CSV content as string
             
         Returns:
@@ -85,33 +83,7 @@ class NamecheapService:
                         continue
                     
                     # Create NamecheapDomain object
-                    domain = NamecheapDomain(
-                        url=row.get('url', '').strip() or None,
-                        name=domain_name,
-                        start_date=parse_date(row.get('startDate', '')),
-                        end_date=parse_date(row.get('endDate', '')),
-                        price=parse_float(row.get('price', '')),
-                        start_price=parse_float(row.get('startPrice', '')),
-                        renew_price=parse_float(row.get('renewPrice', '')),
-                        bid_count=parse_int(row.get('bidCount', '')),
-                        ahrefs_domain_rating=parse_float(row.get('ahrefsDomainRating', '')),
-                        umbrella_ranking=parse_int(row.get('umbrellaRanking', '')),
-                        cloudflare_ranking=parse_int(row.get('cloudflareRanking', '')),
-                        estibot_value=parse_float(row.get('estibotValue', '')),
-                        extensions_taken=parse_int(row.get('extensionsTaken', '')),
-                        keyword_search_count=parse_int(row.get('keywordSearchCount', '')),
-                        registered_date=parse_date(row.get('registeredDate', '')),
-                        last_sold_price=parse_float(row.get('lastSoldPrice', '')),
-                        last_sold_year=parse_int(row.get('lastSoldYear', '')),
-                        is_partner_sale=parse_bool(row.get('isPartnerSale', '')),
-                        semrush_a_score=parse_int(row.get('semrushAScore', '')),
-                        majestic_citation=parse_int(row.get('majesticCitation', '')),
-                        ahrefs_backlinks=parse_int(row.get('ahrefsBacklinks', '')),
-                        semrush_backlinks=parse_int(row.get('semrushBacklinks', '')),
-                        majestic_backlinks=parse_int(row.get('majesticBacklinks', '')),
-                        majestic_trust_flow=parse_float(row.get('majesticTrustFlow', '')),
-                        go_value=parse_float(row.get('goValue', ''))
-                    )
+                    domain = NamecheapDomain( url=row.get('url', '').strip() or None, name=domain_name, start_date=parse_date(row.get('startDate', '')), end_date=parse_date(row.get('endDate', '')), price=parse_float(row.get('price', '')), start_price=parse_float(row.get('startPrice', '')), renew_price=parse_float(row.get('renewPrice', '')), bid_count=parse_int(row.get('bidCount', '')), ahrefs_domain_rating=parse_float(row.get('ahrefsDomainRating', '')), umbrella_ranking=parse_int(row.get('umbrellaRanking', '')), cloudflare_ranking=parse_int(row.get('cloudflareRanking', '')), estibot_value=parse_float(row.get('estibotValue', '')), extensions_taken=parse_int(row.get('extensionsTaken', '')), keyword_search_count=parse_int(row.get('keywordSearchCount', '')), registered_date=parse_date(row.get('registeredDate', '')), last_sold_price=parse_float(row.get('lastSoldPrice', '')), last_sold_year=parse_int(row.get('lastSoldYear', '')), is_partner_sale=parse_bool(row.get('isPartnerSale', '')), semrush_a_score=parse_int(row.get('semrushAScore', '')), majestic_citation=parse_int(row.get('majesticCitation', '')), ahrefs_backlinks=parse_int(row.get('ahrefsBacklinks', '')), semrush_backlinks=parse_int(row.get('semrushBacklinks', '')), majestic_backlinks=parse_int(row.get('majesticBacklinks', '')), majestic_trust_flow=parse_float(row.get('majesticTrustFlow', '')), go_value=parse_float(row.get('goValue', '')) )
                     
                     domains.append(domain)
                     
@@ -149,15 +121,7 @@ class NamecheapService:
             logger.info("CSV parsing complete", domains_count=len(domains))
             
             if not domains:
-                return {
-                    "success": False,
-                    "message": "No valid domains found in CSV",
-                    "loaded_count": 0,
-                    "skipped_count": 0,
-                    "total_count": 0,
-                    "passed_count": 0,
-                    "failed_count": 0
-                }
+                return { "success": False, "message": "No valid domains found in CSV", "loaded_count": 0, "skipped_count": 0, "total_count": 0, "passed_count": 0, "failed_count": 0 }
             
             # Step 2: Score domains (pre-screening + semantic analysis)
             logger.info("Step 2: Scoring domains (pre-screening + semantic analysis)...")
@@ -168,44 +132,20 @@ class NamecheapService:
             passed_domains = [s for s in scored_domains if s.filter_status == 'PASS']
             failed_domains = [s for s in scored_domains if s.filter_status == 'FAIL']
             
-            logger.info("Domain scoring complete", 
-                       total=len(scored_domains),
-                       passed=len(passed_domains),
-                       failed=len(failed_domains))
+            logger.info("Domain scoring complete", total=len(scored_domains), passed=len(passed_domains), failed=len(failed_domains))
             
             # Step 3: Truncate existing table
             logger.info("Step 3: Truncating existing table...")
-            await self.db.truncate_namecheap_domains()
+            await self.await db.truncate_namecheap_domains()
             logger.info("Table truncated successfully")
             
             # Step 4: Bulk insert new records with scores
             logger.info("Step 4: Starting bulk insert with scores", total_domains=len(scored_domains))
-            result = await self.db.load_namecheap_domains_with_scores(scored_domains)
+            result = self.db.load_namecheap_domains_with_scores(scored_domains)
             logger.info("Bulk insert complete", inserted=result['inserted'], skipped=result['skipped'])
             
-            return {
-                "success": True,
-                "message": f"Loaded {result['inserted']} domains, skipped {result['skipped']} duplicates. {len(passed_domains)} passed filtering, {len(failed_domains)} failed.",
-                "loaded_count": result['inserted'],
-                "skipped_count": result['skipped'],
-                "total_count": result['total'],
-                "passed_count": len(passed_domains),
-                "failed_count": len(failed_domains),
-                "scoring_stats": {
-                    "passed": len(passed_domains),
-                    "failed": len(failed_domains),
-                    "top_score": passed_domains[0].total_meaning_score if passed_domains else None
-                }
-            }
+            return { "success": True, "message": f"Loaded {result['inserted']} domains, skipped {result['skipped']} duplicates. {len(passed_domains)} passed filtering, {len(failed_domains)} failed.", "loaded_count": result['inserted'], "skipped_count": result['skipped'], "total_count": result['total'], "passed_count": len(passed_domains), "failed_count": len(failed_domains), "scoring_stats": { "passed": len(passed_domains), "failed": len(failed_domains), "top_score": passed_domains[0].total_meaning_score if passed_domains else None } }
             
         except Exception as e:
             logger.error("Failed to load Namecheap CSV", error=str(e), exc_info=True)
-            return {
-                "success": False,
-                "message": f"Failed to load CSV: {str(e)}",
-                "loaded_count": 0,
-                "skipped_count": 0,
-                "total_count": 0,
-                "passed_count": 0,
-                "failed_count": 0
-            }
+            return { "success": False, "message": f"Failed to load CSV: {str(e)}", "loaded_count": 0, "skipped_count": 0, "total_count": 0, "passed_count": 0, "failed_count": 0 }

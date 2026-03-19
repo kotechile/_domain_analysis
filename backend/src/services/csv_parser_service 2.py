@@ -100,15 +100,10 @@ class CSVParserService:
                         # Store all original data in source_data
                         source_data = {k: v for k, v in row.items()}
                         
-                        auction = AuctionInput(
-                            domain=domain_name,
-                            start_date=None,  # Buy Now listings don't have start dates
+                        auction = AuctionInput( domain=domain_name, start_date=None,  # Buy Now listings don't have start dates
                             expiration_date=far_future_date,  # Use far future date (no expiration)
                             end_date=far_future_date,  # Also set to far future date
-                            current_bid=current_bid,
-                            auction_site='namecheap',
-                            source_data=source_data
-                        )
+                            current_bid=current_bid, auction_site='namecheap', source_data=source_data )
                         
                         auctions.append(auction)
                         
@@ -119,8 +114,7 @@ class CSVParserService:
                 logger.info("Parsed NameCheap Buy Now CSV", total_rows=len(auctions))
                 return auctions
             else:
-                # Parse Market Sales format: url, name, startDate, endDate, price, ...
-                for row_num, row in enumerate(reader, start=2):
+                # Parse Market Sales format: url, name, startDate, endDate, price, ... for row_num, row in enumerate(reader, start=2):
                     try:
                         domain_name = row.get('name', '').strip()
                         if not domain_name:
@@ -141,15 +135,8 @@ class CSVParserService:
                         # Store all original data in source_data
                         source_data = {k: v for k, v in row.items()}
                         
-                        auction = AuctionInput(
-                            domain=domain_name,
-                            start_date=start_date,
-                            expiration_date=end_date,
-                            end_date=end_date,  # Also set for compatibility
-                            current_bid=current_bid,
-                            auction_site='namecheap',
-                            source_data=source_data
-                        )
+                        auction = AuctionInput( domain=domain_name, start_date=start_date, expiration_date=end_date, end_date=end_date,  # Also set for compatibility
+                            current_bid=current_bid, auction_site='namecheap', source_data=source_data )
                         
                         auctions.append(auction)
                         
@@ -168,8 +155,7 @@ class CSVParserService:
         """
         Parse GoDaddy CSV format
         
-        Expected columns: Domain, Start Date, End Date, Price, ...
-        (Format to be determined based on actual GoDaddy export)
+        Expected columns: Domain, Start Date, End Date, Price, ... (Format to be determined based on actual GoDaddy export)
         """
         auctions = []
         
@@ -186,43 +172,29 @@ class CSVParserService:
                         continue
                     
                     # Try different date column name variations
-                    start_date = (
-                        self._parse_date(row.get('Start Date', '')) or
+                    start_date = ( self._parse_date(row.get('Start Date', '')) or
                         self._parse_date(row.get('startDate', '')) or
-                        self._parse_date(row.get('start_date', ''))
-                    )
+                        self._parse_date(row.get('start_date', '')) )
                     
-                    end_date = (
-                        self._parse_date(row.get('End Date', '')) or
+                    end_date = ( self._parse_date(row.get('End Date', '')) or
                         self._parse_date(row.get('endDate', '')) or
                         self._parse_date(row.get('end_date', '')) or
                         self._parse_date(row.get('Expiration Date', '')) or
                         self._parse_date(row.get('expirationDate', '')) or
-                        self._parse_date(row.get('expiration_date', ''))
-                    )
+                        self._parse_date(row.get('expiration_date', '')) )
                     
                     if not end_date:
                         logger.warning("Skipping row without expiration date", row=row_num, domain=domain_name)
                         continue
                     
                     # Parse current_bid/price
-                    current_bid = self._parse_price(
-                        row.get('Price', '') or row.get('price', '') or 
+                    current_bid = self._parse_price( row.get('Price', '') or row.get('price', '') or 
                         row.get('Current Bid', '') or row.get('currentBid', '') or 
-                        row.get('current_bid', '')
-                    )
+                        row.get('current_bid', '') )
                     
                     source_data = {k: v for k, v in row.items()}
                     
-                    auction = AuctionInput(
-                        domain=domain_name,
-                        start_date=start_date,
-                        expiration_date=end_date,
-                        end_date=end_date,
-                        current_bid=current_bid,
-                        auction_site='godaddy',
-                        source_data=source_data
-                    )
+                    auction = AuctionInput( domain=domain_name, start_date=start_date, expiration_date=end_date, end_date=end_date, current_bid=current_bid, auction_site='godaddy', source_data=source_data )
                     
                     auctions.append(auction)
                     
@@ -241,12 +213,9 @@ class CSVParserService:
         """
         Parse NameSilo CSV format
         
-        Expected columns: ID, Leader User ID, Owner User ID, Domain ID, Domain, Status, Type,
-        Opening Bid, Current Bid, Max Bid, Domain Created On, Auction End, Url, Bid Count, External Provider
+        Expected columns: ID, Leader User ID, Owner User ID, Domain ID, Domain, Status, Type, Opening Bid, Current Bid, Max Bid, Domain Created On, Auction End, Url, Bid Count, External Provider
         
-        Note: NameSilo auctions do NOT have an end_date (expiration_date). They are active auctions.
-        The "Auction End" field is used as the start_date for tracking purposes.
-        """
+        Note: NameSilo auctions do NOT have an end_date (expiration_date). They are active auctions. The "Auction End" field is used as the start_date for tracking purposes. """
         auctions = []
         
         try:
@@ -288,15 +257,9 @@ class CSVParserService:
                     from datetime import datetime, timezone
                     far_future_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
                     
-                    auction = AuctionInput(
-                        domain=domain_name,
-                        start_date=start_date,
-                        expiration_date=far_future_date,  # Use far future date for NameSilo (no expiration)
+                    auction = AuctionInput( domain=domain_name, start_date=start_date, expiration_date=far_future_date,  # Use far future date for NameSilo (no expiration)
                         end_date=far_future_date,  # Also set to far future date
-                        current_bid=current_bid,
-                        auction_site='namesilo',
-                        source_data=source_data
-                    )
+                        current_bid=current_bid, auction_site='namesilo', source_data=source_data )
                     
                     auctions.append(auction)
                     
@@ -315,8 +278,7 @@ class CSVParserService:
         """
         Generic CSV parser that tries to detect common column patterns
         
-        Looks for: domain, name, expiration_date, end_date, expiration, etc.
-        """
+        Looks for: domain, name, expiration_date, end_date, expiration, etc. """
         auctions = []
         
         try:
@@ -336,8 +298,7 @@ class CSVParserService:
             
             # Find expiration date column
             exp_date_col = None
-            for col in ['expiration_date', 'end_date', 'expirationDate', 'endDate', 
-                       'Expiration Date', 'End Date', 'expiration', 'expires']:
+            for col in ['expiration_date', 'end_date', 'expirationDate', 'endDate', 'Expiration Date', 'End Date', 'expiration', 'expires']:
                 if col in columns:
                     exp_date_col = col
                     break
@@ -376,15 +337,7 @@ class CSVParserService:
                     
                     source_data = {k: v for k, v in row.items()}
                     
-                    auction = AuctionInput(
-                        domain=domain_name,
-                        start_date=start_date,
-                        expiration_date=end_date,
-                        end_date=end_date,
-                        current_bid=current_bid,
-                        auction_site=auction_site.lower(),
-                        source_data=source_data
-                    )
+                    auction = AuctionInput( domain=domain_name, start_date=start_date, expiration_date=end_date, end_date=end_date, current_bid=current_bid, auction_site=auction_site.lower(), source_data=source_data )
                     
                     auctions.append(auction)
                     
@@ -416,14 +369,7 @@ class CSVParserService:
                 pass
             
             # Try common date formats
-            formats = [
-                '%Y-%m-%d %H:%M:%S',
-                '%Y-%m-%d',
-                '%m/%d/%Y',
-                '%d/%m/%Y',
-                '%Y-%m-%dT%H:%M:%S',
-                '%Y-%m-%dT%H:%M:%S.%f',
-            ]
+            formats = [ '%Y-%m-%d %H:%M:%S', '%Y-%m-%d', '%m/%d/%Y', '%d/%m/%Y', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S.%f', ]
             
             for fmt in formats:
                 try:
@@ -514,16 +460,8 @@ class CSVParserService:
                     if 'meta' in data:
                         source_data['_meta'] = data['meta']
                     
-                    auction = AuctionInput(
-                        domain=domain_name,
-                        start_date=None,  # GoDaddy JSON doesn't provide start date
-                        expiration_date=expiration_date,
-                        end_date=expiration_date,
-                        current_bid=current_bid,
-                        auction_site='godaddy',
-                        source_data=source_data,
-                        link=link
-                    )
+                    auction = AuctionInput( domain=domain_name, start_date=None,  # GoDaddy JSON doesn't provide start date
+                        expiration_date=expiration_date, end_date=expiration_date, current_bid=current_bid, auction_site='godaddy', source_data=source_data, link=link )
                     
                     auctions.append(auction)
                     

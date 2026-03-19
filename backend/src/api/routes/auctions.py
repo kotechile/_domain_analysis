@@ -29,13 +29,12 @@ router = APIRouter()
 
 async def _clear_staging_chunked(db, auction_site: str, job_id: str):
     """
-    Clear staging table for a specific site in chunks to avoid statement timeouts.
-    """
+    Clear staging table for a specific site in chunks to avoid statement timeouts. """
     logger.info("Clearing staging table in chunks", job_id=job_id, site=auction_site)
     total_cleared = 0
     while True:
         # Fetch domains for this job
-        clear_res = await (await db._get_client()).table('auctions_staging').select('domain').eq('job_id', job_id).limit(5000).execute()
+        clear_res = (await db._get_client()).table('auctions_staging').select('domain').eq('job_id', job_id).limit(5000).execute()
         if not clear_res.data:
             break
         
@@ -54,9 +53,7 @@ async def _clear_staging_chunked(db, auction_site: str, job_id: str):
 
 async def _mark_auctions_for_deletion(db, auction_site: str):
     """
-    Mark all auctions for a site with to_delete=true at start of import.
-    Records that are still present in new files will be unflagged during merge.
-    """
+    Mark all auctions for a site with to_delete=true at start of import. Records that are still present in new files will be unflagged during merge. """
     logger.info("Marking auctions for deletion", auction_site=auction_site)
     try:
         # Update all records for this auction_site to set to_delete = true
@@ -84,9 +81,7 @@ async def _mark_auctions_for_deletion(db, auction_site: str):
 
 async def _delete_flagged_auctions(db, auction_site: str):
     """
-    Delete auctions that still have to_delete=true after merge.
-    These are records that were not present in the new file upload.
-    """
+    Delete auctions that still have to_delete=true after merge. These are records that were not present in the new file upload. """
     logger.info("Deleting flagged auctions", auction_site=auction_site)
     total_deleted = 0
 
@@ -94,7 +89,7 @@ async def _delete_flagged_auctions(db, auction_site: str):
         # Delete in chunks to avoid timeouts
         while True:
             # Get batch of records to delete
-            result = await (await db._get_client()).table('auctions')\.select('domain')\.eq('auction_site', auction_site)\.eq('to_delete', True)\.limit(1000)\.execute()
+            result = (await db._get_client()).table('auctions')\.select('domain')\.eq('auction_site', auction_site)\.eq('to_delete', True)\.limit(1000)\.execute()
 
             if not result.data:
                 break
@@ -119,17 +114,14 @@ async def _delete_flagged_auctions(db, auction_site: str):
 async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
     """
     Perform merging from staging to main table in chunks from Python
-    to avoid database statement timeouts.
-    """
+    to avoid database statement timeouts. """
     logger.info("Starting chunked merge from Python", job_id=job_id, site=auction_site)
 
     total_merged = 0
 
     while True:
         # 1. Fetch a batch of records from staging
-        # We also need to fetch columns that we want to keep if they are in the staging record,
-        # but the staging record usually only has basic auction info.
-        result = await (await db._get_client()).table('auctions_staging').select('*').eq('job_id', job_id).limit(2000).execute()
+        # We also need to fetch columns that we want to keep if they are in the staging record, # but the staging record usually only has basic auction info. result = (await db._get_client()).table('auctions_staging').select('*').eq('job_id', job_id).limit(2000).execute()
         records = result.data
 
         if not records:
@@ -138,8 +130,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
         # 2. Prepare for upsert to main table
         # Deduplicate records based on domain, auction_site, and expiration_date to match
         # the database unique constraint and prevent "ON CONFLICT DO UPDATE command cannot
-        # affect row a second time" error.
-        unique_records = {}
+        # affect row a second time" error. unique_records = {}
         for r in records:
             # Key must match the database unique constraint: domain + auction_site + expiration_date
             key = (r.get('domain'), r.get('auction_site'), r.get('expiration_date'))
@@ -150,36 +141,19 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
             if not link and isinstance(source_data, dict):
                 link = source_data.get('link')
 
-            clean_r = {
-                'domain': r.get('domain'),
-                'start_date': r.get('start_date'),
-                'expiration_date': r.get('expiration_date'),
-                'auction_site': r.get('auction_site'),
-                'current_bid': r.get('current_bid'),
-                'source_data': r.get('source_data'),
-                'link': link,
-                'offer_type': r.get('offer_type'),
-                'score': r.get('score'),
-                'first_seen': r.get('first_seen'),
-                'to_delete': False  # Unflag - this record is still present
-            }
+            clean_r = { 'domain': r.get('domain'), 'start_date': r.get('start_date'), 'expiration_date': r.get('expiration_date'), 'auction_site': r.get('auction_site'), 'current_bid': r.get('current_bid'), 'source_data': r.get('source_data'), 'link': link, 'offer_type': r.get('offer_type'), 'score': r.get('score'), 'first_seen': r.get('first_seen'), 'to_delete': False  # Unflag - this record is still present }
             # Remove keys with None values to let Supabase/Postgres handle defaults/preservation
             clean_r = {k: v for k, v in clean_r.items() if v is not None}
 
             # NOTE: We EXPLICITLY do NOT include 'has_statistics', 'page_statistics', or 'traffic_data'
-            # to prevent overwriting them with nulls.
-
-            # Overwrite existing - assuming later records in batch might be newer or identical
+            # to prevent overwriting them with nulls. # Overwrite existing - assuming later records in batch might be newer or identical
             unique_records[key] = clean_r
 
         main_records = list(unique_records.values())
 
         # 3. Upsert to main table
         try:
-            (await db._get_client()).table('auctions').upsert(
-                main_records,
-                on_conflict='domain,auction_site,expiration_date'
-            ).execute()
+            (await db._get_client()).table('auctions').upsert( main_records, on_conflict='domain,auction_site,expiration_date' ).execute()
 
             # 4. Delete merged records from staging in small sub-batches
             # Use smaller batches for the IN filter to avoid "URL component 'query' too long" (max ~2000 chars)
@@ -193,11 +167,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
             logger.info("Merged batch successfully", job_id=job_id, site=auction_site, count=len(records), total=total_merged)
 
             # Update progress
-            await db.update_csv_upload_progress(
-                job_id=job_id,
-                current_stage='merging',
-                inserted_count=total_merged
-            )
+            await db.update_csv_upload_progress( job_id=job_id, current_stage='merging', inserted_count=total_merged )
 
         except Exception as e:
             logger.error("Failed to merge batch in Python", job_id=job_id, site=auction_site, error=str(e))
@@ -208,7 +178,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
     # Post-merge: Delete auctions that still have to_delete=true
     # These are records that were not present in the new file upload
     try:
-        deleted_count = await _delete_flagged_auctions(db, auction_site)
+        deleted_count = _delete_flagged_auctions(db, auction_site)
         logger.info("Post-merge cleanup completed", job_id=job_id, site=auction_site, deleted_count=deleted_count)
     except Exception as e:
         logger.warning("Failed to delete flagged auctions after merge", job_id=job_id, site=auction_site, error=str(e))
@@ -216,14 +186,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
     return total_merged
 
 
-async def process_csv_upload_async(
-    job_id: str,
-    csv_content: str,
-    filename: str,
-    auction_site: str,
-    offering_type: Optional[str] = None,
-    is_file: bool = False
-):
+async def process_csv_upload_async( job_id: str, csv_content: str, filename: str, auction_site: str, offering_type: Optional[str] = None, is_file: bool = False ):
     """
     Background task to process CSV upload with progress tracking using streaming
     
@@ -254,12 +217,7 @@ async def process_csv_upload_async(
                 total_records = 0
         
         # Update status to parsing
-        await db.update_csv_upload_progress(
-            job_id=job_id,
-            status='parsing',
-            current_stage='parsing',
-            total_records=total_records if total_records > 0 else None
-        )
+        await db.update_csv_upload_progress( job_id=job_id, status='parsing', current_stage='parsing', total_records=total_records if total_records > 0 else None )
         
         # 2. Clear Staging for this Job ID to ensure clean slate
         try:
@@ -360,13 +318,7 @@ async def process_csv_upload_async(
                 await asyncio.sleep(0.01)
                 
                 try:
-                    await db.update_csv_upload_progress(
-                        job_id=job_id,
-                        status='processing',
-                        processed_records=processed_count,
-                        current_stage='processing_batch',
-                        total_records=total_records if total_records > 0 else processed_count # Update total if we go over
-                    )
+                    await db.update_csv_upload_progress( job_id=job_id, status='processing', processed_records=processed_count, current_stage='processing_batch', total_records=total_records if total_records > 0 else processed_count # Update total if we go over )
                 except Exception:
                     pass # Ignore progress update errors
 
@@ -376,10 +328,7 @@ async def process_csv_upload_async(
                 auction = auction_input.to_auction()
                 
                 # Logic copied from original process_csv_upload_async
-                # ... score ...
-                # ... map types ...
-
-                # Convert date types for JSON serialization (Supabase expects ISO strings)
+                # ... score ... # ... map types ... # Convert date types for JSON serialization (Supabase expects ISO strings)
                 start_date_iso = auction.start_date.isoformat() if auction.start_date else None
                 expiration_date = auction.expiration_date
 
@@ -402,14 +351,8 @@ async def process_csv_upload_async(
                 
                 expiration_date_iso = expiration_date.isoformat() if expiration_date else None
 
-                namecheap_domain = NamecheapDomain(
-                    name=auction.domain,
-                    registered_date=None, # Extract from source_data if needed
-                    url=None,
-                    start_date=auction.start_date,
-                    end_date=auction.expiration_date,
-                    price=None
-                )
+                namecheap_domain = NamecheapDomain( name=auction.domain, registered_date=None, # Extract from source_data if needed
+                    url=None, start_date=auction.start_date, end_date=auction.expiration_date, price=None )
                 
                 # Score
                 scored = scoring_service.score_domain(namecheap_domain)
@@ -459,24 +402,8 @@ async def process_csv_upload_async(
                      if reg_date_str:
                          first_seen_date = reg_date_str # Already string or parsed? AuctionInput source_data is dict of strings mostly
                 
-                auction_dict = {
-                    'domain': auction.domain,
-                    'start_date': start_date_iso,
-                    'expiration_date': expiration_date_iso,
-                    'auction_site': auction.auction_site,
-                    'current_bid': auction.current_bid,
-                    'source_data': auction.source_data,
-                    'link': auction.link,
-                    'processed': True,
-                    'preferred': False,
-                    'has_statistics': False,
-                    'score': score_value,
-                    'ranking': None,
-                    'first_seen': first_seen_date,
-                    'deletion_flag': False, # Default
-                    'offer_type': record_offer_type,
-                    'job_id': job_id
-                }
+                auction_dict = { 'domain': auction.domain, 'start_date': start_date_iso, 'expiration_date': expiration_date_iso, 'auction_site': auction.auction_site, 'current_bid': auction.current_bid, 'source_data': auction.source_data, 'link': auction.link, 'processed': True, 'preferred': False, 'has_statistics': False, 'score': score_value, 'ranking': None, 'first_seen': first_seen_date, 'deletion_flag': False, # Default
+                    'offer_type': record_offer_type, 'job_id': job_id }
                 
                 batch_list.append(auction_dict)
                 
@@ -495,39 +422,24 @@ async def process_csv_upload_async(
         if batch_list:
             await process_batch(batch_list, is_last=True)
             
-        logger.info("Streaming complete", 
-                   job_id=job_id, 
-                   processed=processed_count, 
-                   passed=passed_count, 
-                   failed=failed_count,
-                   skipped=skipped_count,
-                   namesilo_counts=namesilo_type_counts)
+        logger.info("Streaming complete", job_id=job_id, processed=processed_count, passed=passed_count, failed=failed_count, skipped=skipped_count, namesilo_counts=namesilo_type_counts)
                    
         if processed_count == 0 and skipped_count == 0:
              # Empty file case
              error_msg = f"CSV file is empty or contains no valid auction records. Auction site: {auction_site}"
              logger.error(error_msg, job_id=job_id)
-             await db.update_csv_upload_progress(
-                job_id=job_id,
-                status='failed',
-                error_message=error_msg
-            )
+             await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg )
              return
 
         # 4. Merge Staging to Main
-        await db.update_csv_upload_progress(
-            job_id=job_id,
-            status='processing',
-            current_stage='merging',
-            processed_records=processed_count
-        )
+        await db.update_csv_upload_progress( job_id=job_id, status='processing', current_stage='merging', processed_records=processed_count )
         
         logger.info("Merging staging to main table (using python chunked merge)", job_id=job_id)
         
         try:
              # Use the Python-based chunked merge helper instead of RPC
              # This aligns with the JSON upload logic which is working correctly
-             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id)
+             merged_count = _perform_python_chunked_merge(db, auction_site, job_id)
              
              merge_stats = {'inserted': merged_count, 'updated': 0}
              logger.info("Merge complete", stats=merge_stats)
@@ -537,32 +449,14 @@ async def process_csv_upload_async(
              raise merge_err
 
         # 5. Success
-        await db.update_csv_upload_progress(
-            job_id=job_id,
-            status='completed',
-            current_stage='completed',
-            processed_records=processed_count,
-            skipped_count=skipped_count,
-            completed=True
-        )
+        await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=processed_count, skipped_count=skipped_count, completed=True )
         
     except Exception as e:
         logger.error("An unexpected error occurred during CSV processing", job_id=job_id, error=str(e), exc_info=True)
-        await db.update_csv_upload_progress(
-            job_id=job_id,
-            status='failed',
-            error_message=f"An unexpected error occurred: {str(e)}"
-        )
+        await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=f"An unexpected error occurred: {str(e)}" )
 
 
-async def process_json_upload_async(
-    job_id: str,
-    json_content: str,
-    filename: str,
-    auction_site: str,
-    offering_type: Optional[str] = None,
-    is_file: bool = False
-):
+async def process_json_upload_async( job_id: str, json_content: str, filename: str, auction_site: str, offering_type: Optional[str] = None, is_file: bool = False ):
     """
     Background task to process JSON upload with progress tracking
     """
@@ -571,11 +465,7 @@ async def process_json_upload_async(
     
     try:
         # Update status to parsing
-        await db.update_csv_upload_progress(
-            job_id=job_id,
-            status='parsing',
-            current_stage='parsing'
-        )
+        await db.update_csv_upload_progress( job_id=job_id, status='parsing', current_stage='parsing' )
         
         # Parse JSON using auctions service
         logger.info("Parsing JSON content", job_id=job_id, auction_site=auction_site, filename=filename, is_file=is_file)
@@ -584,22 +474,13 @@ async def process_json_upload_async(
         if not auction_inputs:
             error_msg = f"JSON file is empty or contains no valid auction records. Auction site: {auction_site}, Filename: {filename}"
             logger.error(error_msg, job_id=job_id, auction_site=auction_site, filename=filename)
-            await db.update_csv_upload_progress(
-                job_id=job_id,
-                status='failed',
-                error_message=error_msg
-            )
+            await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg )
             return
         
         total_records = len(auction_inputs)
         
         # Update status to processing
-        await db.update_csv_upload_progress(
-            job_id=job_id,
-            status='processing',
-            total_records=total_records,
-            current_stage='scoring'
-        )
+        await db.update_csv_upload_progress( job_id=job_id, status='processing', total_records=total_records, current_stage='scoring' )
         
         # Initialize scoring service
         scoring_service = DomainScoringService()
@@ -640,31 +521,7 @@ async def process_json_upload_async(
                         elif isinstance(reg_date, datetime):
                             registered_date = reg_date
                 
-                namecheap_domain = NamecheapDomain(
-                    name=auction.domain,
-                    registered_date=registered_date,
-                    url=None,
-                    start_date=auction.start_date,
-                    end_date=auction.expiration_date,
-                    price=None,
-                    bid_count=None,
-                    ahrefs_domain_rating=None,
-                    umbrella_ranking=None,
-                    cloudflare_ranking=None,
-                    estibot_value=None,
-                    extensions_taken=None,
-                    keyword_search_count=None,
-                    last_sold_price=None,
-                    last_sold_year=None,
-                    is_partner_sale=None,
-                    semrush_a_score=None,
-                    majestic_citation=None,
-                    ahrefs_backlinks=None,
-                    semrush_backlinks=None,
-                    majestic_backlinks=None,
-                    majestic_trust_flow=None,
-                    go_value=None
-                )
+                namecheap_domain = NamecheapDomain( name=auction.domain, registered_date=registered_date, url=None, start_date=auction.start_date, end_date=auction.expiration_date, price=None, bid_count=None, ahrefs_domain_rating=None, umbrella_ranking=None, cloudflare_ranking=None, estibot_value=None, extensions_taken=None, keyword_search_count=None, last_sold_price=None, last_sold_year=None, is_partner_sale=None, semrush_a_score=None, majestic_citation=None, ahrefs_backlinks=None, semrush_backlinks=None, majestic_backlinks=None, majestic_trust_flow=None, go_value=None )
                 
                 # Score domain
                 scored = scoring_service.score_domain(namecheap_domain)
@@ -672,22 +529,7 @@ async def process_json_upload_async(
                 
                 score_value = scored.total_meaning_score if scored.total_meaning_score is not None else None
                 
-                auction_dict = {
-                    'domain': auction.domain,
-                    'start_date': auction.start_date.isoformat() if auction.start_date else None,
-                    'expiration_date': auction.expiration_date.isoformat() if auction.expiration_date else None,
-                    'auction_site': auction.auction_site,
-                    'current_bid': auction.current_bid,
-                    'source_data': auction.source_data,
-                    'link': auction.link,
-                    'processed': True,
-                    'preferred': False,
-                    'has_statistics': False,
-                    'score': score_value,
-                    'ranking': None,
-                    'offer_type': record_offer_type,
-                    'job_id': job_id
-                }
+                auction_dict = { 'domain': auction.domain, 'start_date': auction.start_date.isoformat() if auction.start_date else None, 'expiration_date': auction.expiration_date.isoformat() if auction.expiration_date else None, 'auction_site': auction.auction_site, 'current_bid': auction.current_bid, 'source_data': auction.source_data, 'link': auction.link, 'processed': True, 'preferred': False, 'has_statistics': False, 'score': score_value, 'ranking': None, 'offer_type': record_offer_type, 'job_id': job_id }
                 
                 if scored.filter_status == 'PASS':
                     passed_count += 1
@@ -704,29 +546,16 @@ async def process_json_upload_async(
                 await asyncio.sleep(0.01)
                 
             if (idx + 1) % 1000 == 0:
-                await db.update_csv_upload_progress(
-                    job_id=job_id,
-                    processed_records=idx + 1,
-                    skipped_count=skipped_count,
-                    current_stage='scoring'
-                )
+                await db.update_csv_upload_progress( job_id=job_id, processed_records=idx + 1, skipped_count=skipped_count, current_stage='scoring' )
 
         # Update stage
-        await db.update_csv_upload_progress(
-            job_id=job_id,
-            processed_records=len(auction_dicts),
-            skipped_count=skipped_count,
-            current_stage='loading_staging'
-        )
+        await db.update_csv_upload_progress( job_id=job_id, processed_records=len(auction_dicts), skipped_count=skipped_count, current_stage='loading_staging' )
 
         # Loading and Merging (simplified logic)
         if db.client:
              # General "Mark & Sweep" cleanup logic - Mark Phase - DISABLED
              effective_offering_type = offering_type or 'auction'
-             logger.info("Marking records for deletion (cleanup phase 1) - DISABLED", 
-                       job_id=job_id, 
-                       auction_site=auction_site,
-                       offering_type=effective_offering_type)
+             logger.info("Marking records for deletion (cleanup phase 1) - DISABLED", job_id=job_id, auction_site=auction_site, offering_type=effective_offering_type)
              
              # try:
              #     # Build the base query
@@ -736,14 +565,10 @@ async def process_json_upload_async(
              #     if auction_site.lower() != 'namesilo':
              #         mark_query = mark_query.eq('offer_type', effective_offering_type)
              #     
-             await #     mark_result = await mark_query.execute()
+             await #     mark_result = mark_query.execute()
              #     marked_count = len(mark_result.data) if mark_result.data else 0
              #     
-             #     logger.info("Marked records for deletion", 
-             #               job_id=job_id,
-             #               count=marked_count,
-             #               scope_site=auction_site,
-             #               scope_type=effective_offering_type if auction_site.lower() != 'namesilo' else 'ALL')
+             #     logger.info("Marked records for deletion", #               job_id=job_id, #               count=marked_count, #               scope_site=auction_site, #               scope_type=effective_offering_type if auction_site.lower() != 'namesilo' else 'ALL')
              # except Exception as e:
              #     logger.warning("Failed to mark records for deletion", job_id=job_id, error=str(e))
 
@@ -761,7 +586,7 @@ async def process_json_upload_async(
                  await asyncio.sleep(0.01)
              
              # Merge using robust Python-based chunked merge
-             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id)
+             merged_count = _perform_python_chunked_merge(db, auction_site, job_id)
              inserted_count = merged_count
 
              # Cleanup (Sweep phase) - DISABLED
@@ -777,58 +602,31 @@ async def process_json_upload_async(
              #     if auction_site.lower() != 'namesilo':
              #          delete_query = delete_query.eq('offer_type', effective_offering_type)
              #     
-             await #     delete_result = await delete_query.execute()
+             await #     delete_result = delete_query.execute()
              #     deleted_count = len(delete_result.data) if delete_result.data else 0
              #     
-             #     logger.info("Cleanup complete: deleted stale records", 
-             #               job_id=job_id, 
-             #               deleted=deleted_count,
-             #               site=auction_site)
+             #     logger.info("Cleanup complete: deleted stale records", #               job_id=job_id, #               deleted=deleted_count, #               site=auction_site)
              #               
              # except Exception as e:
              #     logger.error("Failed to cleanup stale records", job_id=job_id, error=str(e))
 
-             result = {
-                'inserted': inserted_count,
-                'updated': 0,
-                'skipped': 0,
-                'total': total_records,
-                'deleted': deleted_count
-             }
+             result = { 'inserted': inserted_count, 'updated': 0, 'skipped': 0, 'total': total_records, 'deleted': deleted_count }
 
         # Final update
-        await db.update_csv_upload_progress(
-            job_id=job_id,
-            status='completed',
-            current_stage='completed',
-            processed_records=total_records,
-            completed=True
-        )
+        await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=total_records, completed=True )
         
     except Exception as e:
         error_msg = f"Failed to process JSON upload: {str(e)}"
-        await db.update_csv_upload_progress(
-            job_id=job_id,
-            status='failed',
-            error_message=error_msg
-        )
+        await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg )
 
 
 
 
 
 @router.post("/auctions/upload-csv")
-async def upload_auctions_csv(
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    auction_site: str = Query(..., description="Auction site name (e.g., namecheap, godaddy)"),
-    offering_type: str = Query('auction', description="Offering type (auction, backorder, buy_now)"),
-):
+async def upload_auctions_csv( background_tasks: BackgroundTasks, file: UploadFile = File(...), auction_site: str = Query(..., description="Auction site name (e.g., namecheap, godaddy)"), offering_type: str = Query('auction', description="Offering type (auction, backorder, buy_now)"), ):
     """
-    Upload auctions CSV file.
-    
-    
-    This endpoint:
+    Upload auctions CSV file. This endpoint:
     1. Saves the file to a temporary location immediately
     2. Returns a success response to prevent N8N timeouts
     3. Handles Supabase Storage upload and processing in the background
@@ -851,41 +649,20 @@ async def upload_auctions_csv(
         fd, temp_path = tempfile.mkstemp(suffix=f"_{safe_filename}")
         
         # Read and write content
-        content = await file.read()
+        content = file.read()
         with os.fdopen(fd, 'wb') as tmp:
             tmp.write(content)
             
         # Create job entry (so we have a record even before processing starts)
         db = get_database()
-        await db.create_csv_upload_job(
-            job_id=job_id,
-            filename=safe_filename,
-            auction_site=auction_site,
-            offering_type=offering_type
-        )
+        await db.create_csv_upload_job( job_id=job_id, filename=safe_filename, auction_site=auction_site, offering_type=offering_type )
         
         # Start background task that handles BOTH upload to storage AND processing
-        background_tasks.add_task(
-            background_handle_upload_and_process,
-            job_id=job_id,
-            local_path=temp_path,
-            filename=safe_filename,
-            auction_site=auction_site,
-            offering_type=offering_type
-        )
+        background_tasks.add_task( background_handle_upload_and_process, job_id=job_id, local_path=temp_path, filename=safe_filename, auction_site=auction_site, offering_type=offering_type )
         
-        logger.info("File accepted for async processing", 
-                   filename=safe_filename, 
-                   job_id=job_id,
-                   temp_path=temp_path)
+        logger.info("File accepted for async processing", filename=safe_filename, job_id=job_id, temp_path=temp_path)
             
-        return {
-            "success": True,
-            "message": "File accepted. Upload to storage and processing started in background.",
-            "filename": safe_filename,
-            "job_id": job_id,
-            "n8n_triggered": False 
-        }
+        return { "success": True, "message": "File accepted. Upload to storage and processing started in background.", "filename": safe_filename, "job_id": job_id, "n8n_triggered": False }
         
     except HTTPException:
         raise
@@ -901,43 +678,20 @@ class StorageProcessingRequest(BaseModel):
     bucket: Optional[str] = "auction-csvs"
 
 @router.post("/auctions/process-existing-upload")
-async def process_existing_upload(
-    request: StorageProcessingRequest
-):
+async def process_existing_upload( request: StorageProcessingRequest ):
     """
-    Trigger processing for a file already uploaded to Supabase Storage.
-
-    Use this to bypass backend upload limits/timeouts.
-    Upload directly to Supabase Storage from client (e.g. N8N), then call this.
-    """
+    Trigger processing for a file already uploaded to Supabase Storage. Use this to bypass backend upload limits/timeouts. Upload directly to Supabase Storage from client (e.g. N8N), then call this. """
     try:
         job_id = str(uuid.uuid4())
 
         # Start background processing using asyncio.create_task (proper for async functions)
         # BackgroundTasks.add_task is for sync functions only and can swallow exceptions
-        asyncio.create_task(
-            process_file_from_storage_async(
-                job_id=job_id,
-                bucket=request.bucket,
-                path=request.storage_path,
-                filename=request.filename,
-                auction_site=request.auction_site,
-                offering_type=request.offering_type
-            )
-        )
+        asyncio.create_task( process_file_from_storage_async( job_id=job_id, bucket=request.bucket, path=request.storage_path, filename=request.filename, auction_site=request.auction_site, offering_type=request.offering_type ) )
 
-        logger.info("Triggered processing for existing storage file",
-                   filename=request.filename,
-                   job_id=job_id,
-                   storage_path=request.storage_path)
+        logger.info("Triggered processing for existing storage file", filename=request.filename, job_id=job_id, storage_path=request.storage_path)
 
         # Return immediately - the background task runs after response is sent
-        return {
-            "success": True,
-            "message": "Processing started in background.",
-            "job_id": job_id,
-            "filename": request.filename
-        }
+        return { "success": True, "message": "Processing started in background.", "job_id": job_id, "filename": request.filename }
 
     except Exception as e:
         logger.error("Failed to trigger storage processing", error=str(e))
@@ -945,76 +699,34 @@ async def process_existing_upload(
 
 
 @router.post("/auctions/trigger-processing-async")
-async def trigger_processing_async(
-    request: StorageProcessingRequest
-):
+async def trigger_processing_async( request: StorageProcessingRequest ):
     """
-    Fire-and-forget endpoint to trigger auction file processing.
-
-    This endpoint returns immediately (202 Accepted) and processes the file
+    Fire-and-forget endpoint to trigger auction file processing. This endpoint returns immediately (202 Accepted) and processes the file
     in a completely detached background task. Use this from N8N or other
-    automation tools to avoid timeouts.
-
-    The processing status can be checked via /auctions/upload-progress/{job_id}
+    automation tools to avoid timeouts. The processing status can be checked via /auctions/upload-progress/{job_id}
     """
     job_id = str(uuid.uuid4())
 
     # Create detached background task - runs completely independently
-    asyncio.create_task(
-        _process_file_detached(
-            job_id=job_id,
-            bucket=request.bucket,
-            path=request.storage_path,
-            filename=request.filename,
-            auction_site=request.auction_site,
-            offering_type=request.offering_type
-        )
-    )
+    asyncio.create_task( _process_file_detached( job_id=job_id, bucket=request.bucket, path=request.storage_path, filename=request.filename, auction_site=request.auction_site, offering_type=request.offering_type ) )
 
     # Yield control to ensure the task is scheduled and response is flushed
     await asyncio.sleep(0)
 
-    logger.info("Detached processing triggered",
-               filename=request.filename,
-               job_id=job_id,
-               storage_path=request.storage_path)
+    logger.info("Detached processing triggered", filename=request.filename, job_id=job_id, storage_path=request.storage_path)
 
     # Return immediately - 202 Accepted
-    return {
-        "success": True,
-        "message": "Processing started in background.",
-        "job_id": job_id,
-        "filename": request.filename,
-        "status": "accepted"
-    }
+    return { "success": True, "message": "Processing started in background.", "job_id": job_id, "filename": request.filename, "status": "accepted" }
 
 
-async def _process_file_detached(
-    job_id: str,
-    bucket: str,
-    path: str,
-    filename: str,
-    auction_site: str,
-    offering_type: Optional[str] = None
-):
+async def _process_file_detached( job_id: str, bucket: str, path: str, filename: str, auction_site: str, offering_type: Optional[str] = None ):
     """
     Wrapper to run process_file_from_storage_async in a detached task
-    with proper error handling.
-    """
+    with proper error handling. """
     try:
-        await process_file_from_storage_async(
-            job_id=job_id,
-            bucket=bucket,
-            path=path,
-            filename=filename,
-            auction_site=auction_site,
-            offering_type=offering_type
-        )
+        await process_file_from_storage_async( job_id=job_id, bucket=bucket, path=path, filename=filename, auction_site=auction_site, offering_type=offering_type )
     except Exception as e:
-        logger.error("Detached processing failed",
-                    job_id=job_id,
-                    error=str(e),
-                    exc_info=True)
+        logger.error("Detached processing failed", job_id=job_id, error=str(e), exc_info=True)
 
 
 class NameSiloActiveSalesRequest(BaseModel):
@@ -1025,17 +737,9 @@ class NameSiloActiveSalesRequest(BaseModel):
 
 
 @router.post("/auctions/process-namesilo-active-sales")
-async def process_namesilo_active_sales(
-    request: NameSiloActiveSalesRequest
-):
+async def process_namesilo_active_sales( request: NameSiloActiveSalesRequest ):
     """
-    Process NameSilo active sales data directly from API.
-
-    Accepts JSON data from NameSilo marketplaceActiveSalesOverview API,
-    converts it to CSV format, and processes it like a regular upload.
-
-    The sales_data should be the 'sale_details' array from the NameSilo response.
-    """
+    Process NameSilo active sales data directly from API. Accepts JSON data from NameSilo marketplaceActiveSalesOverview API, converts it to CSV format, and processes it like a regular upload. The sales_data should be the 'sale_details' array from the NameSilo response. """
     job_id = str(uuid.uuid4())
 
     try:
@@ -1043,28 +747,13 @@ async def process_namesilo_active_sales(
         csv_rows = []
 
         # Header row
-        headers = [
-            "Domain", "Status", "Reserve", "Buy_Now", "Portfolio",
-            "Sale_Type", "Pay_Plan_Offered", "End_Date",
-            "Auto_Extend_Days", "Time_Remaining", "Private", "Active_Bid_Or_Offer"
+        headers = [ "Domain", "Status", "Reserve", "Buy_Now", "Portfolio", "Sale_Type", "Pay_Plan_Offered", "End_Date", "Auto_Extend_Days", "Time_Remaining", "Private", "Active_Bid_Or_Offer"
         ]
         csv_rows.append(",".join(f'"{h}"' for h in headers))
 
         # Data rows
         for sale in request.sales_data:
-            row = [
-                sale.get("domain", ""),
-                sale.get("status", ""),
-                sale.get("reserve", ""),
-                sale.get("buy_now", ""),
-                sale.get("portfolio", ""),
-                sale.get("sale_type", ""),
-                sale.get("pay_plan_offered", ""),
-                sale.get("end_date", ""),
-                sale.get("auto_extend_days", ""),
-                sale.get("time_remaining", ""),
-                sale.get("private", ""),
-                sale.get("active_bid_or_offer", "")
+            row = [ sale.get("domain", ""), sale.get("status", ""), sale.get("reserve", ""), sale.get("buy_now", ""), sale.get("portfolio", ""), sale.get("sale_type", ""), sale.get("pay_plan_offered", ""), sale.get("end_date", ""), sale.get("auto_extend_days", ""), sale.get("time_remaining", ""), sale.get("private", ""), sale.get("active_bid_or_offer", "")
             ]
             # Escape quotes and wrap in quotes
             escaped_row = ['"' + str(cell).replace('"', '""') + '"' for cell in row]
@@ -1073,48 +762,23 @@ async def process_namesilo_active_sales(
         csv_content = "\n".join(csv_rows)
 
         # Create detached background task to process the CSV
-        asyncio.create_task(
-            _process_namesilo_sales_detached(
-                job_id=job_id,
-                csv_content=csv_content,
-                filename=request.filename,
-                offering_type=request.offering_type
-            )
-        )
+        asyncio.create_task( _process_namesilo_sales_detached( job_id=job_id, csv_content=csv_content, filename=request.filename, offering_type=request.offering_type ) )
 
         # Yield control to ensure the task is scheduled
         await asyncio.sleep(0)
 
-        logger.info("NameSilo active sales processing triggered",
-                   job_id=job_id,
-                   record_count=len(request.sales_data),
-                   filename=request.filename)
+        logger.info("NameSilo active sales processing triggered", job_id=job_id, record_count=len(request.sales_data), filename=request.filename)
 
-        return {
-            "success": True,
-            "message": "NameSilo active sales processing started in background.",
-            "job_id": job_id,
-            "filename": request.filename,
-            "record_count": len(request.sales_data),
-            "status": "accepted"
-        }
+        return { "success": True, "message": "NameSilo active sales processing started in background.", "job_id": job_id, "filename": request.filename, "record_count": len(request.sales_data), "status": "accepted" }
 
     except Exception as e:
-        logger.error("Failed to process NameSilo active sales",
-                    error=str(e),
-                    exc_info=True)
+        logger.error("Failed to process NameSilo active sales", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to process NameSilo sales: {str(e)}")
 
 
-async def _process_namesilo_sales_detached(
-    job_id: str,
-    csv_content: str,
-    filename: str,
-    offering_type: Optional[str] = None
-):
+async def _process_namesilo_sales_detached( job_id: str, csv_content: str, filename: str, offering_type: Optional[str] = None ):
     """
-    Background task to upload NameSilo sales CSV to storage and process it.
-    """
+    Background task to upload NameSilo sales CSV to storage and process it. """
     import tempfile
     import os
 
@@ -1137,32 +801,16 @@ async def _process_namesilo_sales_detached(
             file_content = f.read()
 
         storage_path = await db.upload_csv_to_storage(file_content, filename)
-        logger.info("NameSilo sales uploaded to storage",
-                   job_id=job_id,
-                   storage_path=storage_path)
+        logger.info("NameSilo sales uploaded to storage", job_id=job_id, storage_path=storage_path)
 
         # Process the file
-        await process_csv_upload_async(
-            job_id=job_id,
-            csv_content=temp_path,
-            filename=filename,
-            auction_site="namesilo",
-            offering_type=offering_type,
-            is_file=True
-        )
+        await process_csv_upload_async( job_id=job_id, csv_content=temp_path, filename=filename, auction_site="namesilo", offering_type=offering_type, is_file=True )
 
     except Exception as e:
-        logger.error("Failed to process NameSilo sales in background",
-                    job_id=job_id,
-                    error=str(e),
-                    exc_info=True)
+        logger.error("Failed to process NameSilo sales in background", job_id=job_id, error=str(e), exc_info=True)
         try:
             db = get_database()
-            await db.update_csv_upload_progress(
-                job_id=job_id,
-                status='failed',
-                error_message=str(e)
-            )
+            await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=str(e) )
         except:
             pass
     finally:
@@ -1174,13 +822,7 @@ async def _process_namesilo_sales_detached(
                 pass
 
 
-async def background_handle_upload_and_process(
-    job_id: str,
-    local_path: str,
-    filename: str,
-    auction_site: str,
-    offering_type: str
-):
+async def background_handle_upload_and_process( job_id: str, local_path: str, filename: str, auction_site: str, offering_type: str ):
     """
     Handles the full background lifecycle:
     1. Upload local temp file to Supabase Storage
@@ -1208,33 +850,15 @@ async def background_handle_upload_and_process(
         is_csv = filename.lower().endswith('.csv')
         
         if is_json:
-            await process_json_upload_async(
-                job_id=job_id,
-                json_content=local_path,
-                filename=filename,
-                auction_site=auction_site,
-                offering_type=offering_type,
-                is_file=True
-            )
+            await process_json_upload_async( job_id=job_id, json_content=local_path, filename=filename, auction_site=auction_site, offering_type=offering_type, is_file=True )
         elif is_csv:
-            await process_csv_upload_async(
-                job_id=job_id,
-                csv_content=local_path,
-                filename=filename,
-                auction_site=auction_site,
-                offering_type=offering_type,
-                is_file=True
-            )
+            await process_csv_upload_async( job_id=job_id, csv_content=local_path, filename=filename, auction_site=auction_site, offering_type=offering_type, is_file=True )
             
     except Exception as e:
         logger.error("Background upload/processing failed", job_id=job_id, error=str(e), exc_info=True)
         try:
             db = get_database()
-            await db.update_csv_upload_progress(
-                job_id=job_id,
-                status='failed',
-                error_message=str(e)
-            )
+            await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=str(e) )
         except:
             pass
             
@@ -1250,12 +874,7 @@ async def background_handle_upload_and_process(
 
 
 @router.post("/auctions/upload-json")
-async def upload_auctions_json(
-    file: UploadFile = File(...),
-    auction_site: str = Query(..., description="Auction site source: 'godaddy', etc."),
-    offering_type: Optional[str] = Query(None, description="Type of domain offering: 'auction', 'backorder', 'buy_now'"),
-    background_tasks: BackgroundTasks = BackgroundTasks()
-):
+async def upload_auctions_json( file: UploadFile = File(...), auction_site: str = Query(..., description="Auction site source: 'godaddy', etc."), offering_type: Optional[str] = Query(None, description="Type of domain offering: 'auction', 'backorder', 'buy_now'"), background_tasks: BackgroundTasks = BackgroundTasks() ):
     """
     Upload JSON file and process it asynchronously with progress tracking
     
@@ -1296,7 +915,7 @@ async def upload_auctions_json(
         
         # Read file in chunks
         while True:
-            chunk = await file.read(chunk_size)
+            chunk = file.read(chunk_size)
             if not chunk:
                 break
             content_chunks.append(chunk)
@@ -1307,12 +926,7 @@ async def upload_auctions_json(
         content_bytes = b''.join(content_chunks)
         file_size_mb = round(total_size / (1024 * 1024), 2)
         
-        logger.info("Received auctions JSON upload", 
-                   job_id=job_id,
-                   filename=file.filename, 
-                   size=total_size,
-                   size_mb=file_size_mb,
-                   auction_site=detected_site)
+        logger.info("Received auctions JSON upload", job_id=job_id, filename=file.filename, size=total_size, size_mb=file_size_mb, auction_site=detected_site)
         
         # Decode JSON content
         try:
@@ -1336,47 +950,23 @@ async def upload_auctions_json(
         
         # Create progress tracking job
         db = get_database()
-        await db.create_csv_upload_job(
-            job_id=job_id,
-            filename=file.filename,
-            auction_site=detected_site
-        )
+        await db.create_csv_upload_job( job_id=job_id, filename=file.filename, auction_site=detected_site )
         
         # Start background processing
-        background_tasks.add_task(
-            process_json_upload_async,
-            job_id=job_id,
-            json_content=json_content,
-            filename=file.filename,
-            auction_site=detected_site,
-            offering_type=detected_offering_type
-        )
+        background_tasks.add_task( process_json_upload_async, job_id=job_id, json_content=json_content, filename=file.filename, auction_site=detected_site, offering_type=detected_offering_type )
         
-        return {
-            "success": True,
-            "job_id": job_id,
-            "message": "JSON upload started. Use /auctions/upload-progress/{job_id} to check progress.",
-            "filename": file.filename,
-            "auction_site": detected_site
-        }
+        return { "success": True, "job_id": job_id, "message": "JSON upload started. Use /auctions/upload-progress/{job_id} to check progress.", "filename": file.filename, "auction_site": detected_site }
         
     except HTTPException:
         raise
     except MemoryError:
         logger.error("Out of memory while processing JSON", filename=file.filename)
-        raise HTTPException(
-            status_code=413, 
-            detail="File is too large to process. Please split the file into smaller chunks or contact support."
-        )
+        raise HTTPException( status_code=413, detail="File is too large to process. Please split the file into smaller chunks or contact support." )
     except Exception as e:
         error_msg = str(e)
         error_type = type(e).__name__
         
-        logger.error("Failed to upload auctions JSON", 
-                    error=error_msg, 
-                    error_type=error_type,
-                    filename=file.filename,
-                    exc_info=True)
+        logger.error("Failed to upload auctions JSON", error=error_msg, error_type=error_type, filename=file.filename, exc_info=True)
         
         # Provide more helpful error messages
         if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
@@ -1391,14 +981,7 @@ async def upload_auctions_json(
         raise HTTPException(status_code=500, detail=detail)
 
 
-async def process_file_from_storage_async(
-    job_id: str,
-    bucket: str,
-    path: str,
-    filename: str,
-    auction_site: str,
-    offering_type: Optional[str] = None
-):
+async def process_file_from_storage_async( job_id: str, bucket: str, path: str, filename: str, auction_site: str, offering_type: Optional[str] = None ):
     """
     Background task to download and process file from storage using streaming and temp files
     """
@@ -1411,12 +994,7 @@ async def process_file_from_storage_async(
         db = get_database()
         
         # Create progress tracking job (moved from endpoint to prevent timeouts)
-        await db.create_csv_upload_job(
-            job_id=job_id,
-            filename=filename,
-            auction_site=auction_site,
-            offering_type=offering_type
-        )
+        await db.create_csv_upload_job( job_id=job_id, filename=filename, auction_site=auction_site, offering_type=offering_type )
         
         # Sanitize filename for temp file usage (replace slashes with underscores)
         # This prevents "No such file or directory" errors if filename contains folders
@@ -1428,11 +1006,7 @@ async def process_file_from_storage_async(
         os.close(temp_fd) # Close file descriptor, we'll open it by path
         
         # Update status to downloading
-        await db.update_csv_upload_progress(
-            job_id=job_id,
-            status='downloading',
-            current_stage='downloading_from_storage'
-        )
+        await db.update_csv_upload_progress( job_id=job_id, status='downloading', current_stage='downloading_from_storage' )
         
         # Download file to temp disk location
         logger.info("Downloading file from storage to temp disk", job_id=job_id, bucket=bucket, path=path, local_path=temp_path)
@@ -1449,30 +1023,12 @@ async def process_file_from_storage_async(
         
         if is_json:
             # Process JSON using the file path
-            await process_json_upload_async(
-                job_id=job_id,
-                json_content=temp_path,
-                filename=filename,
-                auction_site=auction_site,
-                offering_type=offering_type,
-                is_file=True
-            )
+            await process_json_upload_async( job_id=job_id, json_content=temp_path, filename=filename, auction_site=auction_site, offering_type=offering_type, is_file=True )
         elif is_csv:
             # Process CSV using the file path
-            await process_csv_upload_async(
-                job_id=job_id,
-                csv_content=temp_path,
-                filename=filename,
-                auction_site=auction_site,
-                offering_type=offering_type,
-                is_file=True
-            )
+            await process_csv_upload_async( job_id=job_id, csv_content=temp_path, filename=filename, auction_site=auction_site, offering_type=offering_type, is_file=True )
         else:
-            await db.update_csv_upload_progress(
-                job_id=job_id,
-                status='failed',
-                error_message="File must be CSV or JSON"
-            )
+            await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message="File must be CSV or JSON" )
             logger.error("Invalid file type", job_id=job_id, filename=filename)
         
         # Check job status and delete file from storage if successful
@@ -1482,32 +1038,17 @@ async def process_file_from_storage_async(
                 logger.info("Job completed successfully, deleting file from storage", job_id=job_id, bucket=bucket, path=path)
                 await db.delete_file_from_storage(bucket, path)
             else:
-                logger.info("Job did not complete successfully, keeping file in storage", 
-                           job_id=job_id, 
-                           status=job_status.get('status') if job_status else 'unknown',
-                           bucket=bucket, 
-                           path=path)
+                logger.info("Job did not complete successfully, keeping file in storage", job_id=job_id, status=job_status.get('status') if job_status else 'unknown', bucket=bucket, path=path)
         except Exception as cleanup_error:
             logger.warning("Failed to perform storage cleanup check", job_id=job_id, error=str(cleanup_error))
             
     except Exception as e:
         error_msg = str(e)
-        logger.error("Failed to process file from storage", 
-                    job_id=job_id,
-                    bucket=bucket, 
-                    path=path,
-                    error=error_msg,
-                    exc_info=True)
+        logger.error("Failed to process file from storage", job_id=job_id, bucket=bucket, path=path, error=error_msg, exc_info=True)
         
         try:
             db = get_database()
-            # If job exists, update it. If create_job failed, this might also fail or update non-existent job.
-            # But mostly create_job succeeds, and error happens later.
-            await db.update_csv_upload_progress(
-                job_id=job_id,
-                status='failed',
-                error_message=f"Storage processing failed: {error_msg}"
-            )
+            # If job exists, update it. If create_job failed, this might also fail or update non-existent job. # But mostly create_job succeeds, and error happens later. await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=f"Storage processing failed: {error_msg}" )
         except:
             pass
             
@@ -1522,18 +1063,11 @@ async def process_file_from_storage_async(
 
 
 @router.post("/auctions/process-from-storage")
-async def process_from_storage(
-    bucket: str = Body(..., description="Supabase storage bucket name"),
-    path: str = Body(..., description="File path in storage"),
-    auction_site: str = Body(..., description="Auction site source"),
-    offering_type: Optional[str] = Body(None, description="Type of domain offering"),
-    filename: Optional[str] = Body(None, description="Original filename")
-):
+async def process_from_storage( bucket: str = Body(..., description="Supabase storage bucket name"), path: str = Body(..., description="File path in storage"), auction_site: str = Body(..., description="Auction site source"), offering_type: Optional[str] = Body(None, description="Type of domain offering"), filename: Optional[str] = Body(None, description="Original filename") ):
     """
     Process auction file from Supabase storage
 
-    Returns immediately and processes the file in the background to avoid ngrok timeouts.
-    Downloads the file from storage and processes it (CSV or JSON)
+    Returns immediately and processes the file in the background to avoid ngrok timeouts. Downloads the file from storage and processes it (CSV or JSON)
     """
     try:
         # Determine file type from path/filename
@@ -1549,38 +1083,17 @@ async def process_from_storage(
 
         # Start background task using asyncio.create_task (proper for async functions)
         # BackgroundTasks.add_task is for sync functions only and can swallow exceptions
-        asyncio.create_task(
-            process_file_from_storage_async(
-                job_id=job_id,
-                bucket=bucket,
-                path=path,
-                filename=file_path,
-                auction_site=auction_site,
-                offering_type=offering_type
-            )
-        )
+        asyncio.create_task( process_file_from_storage_async( job_id=job_id, bucket=bucket, path=path, filename=file_path, auction_site=auction_site, offering_type=offering_type ) )
 
         logger.info("File processing started in background", job_id=job_id, bucket=bucket, path=path)
 
-        return {
-            "success": True,
-            "job_id": job_id,
-            "message": f"{'JSON' if is_json else 'CSV'} processing started from storage. Use /auctions/upload-progress/{job_id} to check progress.",
-            "filename": file_path,
-            "auction_site": auction_site,
-            "bucket": bucket,
-            "path": path
-        }
+        return { "success": True, "job_id": job_id, "message": f"{'JSON' if is_json else 'CSV'} processing started from storage. Use /auctions/upload-progress/{job_id} to check progress.", "filename": file_path, "auction_site": auction_site, "bucket": bucket, "path": path }
 
     except HTTPException:
         raise
     except Exception as e:
         error_msg = str(e)
-        logger.error("Failed to initiate file processing from storage",
-                    bucket=bucket,
-                    path=path,
-                    error=error_msg,
-                    exc_info=True)
+        logger.error("Failed to initiate file processing from storage", bucket=bucket, path=path, error=error_msg, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to initiate file processing: {error_msg}")
 
 
@@ -1597,31 +1110,10 @@ async def get_latest_active_upload_progress():
         progress = await db.get_latest_active_upload_job()
         
         if not progress:
-            raise HTTPException(
-                status_code=404,
-                detail="No active upload job found"
-            )
+            raise HTTPException( status_code=404, detail="No active upload job found" )
         
         job_id = progress.get('job_id')
-        return {
-            "success": True,
-            "job_id": job_id,
-            "status": progress.get('status'),
-            "filename": progress.get('filename'),
-            "auction_site": progress.get('auction_site'),
-            "total_records": progress.get('total_records', 0),
-            "processed_records": progress.get('processed_records', 0),
-            "inserted_count": progress.get('inserted_count', 0),
-            "updated_count": progress.get('updated_count', 0),
-            "skipped_count": progress.get('skipped_count', 0),
-            "deleted_expired_count": progress.get('deleted_expired_count', 0),
-            "current_stage": progress.get('current_stage'),
-            "progress_percentage": progress.get('progress_percentage', 0.00),
-            "error_message": progress.get('error_message'),
-            "started_at": progress.get('started_at'),
-            "updated_at": progress.get('updated_at'),
-            "completed_at": progress.get('completed_at')
-        }
+        return { "success": True, "job_id": job_id, "status": progress.get('status'), "filename": progress.get('filename'), "auction_site": progress.get('auction_site'), "total_records": progress.get('total_records', 0), "processed_records": progress.get('processed_records', 0), "inserted_count": progress.get('inserted_count', 0), "updated_count": progress.get('updated_count', 0), "skipped_count": progress.get('skipped_count', 0), "deleted_expired_count": progress.get('deleted_expired_count', 0), "current_stage": progress.get('current_stage'), "progress_percentage": progress.get('progress_percentage', 0.00), "error_message": progress.get('error_message'), "started_at": progress.get('started_at'), "updated_at": progress.get('updated_at'), "completed_at": progress.get('completed_at') }
         
     except HTTPException:
         raise
@@ -1646,30 +1138,9 @@ async def get_upload_progress(job_id: str):
         progress = await db.get_csv_upload_progress(job_id)
         
         if not progress:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Job {job_id} not found"
-            )
+            raise HTTPException( status_code=404, detail=f"Job {job_id} not found" )
         
-        return {
-            "success": True,
-            "job_id": job_id,
-            "status": progress.get('status'),
-            "filename": progress.get('filename'),
-            "auction_site": progress.get('auction_site'),
-            "total_records": progress.get('total_records', 0),
-            "processed_records": progress.get('processed_records', 0),
-            "inserted_count": progress.get('inserted_count', 0),
-            "updated_count": progress.get('updated_count', 0),
-            "skipped_count": progress.get('skipped_count', 0),
-            "deleted_expired_count": progress.get('deleted_expired_count', 0),
-            "current_stage": progress.get('current_stage'),
-            "progress_percentage": progress.get('progress_percentage', 0.00),
-            "error_message": progress.get('error_message'),
-            "started_at": progress.get('started_at'),
-            "updated_at": progress.get('updated_at'),
-            "completed_at": progress.get('completed_at')
-        }
+        return { "success": True, "job_id": job_id, "status": progress.get('status'), "filename": progress.get('filename'), "auction_site": progress.get('auction_site'), "total_records": progress.get('total_records', 0), "processed_records": progress.get('processed_records', 0), "inserted_count": progress.get('inserted_count', 0), "updated_count": progress.get('updated_count', 0), "skipped_count": progress.get('skipped_count', 0), "deleted_expired_count": progress.get('deleted_expired_count', 0), "current_stage": progress.get('current_stage'), "progress_percentage": progress.get('progress_percentage', 0.00), "error_message": progress.get('error_message'), "started_at": progress.get('started_at'), "updated_at": progress.get('updated_at'), "completed_at": progress.get('completed_at') }
         
     except HTTPException:
         raise
@@ -1679,10 +1150,7 @@ async def get_upload_progress(job_id: str):
 
 
 @router.post("/auctions/upload-progress/{job_id}/mark-failed")
-async def mark_job_as_failed(
-    job_id: str,
-    request: Optional[Dict[str, Any]] = Body(default=None, description="Optional request body with error_message")
-):
+async def mark_job_as_failed( job_id: str, request: Optional[Dict[str, Any]] = Body(default=None, description="Optional request body with error_message") ):
     """
     Manually mark an upload job as failed
     
@@ -1693,36 +1161,20 @@ async def mark_job_as_failed(
         progress = await db.get_csv_upload_progress(job_id)
         
         if not progress:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Job {job_id} not found"
-            )
+            raise HTTPException( status_code=404, detail=f"Job {job_id} not found" )
         
         if progress.get('status') in ['completed', 'failed']:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Job is already {progress.get('status')}"
-            )
+            raise HTTPException( status_code=400, detail=f"Job is already {progress.get('status')}" )
         
         # Get error message from request body or use default
         error_msg = (request.get('error_message') if request else None) or "Job marked as failed manually (appears to be stuck)"
         
         # Mark as failed
-        await db.update_csv_upload_progress(
-            job_id=job_id,
-            status='failed',
-            error_message=error_msg,
-            current_stage='failed'
-        )
+        await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg, current_stage='failed' )
         
         logger.info("Job marked as failed manually", job_id=job_id, error_message=error_msg)
         
-        return {
-            "success": True,
-            "message": f"Job {job_id} marked as failed",
-            "job_id": job_id,
-            "error_message": error_msg
-        }
+        return { "success": True, "message": f"Job {job_id} marked as failed", "job_id": job_id, "error_message": error_msg }
         
     except HTTPException:
         raise
@@ -1732,10 +1184,7 @@ async def mark_job_as_failed(
 
 
 @router.post("/auctions/trigger-analysis")
-async def trigger_auctions_analysis(
-    limit: int = Query(100, description="Maximum number of unique domains to trigger (DataForSEO limit: 100 unique domains per request)", ge=1, le=100),
-    current_user = Depends(get_current_user)
-):
+async def trigger_auctions_analysis( limit: int = Query(100, description="Maximum number of unique domains to trigger (DataForSEO limit: 100 unique domains per request)", ge=1, le=100), current_user = Depends(get_current_user) ):
     """
     Trigger DataForSEO analysis for scored domains without page_statistics
     
@@ -1752,16 +1201,10 @@ async def trigger_auctions_analysis(
         auctions_service = AuctionsService()
         
         # Get scored auctions without page_statistics (most recent first)
-        auctions = await auctions_service.get_scored_auctions_without_page_statistics(limit=limit)
+        auctions = auctions_service.get_scored_auctions_without_page_statistics(limit=limit)
         
         if not auctions:
-            return {
-                "success": True,
-                "message": "No scored domains without page_statistics found",
-                "triggered_count": 0,
-                "skipped_count": 0,
-                "triggered_domains": []
-            }
+            return { "success": True, "message": "No scored domains without page_statistics found", "triggered_count": 0, "skipped_count": 0, "triggered_domains": [] }
         
         domain_names = [a['domain'] for a in auctions]
         
@@ -1771,71 +1214,39 @@ async def trigger_auctions_analysis(
         credits_service = CreditsService(db)
         
         # Calculate cost for syncing these domains
-        total_cost = await pricing_service.calculate_action_cost('stats_sync', len(domain_names))
+        total_cost = pricing_service.calculate_action_cost('stats_sync', len(domain_names))
         
-        logger.info("Deducting credits for auctions analysis", 
-                   user_id=str(current_user.id), 
-                   domain_count=len(domain_names), 
-                   cost=total_cost)
+        logger.info("Deducting credits for auctions analysis", user_id=str(current_user.id), domain_count=len(domain_names), cost=total_cost)
         
         # Deduct credits
-        success = await credits_service.deduct_credits(
-            user_id=current_user.id,
-            amount=total_cost,
-            description=f"DataForSEO extraction for {len(domain_names)} domains",
-            reference_id=f"sync_{int(datetime.now(timezone.utc).timestamp())}"
-        )
+        success = credits_service.deduct_credits( user_id=current_user.id, amount=total_cost, description=f"DataForSEO extraction for {len(domain_names)} domains", reference_id=f"sync_{int(datetime.now(timezone.utc).timestamp())}" )
         
         if not success:
-            logger.warning("Insufficient credits for auctions analysis", 
-                          user_id=str(current_user.id), 
-                          cost=total_cost)
-            raise HTTPException(
-                status_code=402, 
-                detail=f"Insufficient credits. This action requires {total_cost} credits."
-            )
+            logger.warning("Insufficient credits for auctions analysis", user_id=str(current_user.id), cost=total_cost)
+            raise HTTPException( status_code=402, detail=f"Insufficient credits. This action requires {total_cost} credits." )
         # ------------------------------
         
         # Trigger DataForSEO analysis via N8N webhook
         n8n_service = N8NService()
-        n8n_result = await n8n_service.trigger_bulk_page_summary_workflow(domain_names)
+        n8n_result = n8n_service.trigger_bulk_page_summary_workflow(domain_names)
         
         if n8n_result:
             triggered_count = len(domain_names)
-            logger.info("Triggered N8N workflow for bulk page summary", 
-                       triggered=triggered_count,
-                       request_id=n8n_result.get('request_id'))
+            logger.info("Triggered N8N workflow for bulk page summary", triggered=triggered_count, request_id=n8n_result.get('request_id'))
             
-            return {
-                "success": True,
-                "message": f"Triggered analysis for {triggered_count} domains",
-                "triggered_count": triggered_count,
-                "skipped_count": 0,
-                "triggered_domains": domain_names[:100],  # Return first 100 for display
-                "request_id": n8n_result.get('request_id')
-            }
+            return { "success": True, "message": f"Triggered analysis for {triggered_count} domains", "triggered_count": triggered_count, "skipped_count": 0, "triggered_domains": domain_names[:100],  # Return first 100 for display
+                "request_id": n8n_result.get('request_id') }
         else:
             logger.warning("Failed to trigger N8N workflow", domains=len(domain_names))
-            return {
-                "success": False,
-                "message": "Failed to trigger N8N workflow",
-                "triggered_count": 0,
-                "skipped_count": len(domain_names),
-                "triggered_domains": []
-            }
+            return { "success": False, "message": "Failed to trigger N8N workflow", "triggered_count": 0, "skipped_count": len(domain_names), "triggered_domains": [] }
         
     except Exception as e:
         logger.error("Failed to trigger auctions analysis", error=str(e))
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to trigger analysis: {str(e)}"
-        )
+        raise HTTPException( status_code=500, detail=f"Failed to trigger analysis: {str(e)}" )
 
 
 @router.post("/auctions/trigger-bulk-rank")
-async def trigger_bulk_rank_analysis(
-    limit: int = Query(1000, description="Maximum number of domains to trigger (DataForSEO bulk rank limit: 1000 domains)", ge=1, le=1000)
-):
+async def trigger_bulk_rank_analysis( limit: int = Query(1000, description="Maximum number of domains to trigger (DataForSEO bulk rank limit: 1000 domains)", ge=1, le=1000) ):
     """
     Trigger DataForSEO bulk rank analysis for scored domains closest to expire
     
@@ -1851,67 +1262,40 @@ async def trigger_bulk_rank_analysis(
         auctions_service = AuctionsService()
         
         # Get scored auctions closest to expire that don't have rank data
-        auctions = await auctions_service.get_scored_auctions_closest_to_expire(limit=limit)
+        auctions = auctions_service.get_scored_auctions_closest_to_expire(limit=limit)
         
         if not auctions:
-            return {
-                "success": True,
-                "message": "No scored domains without rank found",
-                "triggered_count": 0,
-                "skipped_count": 0,
-                "triggered_domains": []
-            }
+            return { "success": True, "message": "No scored domains without rank found", "triggered_count": 0, "skipped_count": 0, "triggered_domains": [] }
         
         domain_names = [a['domain'] for a in auctions]
         
         # Trigger DataForSEO bulk rank analysis via N8N webhook
         n8n_service = N8NService()
-        n8n_result = await n8n_service.trigger_bulk_rank_workflow(domain_names)
+        n8n_result = n8n_service.trigger_bulk_rank_workflow(domain_names)
         
         if n8n_result:
             triggered_count = len(domain_names)
-            logger.info("Triggered N8N workflow for bulk rank", 
-                       triggered=triggered_count,
-                       request_id=n8n_result.get('request_id'))
+            logger.info("Triggered N8N workflow for bulk rank", triggered=triggered_count, request_id=n8n_result.get('request_id'))
             
-            return {
-                "success": True,
-                "message": f"Triggered bulk rank analysis for {triggered_count} domains",
-                "triggered_count": triggered_count,
-                "skipped_count": 0,
-                "triggered_domains": domain_names[:100],  # Return first 100 for display
-                "request_id": n8n_result.get('request_id')
-            }
+            return { "success": True, "message": f"Triggered bulk rank analysis for {triggered_count} domains", "triggered_count": triggered_count, "skipped_count": 0, "triggered_domains": domain_names[:100],  # Return first 100 for display
+                "request_id": n8n_result.get('request_id') }
         else:
             logger.warning("Failed to trigger N8N bulk rank workflow", domains=len(domain_names))
-            return {
-                "success": False,
-                "message": "Failed to trigger N8N bulk rank workflow",
-                "triggered_count": 0,
-                "skipped_count": len(domain_names),
-                "triggered_domains": []
-            }
+            return { "success": False, "message": "Failed to trigger N8N bulk rank workflow", "triggered_count": 0, "skipped_count": len(domain_names), "triggered_domains": [] }
         
     except Exception as e:
         error_msg = str(e)
-        logger.error("Failed to trigger auctions analysis", 
-                    error=error_msg,
-                    limit=limit)
+        logger.error("Failed to trigger auctions analysis", error=error_msg, limit=limit)
         
         # Check if it's a timeout or connection error
         if 'timeout' in error_msg.lower() or 'connection' in error_msg.lower() or 'reset' in error_msg.lower():
-            raise HTTPException(
-                status_code=504, 
-                detail=f"Database query timed out while fetching auctions. Error: {error_msg}"
-            )
+            raise HTTPException( status_code=504, detail=f"Database query timed out while fetching auctions. Error: {error_msg}" )
         
         raise HTTPException(status_code=500, detail=f"Failed to trigger analysis: {error_msg}")
 
 
 @router.post("/auctions/trigger-bulk-traffic-data")
-async def trigger_bulk_traffic_data_analysis(
-    limit: int = Query(1000, description="Maximum number of domains to trigger (DataForSEO Labs API limit: 1000 domains per request)", ge=1, le=1000)
-):
+async def trigger_bulk_traffic_data_analysis( limit: int = Query(1000, description="Maximum number of domains to trigger (DataForSEO Labs API limit: 1000 domains per request)", ge=1, le=1000) ):
     """
     Trigger DataForSEO Labs API traffic data collection for scored domains closest to expire without traffic_data
     
@@ -1927,67 +1311,40 @@ async def trigger_bulk_traffic_data_analysis(
         auctions_service = AuctionsService()
         
         # Get scored auctions closest to expire without traffic_data
-        auctions = await auctions_service.get_scored_auctions_closest_to_expire_without_traffic_data(limit=limit)
+        auctions = auctions_service.get_scored_auctions_closest_to_expire_without_traffic_data(limit=limit)
         
         if not auctions:
-            return {
-                "success": True,
-                "message": "No scored domains without traffic_data found",
-                "triggered_count": 0,
-                "skipped_count": 0,
-                "triggered_domains": []
-            }
+            return { "success": True, "message": "No scored domains without traffic_data found", "triggered_count": 0, "skipped_count": 0, "triggered_domains": [] }
         
         domain_names = [a['domain'] for a in auctions]
         
         # Trigger DataForSEO Labs API traffic data collection via N8N webhook
         n8n_service = N8NService()
-        n8n_result = await n8n_service.trigger_bulk_traffic_batch_workflow(domain_names)
+        n8n_result = n8n_service.trigger_bulk_traffic_batch_workflow(domain_names)
         
         if n8n_result:
             triggered_count = len(domain_names)
-            logger.info("Triggered N8N workflow for bulk traffic batch", 
-                       triggered=triggered_count,
-                       request_id=n8n_result.get('request_id'))
+            logger.info("Triggered N8N workflow for bulk traffic batch", triggered=triggered_count, request_id=n8n_result.get('request_id'))
             
-            return {
-                "success": True,
-                "message": f"Triggered traffic data collection for {triggered_count} domains",
-                "triggered_count": triggered_count,
-                "skipped_count": 0,
-                "triggered_domains": domain_names[:100],  # Return first 100 for display
-                "request_id": n8n_result.get('request_id')
-            }
+            return { "success": True, "message": f"Triggered traffic data collection for {triggered_count} domains", "triggered_count": triggered_count, "skipped_count": 0, "triggered_domains": domain_names[:100],  # Return first 100 for display
+                "request_id": n8n_result.get('request_id') }
         else:
             logger.warning("Failed to trigger N8N traffic data workflow", domains=len(domain_names))
-            return {
-                "success": False,
-                "message": "Failed to trigger N8N traffic data workflow",
-                "triggered_count": 0,
-                "skipped_count": len(domain_names),
-                "triggered_domains": []
-            }
+            return { "success": False, "message": "Failed to trigger N8N traffic data workflow", "triggered_count": 0, "skipped_count": len(domain_names), "triggered_domains": [] }
         
     except Exception as e:
         error_msg = str(e)
-        logger.error("Failed to trigger traffic data analysis", 
-                    error=error_msg,
-                    limit=limit)
+        logger.error("Failed to trigger traffic data analysis", error=error_msg, limit=limit)
         
         # Check if it's a timeout or connection error
         if 'timeout' in error_msg.lower() or 'connection' in error_msg.lower() or 'reset' in error_msg.lower():
-            raise HTTPException(
-                status_code=504, 
-                detail=f"Database query timed out while fetching auctions. Error: {error_msg}"
-            )
+            raise HTTPException( status_code=504, detail=f"Database query timed out while fetching auctions. Error: {error_msg}" )
         
         raise HTTPException(status_code=500, detail=f"Failed to trigger traffic data analysis: {error_msg}")
 
 
 @router.post("/auctions/trigger-bulk-spam-score")
-async def trigger_bulk_spam_score_analysis(
-    limit: int = Query(1000, description="Maximum number of domains to trigger (DataForSEO bulk spam score limit: 1000 domains)", ge=1, le=1000)
-):
+async def trigger_bulk_spam_score_analysis( limit: int = Query(1000, description="Maximum number of domains to trigger (DataForSEO bulk spam score limit: 1000 domains)", ge=1, le=1000) ):
     """
     Trigger DataForSEO bulk spam score analysis for scored domains closest to expire
     
@@ -2003,67 +1360,40 @@ async def trigger_bulk_spam_score_analysis(
         auctions_service = AuctionsService()
         
         # Get scored auctions closest to expire that don't have spam score data
-        auctions = await auctions_service.get_auctions_without_spam_score_closest_to_expire(limit=limit)
+        auctions = auctions_service.get_auctions_without_spam_score_closest_to_expire(limit=limit)
         
         if not auctions:
-            return {
-                "success": True,
-                "message": "No scored domains without spam score found",
-                "triggered_count": 0,
-                "skipped_count": 0,
-                "triggered_domains": []
-            }
+            return { "success": True, "message": "No scored domains without spam score found", "triggered_count": 0, "skipped_count": 0, "triggered_domains": [] }
         
         domain_names = [a['domain'] for a in auctions]
         
         # Trigger DataForSEO bulk spam score analysis via N8N webhook
         n8n_service = N8NService()
-        n8n_result = await n8n_service.trigger_bulk_spam_score_workflow(domain_names)
+        n8n_result = n8n_service.trigger_bulk_spam_score_workflow(domain_names)
         
         if n8n_result:
             triggered_count = len(domain_names)
-            logger.info("Triggered N8N workflow for bulk spam score", 
-                       triggered=triggered_count,
-                       request_id=n8n_result.get('request_id'))
+            logger.info("Triggered N8N workflow for bulk spam score", triggered=triggered_count, request_id=n8n_result.get('request_id'))
             
-            return {
-                "success": True,
-                "message": f"Triggered bulk spam score analysis for {triggered_count} domains",
-                "triggered_count": triggered_count,
-                "skipped_count": 0,
-                "triggered_domains": domain_names[:100],  # Return first 100 for display
-                "request_id": n8n_result.get('request_id')
-            }
+            return { "success": True, "message": f"Triggered bulk spam score analysis for {triggered_count} domains", "triggered_count": triggered_count, "skipped_count": 0, "triggered_domains": domain_names[:100],  # Return first 100 for display
+                "request_id": n8n_result.get('request_id') }
         else:
             logger.warning("Failed to trigger N8N bulk spam score workflow", domains=len(domain_names))
-            return {
-                "success": False,
-                "message": "Failed to trigger N8N bulk spam score workflow",
-                "triggered_count": 0,
-                "skipped_count": len(domain_names),
-                "triggered_domains": []
-            }
+            return { "success": False, "message": "Failed to trigger N8N bulk spam score workflow", "triggered_count": 0, "skipped_count": len(domain_names), "triggered_domains": [] }
         
     except Exception as e:
         error_msg = str(e)
-        logger.error("Failed to trigger bulk spam score analysis", 
-                    error=error_msg,
-                    limit=limit)
+        logger.error("Failed to trigger bulk spam score analysis", error=error_msg, limit=limit)
         
         # Check if it's a timeout or connection error
         if 'timeout' in error_msg.lower() or 'connection' in error_msg.lower() or 'reset' in error_msg.lower():
-            raise HTTPException(
-                status_code=504, 
-                detail=f"Database query timed out while fetching auctions. Error: {error_msg}"
-            )
+            raise HTTPException( status_code=504, detail=f"Database query timed out while fetching auctions. Error: {error_msg}" )
         
         raise HTTPException(status_code=500, detail=f"Failed to trigger bulk spam score analysis: {error_msg}")
 
 
 @router.post("/auctions/trigger-bulk-backlinks")
-async def trigger_bulk_backlinks_analysis(
-    limit: int = Query(1000, description="Maximum number of domains to trigger (DataForSEO bulk backlinks limit: 1000 domains)", ge=1, le=1000)
-):
+async def trigger_bulk_backlinks_analysis( limit: int = Query(1000, description="Maximum number of domains to trigger (DataForSEO bulk backlinks limit: 1000 domains)", ge=1, le=1000) ):
     """
     Trigger DataForSEO bulk backlinks analysis for scored domains closest to expire
     
@@ -2079,59 +1409,34 @@ async def trigger_bulk_backlinks_analysis(
         auctions_service = AuctionsService()
         
         # Get scored auctions closest to expire that don't have backlinks data
-        auctions = await auctions_service.get_auctions_without_backlinks_closest_to_expire(limit=limit)
+        auctions = auctions_service.get_auctions_without_backlinks_closest_to_expire(limit=limit)
         
         if not auctions:
-            return {
-                "success": True,
-                "message": "No scored domains without backlinks found",
-                "triggered_count": 0,
-                "skipped_count": 0,
-                "triggered_domains": []
-            }
+            return { "success": True, "message": "No scored domains without backlinks found", "triggered_count": 0, "skipped_count": 0, "triggered_domains": [] }
         
         domain_names = [a['domain'] for a in auctions]
         
         # Trigger DataForSEO bulk backlinks analysis via N8N webhook
         n8n_service = N8NService()
-        n8n_result = await n8n_service.trigger_bulk_backlinks_workflow(domain_names)
+        n8n_result = n8n_service.trigger_bulk_backlinks_workflow(domain_names)
         
         if n8n_result:
             triggered_count = len(domain_names)
-            logger.info("Triggered N8N workflow for bulk backlinks", 
-                       triggered=triggered_count,
-                       request_id=n8n_result.get('request_id'))
+            logger.info("Triggered N8N workflow for bulk backlinks", triggered=triggered_count, request_id=n8n_result.get('request_id'))
             
-            return {
-                "success": True,
-                "message": f"Triggered bulk backlinks analysis for {triggered_count} domains",
-                "triggered_count": triggered_count,
-                "skipped_count": 0,
-                "triggered_domains": domain_names[:100],  # Return first 100 for display
-                "request_id": n8n_result.get('request_id')
-            }
+            return { "success": True, "message": f"Triggered bulk backlinks analysis for {triggered_count} domains", "triggered_count": triggered_count, "skipped_count": 0, "triggered_domains": domain_names[:100],  # Return first 100 for display
+                "request_id": n8n_result.get('request_id') }
         else:
             logger.warning("Failed to trigger N8N bulk backlinks workflow", domains=len(domain_names))
-            return {
-                "success": False,
-                "message": "Failed to trigger N8N bulk backlinks workflow",
-                "triggered_count": 0,
-                "skipped_count": len(domain_names),
-                "triggered_domains": []
-            }
+            return { "success": False, "message": "Failed to trigger N8N bulk backlinks workflow", "triggered_count": 0, "skipped_count": len(domain_names), "triggered_domains": [] }
         
     except Exception as e:
         error_msg = str(e)
-        logger.error("Failed to trigger bulk backlinks analysis", 
-                    error=error_msg,
-                    limit=limit)
+        logger.error("Failed to trigger bulk backlinks analysis", error=error_msg, limit=limit)
         
         # Check if it's a timeout or connection error
         if 'timeout' in error_msg.lower() or 'connection' in error_msg.lower() or 'reset' in error_msg.lower():
-            raise HTTPException(
-                status_code=504, 
-                detail=f"Database query timed out while fetching auctions. Error: {error_msg}"
-            )
+            raise HTTPException( status_code=504, detail=f"Database query timed out while fetching auctions. Error: {error_msg}" )
         
         raise HTTPException(status_code=500, detail=f"Failed to trigger bulk backlinks analysis: {error_msg}")
 
@@ -2140,8 +1445,7 @@ async def trigger_bulk_backlinks_analysis(
 
 async def process_traffic_metrics_background_task(domains: list[str]):
     """
-    Background task to fetch and save traffic metrics using DataForSEO Live API.
-    """
+    Background task to fetch and save traffic metrics using DataForSEO Live API. """
     try:
         from services.external_apis import DataForSEOService
         from services.database import get_database
@@ -2152,7 +1456,7 @@ async def process_traffic_metrics_background_task(domains: list[str]):
         logger.info("Starting background processing for traffic data", domains=len(domains))
         
         # Call Live API (this blocks this task but not the main thread)
-        items = await service.fetch_bulk_traffic_estimation_live(domains)
+        items = service.fetch_bulk_traffic_estimation_live(domains)
         
         if items:
             logger.info("Traffic data retrieved", count=len(items))
@@ -2165,12 +1469,7 @@ async def process_traffic_metrics_background_task(domains: list[str]):
                 metrics = item.get('metrics', {})
                 
                 if target and metrics:
-                    traffic_data = {
-                        "organic_traffic": metrics.get('organic', {}).get('etv', 0),
-                        "etv": metrics.get('organic', {}).get('etv', 0),
-                        "organic_keywords": metrics.get('organic', {}).get('count', 0),
-                        "traffic_timestamp": datetime.now(timezone.utc).isoformat()
-                    }
+                    traffic_data = { "organic_traffic": metrics.get('organic', {}).get('etv', 0), "etv": metrics.get('organic', {}).get('etv', 0), "organic_keywords": metrics.get('organic', {}).get('count', 0), "traffic_timestamp": datetime.now(timezone.utc).isoformat() }
                     
                     # Update DB
                     await db.update_auction_traffic_data(target, traffic_data)
@@ -2184,15 +1483,9 @@ async def process_traffic_metrics_background_task(domains: list[str]):
         logger.error("Background traffic processing failed", error=str(e))
 
 
-async def trigger_full_analysis_background(
-    domain_names: List[str],
-    n8n_service: N8NService,
-    user_id: str
-):
+async def trigger_full_analysis_background( domain_names: List[str], n8n_service: N8NService, user_id: str ):
     """
-    Background task to trigger all four DataForSEO analyses sequentially.
-    Errors in one don't stop the others.
-    """
+    Background task to trigger all four DataForSEO analyses sequentially. Errors in one don't stop the others. """
     logger = structlog.get_logger().bind(user_id=user_id, operation="bulk_trigger_background")
     logger.info("Starting background bulk analysis triggers", domain_count=len(domain_names))
     
@@ -2228,27 +1521,7 @@ async def trigger_full_analysis_background(
 
 
 @router.post("/auctions/trigger-bulk-all-metrics")
-async def trigger_bulk_all_metrics_analysis(
-    preferred: Optional[bool] = Query(None, description="Filter by preferred status"),
-    auction_site: Optional[str] = Query(None, description="Filter by auction site"),
-    offering_type: Optional[str] = Query(None, description="Filter by market type: 'auction', 'backorder', 'buy_now'"),
-    tld: Optional[str] = Query(None, description="Filter by TLD extension (e.g., '.com', '.ai') - deprecated, use tlds"),
-    tlds: Optional[str] = Query(None, description="Comma-separated list of TLDs (e.g., '.com,.io,.ai')"),
-    has_statistics: Optional[bool] = Query(None, description="Filter by has_statistics"),
-    scored: Optional[bool] = Query(None, description="Filter by scored status (has score)"),
-    min_rank: Optional[int] = Query(None, description="Minimum ranking", ge=1),
-    max_rank: Optional[int] = Query(None, description="Maximum ranking", ge=1),
-    min_score: Optional[float] = Query(None, description="Minimum score", ge=0, le=100),
-    max_score: Optional[float] = Query(None, description="Maximum score", ge=0, le=100),
-    expiration_from_date: Optional[str] = Query(None, description="Filter by expiration date from (YYYY-MM-DD)"),
-    expiration_to_date: Optional[str] = Query(None, description="Filter by expiration date to (YYYY-MM-DD)"),
-    sort_by: str = Query("expiration_date", description="Field to sort by"),
-    sort_order: str = Query("asc", description="Sort order (asc, desc)"),
-    limit: int = Query(1000, description="Maximum number of domains to trigger (1000 per analysis type)", ge=1, le=1000),
-    force_refresh: bool = Query(False, description="Force refresh even if some metrics already exist"),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    current_user = Depends(get_current_user)
-):
+async def trigger_bulk_all_metrics_analysis( preferred: Optional[bool] = Query(None, description="Filter by preferred status"), auction_site: Optional[str] = Query(None, description="Filter by auction site"), offering_type: Optional[str] = Query(None, description="Filter by market type: 'auction', 'backorder', 'buy_now'"), tld: Optional[str] = Query(None, description="Filter by TLD extension (e.g., '.com', '.ai') - deprecated, use tlds"), tlds: Optional[str] = Query(None, description="Comma-separated list of TLDs (e.g., '.com,.io,.ai')"), has_statistics: Optional[bool] = Query(None, description="Filter by has_statistics"), scored: Optional[bool] = Query(None, description="Filter by scored status (has score)"), min_rank: Optional[int] = Query(None, description="Minimum ranking", ge=1), max_rank: Optional[int] = Query(None, description="Maximum ranking", ge=1), min_score: Optional[float] = Query(None, description="Minimum score", ge=0, le=100), max_score: Optional[float] = Query(None, description="Maximum score", ge=0, le=100), expiration_from_date: Optional[str] = Query(None, description="Filter by expiration date from (YYYY-MM-DD)"), expiration_to_date: Optional[str] = Query(None, description="Filter by expiration date to (YYYY-MM-DD)"), sort_by: str = Query("expiration_date", description="Field to sort by"), sort_order: str = Query("asc", description="Sort order (asc, desc)"), limit: int = Query(1000, description="Maximum number of domains to trigger (1000 per analysis type)", ge=1, le=1000), force_refresh: bool = Query(False, description="Force refresh even if some metrics already exist"), background_tasks: BackgroundTasks = BackgroundTasks(), current_user = Depends(get_current_user) ):
     """
     Trigger all four DataForSEO analyses (traffic, rank, backlinks, spam_score) for domains matching current filters
     
@@ -2300,28 +1573,10 @@ async def trigger_bulk_all_metrics_analysis(
         auctions_service = AuctionsService()
         
         # Get auctions matching filters (missing any metric OR force refresh)
-        auctions = await auctions_service.get_auctions_missing_any_metric_with_filters(
-            filters=filters,
-            sort_by=sort_by,
-            sort_order=sort_order,
-            limit=limit,
-            force_refresh=force_refresh
-        )
+        auctions = auctions_await service.get_auctions_missing_any_metric_with_filters( filters=filters, sort_by=sort_by, sort_order=sort_order, limit=limit, force_refresh=force_refresh )
         
         if not auctions:
-            return {
-                "success": True,
-                "message": "No domains matching filters and missing any DataForSEO metric found",
-                "triggered_count": 0,
-                "skipped_count": 0,
-                "triggered_domains": [],
-                "results": {
-                    "traffic_data": {"triggered": 0, "success": False},
-                    "rank": {"triggered": 0, "success": False},
-                    "backlinks": {"triggered": 0, "success": False},
-                    "spam_score": {"triggered": 0, "success": False}
-                }
-            }
+            return { "success": True, "message": "No domains matching filters and missing any DataForSEO metric found", "triggered_count": 0, "skipped_count": 0, "triggered_domains": [], "results": { "traffic_data": {"triggered": 0, "success": False}, "rank": {"triggered": 0, "success": False}, "backlinks": {"triggered": 0, "success": False}, "spam_score": {"triggered": 0, "success": False} } }
         
         domain_names = [a['domain'] for a in auctions]
         
@@ -2331,93 +1586,42 @@ async def trigger_bulk_all_metrics_analysis(
         credits_service = CreditsService(db)
         
         # Calculate cost for syncing these domains
-        total_cost = await pricing_service.calculate_action_cost('stats_sync', len(domain_names))
+        total_cost = pricing_service.calculate_action_cost('stats_sync', len(domain_names))
         
-        logger.info("Deducting credits for bulk analysis", 
-                   user_id=str(current_user.id), 
-                   domain_count=len(domain_names), 
-                   cost=total_cost)
+        logger.info("Deducting credits for bulk analysis", user_id=str(current_user.id), domain_count=len(domain_names), cost=total_cost)
         
         # Deduct credits
-        success = await credits_service.deduct_credits(
-            user_id=current_user.id,
-            amount=total_cost,
-            description=f"Bulk DataForSEO extraction for {len(domain_names)} domains",
-            reference_id=f"bulk_sync_{int(datetime.now(timezone.utc).timestamp())}"
-        )
+        success = credits_service.deduct_credits( user_id=current_user.id, amount=total_cost, description=f"Bulk DataForSEO extraction for {len(domain_names)} domains", reference_id=f"bulk_sync_{int(datetime.now(timezone.utc).timestamp())}" )
         
         if not success:
-            logger.warning("Insufficient credits for bulk analysis", 
-                          user_id=str(current_user.id), 
-                          cost=total_cost)
-            raise HTTPException(
-                status_code=402, 
-                detail=f"Insufficient credits. This action requires {total_cost} credits."
-            )
+            logger.warning("Insufficient credits for bulk analysis", user_id=str(current_user.id), cost=total_cost)
+            raise HTTPException( status_code=402, detail=f"Insufficient credits. This action requires {total_cost} credits." )
         # ------------------------------
         
         # Trigger all four analyses sequentially
         # Trigger all four analyses in background to avoid API timeout (503)
         n8n_service = N8NService()
-        background_tasks.add_task(
-            trigger_full_analysis_background, 
-            domain_names, 
-            n8n_service, 
-            str(current_user.id)
-        )
+        background_tasks.add_task( trigger_full_analysis_background, domain_names, n8n_service, str(current_user.id) )
         
-        return {
-            "success": True,
-            "message": f"Successfully queued DataForSEO extraction for {len(domain_names)} domains. Metrics will update as they complete in the background and might take several minutes.",
-            "triggered_count": len(domain_names),
-            "skipped_count": 0,
-            "triggered_domains": domain_names[:100]
-        }
+        return { "success": True, "message": f"Successfully queued DataForSEO extraction for {len(domain_names)} domains. Metrics will update as they complete in the background and might take several minutes.", "triggered_count": len(domain_names), "skipped_count": 0, "triggered_domains": domain_names[:100] }
         
     except Exception as e:
         error_msg = str(e)
-        logger.error("Failed to trigger bulk all metrics analysis", 
-                    error=error_msg,
-                    limit=limit)
+        logger.error("Failed to trigger bulk all metrics analysis", error=error_msg, limit=limit)
         
         # Check if it's a timeout or connection error
         if 'timeout' in error_msg.lower() or 'connection' in error_msg.lower() or 'reset' in error_msg.lower():
-            raise HTTPException(
-                status_code=504, 
-                detail=f"Database query timed out while fetching auctions. Error: {error_msg}"
-            )
+            raise HTTPException( status_code=504, detail=f"Database query timed out while fetching auctions. Error: {error_msg}" )
         
         raise HTTPException(status_code=500, detail=f"Failed to trigger bulk all metrics analysis: {error_msg}")
 
 
 @router.get("/auctions/report")
-async def get_auctions_report(
-    search: Optional[str] = Query(None, description="Search by domain name"),
-    preferred: Optional[bool] = Query(None, description="Filter by preferred status"),
-    auction_site: Optional[str] = Query(None, description="Filter by auction site"),
-    offering_type: Optional[str] = Query(None, description="Filter by market type: 'auction', 'backorder', 'buy_now'"),
-    tld: Optional[str] = Query(None, description="Filter by TLD extension (e.g., '.com', '.ai') - deprecated, use tlds"),
-    tlds: Optional[str] = Query(None, description="Comma-separated list of TLDs (e.g., '.com,.io,.ai')"),
-    has_statistics: Optional[bool] = Query(None, description="Filter by has_statistics"),
-    scored: Optional[bool] = Query(None, description="Filter by scored status (has score)"),
-    min_rank: Optional[int] = Query(None, description="Minimum ranking", ge=1),
-    max_rank: Optional[int] = Query(None, description="Maximum ranking", ge=1),
-    min_score: Optional[float] = Query(None, description="Minimum score", ge=0, le=100),
-    max_score: Optional[float] = Query(None, description="Maximum score", ge=0, le=100),
-    expiration_from_date: Optional[str] = Query(None, description="Filter by expiration date from (YYYY-MM-DD)"),
-    expiration_to_date: Optional[str] = Query(None, description="Filter by expiration date to (YYYY-MM-DD)"),
-    auction_sites: Optional[str] = Query(None, description="Comma-separated list of auction sites (e.g., 'godaddy,namecheap')"),
-    sort_by: str = Query("expiration_date", description="Field to sort by"),
-    order: str = Query("asc", description="Sort order (asc, desc)"),
-    limit: int = Query(50, description="Maximum number of records (reduced default to prevent timeouts)", ge=1, le=100),
-    offset: int = Query(0, description="Number of records to skip", ge=0)
-):
+async def get_auctions_report( search: Optional[str] = Query(None, description="Search by domain name"), preferred: Optional[bool] = Query(None, description="Filter by preferred status"), auction_site: Optional[str] = Query(None, description="Filter by auction site"), offering_type: Optional[str] = Query(None, description="Filter by market type: 'auction', 'backorder', 'buy_now'"), tld: Optional[str] = Query(None, description="Filter by TLD extension (e.g., '.com', '.ai') - deprecated, use tlds"), tlds: Optional[str] = Query(None, description="Comma-separated list of TLDs (e.g., '.com,.io,.ai')"), has_statistics: Optional[bool] = Query(None, description="Filter by has_statistics"), scored: Optional[bool] = Query(None, description="Filter by scored status (has score)"), min_rank: Optional[int] = Query(None, description="Minimum ranking", ge=1), max_rank: Optional[int] = Query(None, description="Maximum ranking", ge=1), min_score: Optional[float] = Query(None, description="Minimum score", ge=0, le=100), max_score: Optional[float] = Query(None, description="Maximum score", ge=0, le=100), expiration_from_date: Optional[str] = Query(None, description="Filter by expiration date from (YYYY-MM-DD)"), expiration_to_date: Optional[str] = Query(None, description="Filter by expiration date to (YYYY-MM-DD)"), auction_sites: Optional[str] = Query(None, description="Comma-separated list of auction sites (e.g., 'godaddy,namecheap')"), sort_by: str = Query("expiration_date", description="Field to sort by"), order: str = Query("asc", description="Sort order (asc, desc)"), limit: int = Query(50, description="Maximum number of records (reduced default to prevent timeouts)", ge=1, le=100), offset: int = Query(0, description="Number of records to skip", ge=0) ):
     """
     Get auctions report with page_statistics from auctions table
     
-    Returns auctions with page_statistics when available.
-    Records without statistics will have NULL page_statistics field.
-    """
+    Returns auctions with page_statistics when available. Records without statistics will have NULL page_statistics field. """
     try:
         # Build filters
         filters = {}
@@ -2433,12 +1637,8 @@ async def get_auctions_report(
         if offering_type:
             # Normalize offering_type to lowercase for consistency
             filters['offering_type'] = offering_type.lower().strip()
-            logger.info("Setting offering_type filter", 
-                        offering_type=filters['offering_type'],
-                        original_value=offering_type)
-            logger.debug("Setting offering_type filter", 
-                        offering_type=offering_type,
-                        filter_dict=filters)
+            logger.info("Setting offering_type filter", offering_type=filters['offering_type'], original_value=offering_type)
+            logger.debug("Setting offering_type filter", offering_type=offering_type, filter_dict=filters)
         if tlds:
             # Parse comma-separated TLDs into a list
             filters['tlds'] = [t.strip() for t in tlds.split(',') if t.strip()]
@@ -2480,57 +1680,29 @@ async def get_auctions_report(
         logger.info("Fetching auctions report", filters=filters, limit=limit, offset=offset)
 
         auctions_service = AuctionsService()
-        result = await auctions_service.get_auctions_report(
-            filters=filters,
-            sort_by=sort_by,
-            order=order,
-            limit=limit,
-            offset=offset
-        )
+        result = auctions_service.get_auctions_report( filters=filters, sort_by=sort_by, order=order, limit=limit, offset=offset )
         
         count = result.get("count", 0)
         total_count = result.get("total_count", 0)
         logger.info("Auctions report result", count=count, total=total_count, has_more=result.get("has_more", False))
         
-        return {
-            "success": True,
-            "count": count,
-            "total_count": total_count,
-            "has_more": result.get("has_more", False),
-            "auctions": result.get("auctions", [])
-        }
+        return { "success": True, "count": count, "total_count": total_count, "has_more": result.get("has_more", False), "auctions": result.get("auctions", []) }
         
     except Exception as e:
         error_msg = str(e)
         error_type = type(e).__name__
-        logger.error("Failed to get auctions report", 
-                    error=error_msg,
-                    error_type=error_type,
-                    sort_by=sort_by,
-                    order=order,
-                    limit=limit,
-                    offset=offset,
-                    exc_info=True)
+        logger.error("Failed to get auctions report", error=error_msg, error_type=error_type, sort_by=sort_by, order=order, limit=limit, offset=offset, exc_info=True)
         
         # Check if it's a timeout or connection error
         if 'timeout' in error_msg.lower() or 'timed out' in error_msg.lower():
-            raise HTTPException(
-                status_code=504, 
-                detail=f"Database query timed out. {error_msg}"
-            )
+            raise HTTPException( status_code=504, detail=f"Database query timed out. {error_msg}" )
         elif 'connection' in error_msg.lower() or 'reset' in error_msg.lower() or 'no available server' in error_msg.lower():
-            raise HTTPException(
-                status_code=503,
-                detail=f"Database connection error. {error_msg}"
-            )
+            raise HTTPException( status_code=503, detail=f"Database connection error. {error_msg}" )
         elif 'not found' in error_msg.lower() or 'does not exist' in error_msg.lower() or '42703' in error_msg:
             # Only return 404 for actual missing resources, not for RPC function errors
             if 'rpc' in error_msg.lower() or 'function' in error_msg.lower() or '42703' in error_msg:
                 # Log full error for debugging
-                logger.error("Database function error", 
-                           error=error_msg,
-                           error_type=type(e).__name__,
-                           exc_info=True)
+                logger.error("Database function error", error=error_msg, error_type=type(e).__name__, exc_info=True)
                 # Extract full error details
                 full_error = error_msg
                 if hasattr(e, 'args') and e.args:
@@ -2538,42 +1710,25 @@ async def get_auctions_report(
                         full_error = str(e.args[0])
                     elif isinstance(e.args[0], str):
                         full_error = e.args[0]
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Database function error (code 42703 = undefined column). The filter_auctions_by_tlds function may have a missing column. Please ensure migration 20250131000013_fix_tld_filter_function.sql is applied. Full error: {full_error}"
-                )
-            raise HTTPException(
-                status_code=404,
-                detail=f"Database table or resource not found. {error_msg}"
-            )
+                raise HTTPException( status_code=500, detail=f"Database function error (code 42703 = undefined column). The filter_auctions_by_tlds function may have a missing column. Please ensure migration 20250131000013_fix_tld_filter_function.sql is applied. Full error: {full_error}" )
+            raise HTTPException( status_code=404, detail=f"Database table or resource not found. {error_msg}" )
         
         raise HTTPException(status_code=500, detail=f"Failed to retrieve auctions report: {error_msg}")
 
 
 @router.post("/auctions/process-scoring-batch")
-async def process_scoring_batch(
-    batch_size: int = Query(10000, ge=1, le=50000, description="Number of records to process"),
-    config_id: Optional[str] = Query(None, description="Optional scoring config ID"),
-    recalculate_rankings: bool = Query(True, description="Recalculate global rankings after processing")
-):
+async def process_scoring_batch( batch_size: int = Query(10000, ge=1, le=50000, description="Number of records to process"), config_id: Optional[str] = Query(None, description="Optional scoring config ID"), recalculate_rankings: bool = Query(True, description="Recalculate global rankings after processing") ):
     """
-    Process a batch of unprocessed auctions through the scoring pipeline.
-    
-    This endpoint:
+    Process a batch of unprocessed auctions through the scoring pipeline. This endpoint:
     1. Fetches unprocessed records with pre-scoring from Supabase
     2. Calculates complex scores (LFS, semantic) in Python
     3. Updates scores back to database
     4. Optionally recalculates global rankings
     
-    Returns processing statistics.
-    """
+    Returns processing statistics. """
     try:
         scoring_service = AuctionScoringService()
-        result = await scoring_service.process_batch(
-            batch_size=batch_size,
-            config_id=config_id,
-            recalculate_rankings_after=recalculate_rankings
-        )
+        result = scoring_service.process_batch( batch_size=batch_size, config_id=config_id, recalculate_rankings_after=recalculate_rankings )
         return result
     except Exception as e:
         logger.error("Failed to process scoring batch", error=str(e))
@@ -2583,13 +1738,10 @@ async def process_scoring_batch(
 @router.get("/auctions/scoring-stats")
 async def get_scoring_stats():
     """
-    Get statistics about auction scoring progress.
-    
-    Returns counts of processed, unprocessed, and scored records.
-    """
+    Get statistics about auction scoring progress. Returns counts of processed, unprocessed, and scored records. """
     try:
         scoring_service = AuctionScoringService()
-        stats = await scoring_service.get_processing_stats()
+        stats = scoring_service.get_processing_stats()
         return stats
     except Exception as e:
         logger.error("Failed to get scoring stats", error=str(e))
@@ -2599,13 +1751,10 @@ async def get_scoring_stats():
 @router.post("/auctions/recalculate-rankings")
 async def recalculate_rankings():
     """
-    Recalculate global rankings and preferred flags for all scored auctions.
-    
-    This should be called periodically or after processing large batches.
-    """
+    Recalculate global rankings and preferred flags for all scored auctions. This should be called periodically or after processing large batches. """
     try:
         scoring_service = AuctionScoringService()
-        result = await scoring_service.recalculate_rankings()
+        result = scoring_service.recalculate_rankings()
         return result
     except Exception as e:
         logger.error("Failed to recalculate rankings", error=str(e))
@@ -2641,42 +1790,23 @@ async def fetch_wayback_first_seen(domain: str):
         
         # Fetch Wayback Machine data with timeout handling
         try:
-            wayback_data = await asyncio.wait_for(
-                wayback_service.get_domain_history(domain),
-                timeout=30.0  # 30 second timeout
-            )
+            wayback_data = asyncio.wait_for( wayback_service.get_domain_history(domain), timeout=30.0  # 30 second timeout )
         except asyncio.TimeoutError:
             logger.warning("Wayback Machine request timed out", domain=domain)
-            return {
-                "success": False,
-                "message": "Request timed out. Wayback Machine may be slow or unavailable.",
-                "first_seen": None
-            }
+            return { "success": False, "message": "Request timed out. Wayback Machine may be slow or unavailable.", "first_seen": None }
         except Exception as e:
             logger.error("Wayback Machine request failed", domain=domain, error=str(e))
-            return {
-                "success": False,
-                "message": f"Failed to fetch from Wayback Machine: {str(e)}",
-                "first_seen": None
-            }
+            return { "success": False, "message": f"Failed to fetch from Wayback Machine: {str(e)}", "first_seen": None }
         
         if not wayback_data:
             logger.info("No Wayback Machine data returned", domain=domain)
-            return {
-                "success": False,
-                "message": "No Wayback Machine data found for this domain",
-                "first_seen": None
-            }
+            return { "success": False, "message": "No Wayback Machine data found for this domain", "first_seen": None }
         
         # Get the first capture timestamp
         captures = wayback_data.get('captures', [])
         if not captures:
             logger.info("No captures found in Wayback Machine data", domain=domain)
-            return {
-                "success": False,
-                "message": "No captures found for this domain",
-                "first_seen": None
-            }
+            return { "success": False, "message": "No captures found for this domain", "first_seen": None }
         
         # Find the earliest capture
         try:
@@ -2684,18 +1814,10 @@ async def fetch_wayback_first_seen(domain: str):
             first_timestamp = first_capture.get("timestamp")
         except Exception as e:
             logger.error("Failed to find earliest capture", domain=domain, error=str(e))
-            return {
-                "success": False,
-                "message": "Failed to process capture data",
-                "first_seen": None
-            }
+            return { "success": False, "message": "Failed to process capture data", "first_seen": None }
         
         if not first_timestamp:
-            return {
-                "success": False,
-                "message": "Invalid timestamp in capture data",
-                "first_seen": None
-            }
+            return { "success": False, "message": "Invalid timestamp in capture data", "first_seen": None }
         
         # Parse timestamp (format: YYYYMMDDHHMMSS)
         try:
@@ -2706,53 +1828,30 @@ async def fetch_wayback_first_seen(domain: str):
                 first_seen_dt = datetime.strptime(first_timestamp[:8], "%Y%m%d")
             except ValueError:
                 logger.error("Failed to parse timestamp", domain=domain, timestamp=first_timestamp)
-                return {
-                    "success": False,
-                    "message": "Failed to parse timestamp",
-                    "first_seen": None
-                }
+                return { "success": False, "message": "Failed to parse timestamp", "first_seen": None }
         
         # Update all auction records for this domain with the first_seen date
         if not db.client:
             raise HTTPException(status_code=503, detail="Database connection not available")
         
         try:
-            result = (await db._get_client()).table('auctions').update({
-                'first_seen': first_seen_dt.isoformat()
-            }).eq('domain', domain).execute()
+            result = (await db._get_client()).table('auctions').update({ 'first_seen': first_seen_dt.isoformat() }).eq('domain', domain).execute()
             
             updated_count = len(result.data) if result.data else 0
             
-            logger.info("Updated first_seen from Wayback Machine", 
-                       domain=domain, 
-                       first_seen=first_seen_dt.isoformat(),
-                       updated_count=updated_count)
+            logger.info("Updated first_seen from Wayback Machine", domain=domain, first_seen=first_seen_dt.isoformat(), updated_count=updated_count)
             
-            return {
-                "success": True,
-                "first_seen": first_seen_dt.isoformat(),
-                "first_seen_year": first_seen_dt.year,
-                "updated_count": updated_count
-            }
+            return { "success": True, "first_seen": first_seen_dt.isoformat(), "first_seen_year": first_seen_dt.year, "updated_count": updated_count }
         except Exception as e:
             logger.error("Failed to update database", domain=domain, error=str(e))
-            return {
-                "success": False,
-                "message": f"Failed to update database: {str(e)}",
-                "first_seen": None
-            }
+            return { "success": False, "message": f"Failed to update database: {str(e)}", "first_seen": None }
         
     except HTTPException:
         raise
     except Exception as e:
         error_msg = str(e)
-        logger.error("Failed to fetch Wayback Machine first seen", 
-                    domain=domain, error=error_msg, exc_info=True)
-        return {
-            "success": False,
-            "message": f"Unexpected error: {error_msg}",
-            "first_seen": None
-        }
+        logger.error("Failed to fetch Wayback Machine first seen", domain=domain, error=error_msg, exc_info=True)
+        return { "success": False, "message": f"Unexpected error: {error_msg}", "first_seen": None }
 
 
 async def get_queue_count() -> int:
@@ -2779,9 +1878,7 @@ async def process_dataforseo_queue():
             return
         
         # Get 100 pending domains ordered by expiration_date ASC (closest to NOW first)
-        queue_result = (await db._get_client()).table('dataforseo_queue').select(
-            'id,domain,expiration_date'
-        ).eq('status', 'pending').order('expiration_date', desc= False).limit(100).execute()
+        queue_result = (await db._get_client()).table('dataforseo_queue').select( 'id,domain,expiration_date' ).eq('status', 'pending').order('expiration_date', desc= False).limit(100).execute()
         
         if not queue_result.data or len(queue_result.data) < 100:
             logger.info("Queue does not have 100 domains yet", count=len(queue_result.data) if queue_result.data else 0)
@@ -2791,30 +1888,21 @@ async def process_dataforseo_queue():
         queue_ids = [item['id'] for item in queue_result.data]
         
         # Update queue items to 'processing'
-        (await db._get_client()).table('dataforseo_queue').update({
-            'status': 'processing',
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }).in_('id', queue_ids).execute()
+        (await db._get_client()).table('dataforseo_queue').update({ 'status': 'processing', 'updated_at': datetime.now(timezone.utc).isoformat() }).in_('id', queue_ids).execute()
         
         logger.info("Processing DataForSEO queue", domain_count=len(domains))
         
         # Trigger DataForSEO analysis via N8N
         n8n_service = N8NService()
-        n8n_result = await n8n_service.trigger_bulk_page_summary_workflow(domains)
+        n8n_result = n8n_service.trigger_bulk_page_summary_workflow(domains)
         
         if n8n_result:
-            logger.info("Triggered N8N workflow for queued domains", 
-                       domain_count=len(domains),
-                       request_id=n8n_result.get('request_id'))
+            logger.info("Triggered N8N workflow for queued domains", domain_count=len(domains), request_id=n8n_result.get('request_id'))
             # Note: Queue items will be marked as 'completed' by the n8n webhook callback
             # when page_statistics are updated in the auctions table
         else:
             # Mark as failed if N8N trigger failed
-            (await db._get_client()).table('dataforseo_queue').update({
-                'status': 'failed',
-                'error_message': 'Failed to trigger N8N workflow',
-                'updated_at': datetime.now(timezone.utc).isoformat()
-            }).in_('id', queue_ids).execute()
+            (await db._get_client()).table('dataforseo_queue').update({ 'status': 'failed', 'error_message': 'Failed to trigger N8N workflow', 'updated_at': datetime.now(timezone.utc).isoformat() }).in_('id', queue_ids).execute()
             logger.error("Failed to trigger N8N workflow for queue", queue_ids=queue_ids)
             
     except Exception as e:
@@ -2840,42 +1928,28 @@ async def queue_domain_for_dataforseo(domain: str):
             raise HTTPException(status_code=503, detail="Database connection not available")
         
         # Check if domain exists in auctions table and meets criteria
-        auction_result = (await db._get_client()).table('auctions').select(
-            'id,domain,score,expiration_date,page_statistics'
-        ).eq('domain', domain).limit(1).execute()
+        auction_result = (await db._get_client()).table('auctions').select( 'id,domain,score,expiration_date,page_statistics' ).eq('domain', domain).limit(1).execute()
         
         if not auction_result.data or len(auction_result.data) == 0:
-            return {
-                "success": False,
-                "message": "Domain not found in auctions table",
-                "queued": False
-            }
+            return { "success": False, "message": "Domain not found in auctions table", "queued": False }
         
         auction = auction_result.data[0]
         
         # Check if domain is scored (score > 0)
         if not auction.get('score') or auction['score'] <= 0:
-            return {
-                "success": False,
-                "message": "Domain must be scored (score > 0) to queue for DataForSEO analysis",
-                "queued": False
-            }
+            return { "success": False, "message": "Domain must be scored (score > 0) to queue for DataForSEO analysis", "queued": False }
         
         # Check if domain already has page_statistics
         if auction.get('page_statistics'):
-            return {
-                "success": False,
-                "message": "Domain already has DataForSEO data",
-                "queued": False
-            }
+            return { "success": False, "message": "Domain already has DataForSEO data", "queued": False }
         
         # Check if domain is already in queue
-        queue_check = await (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
+        queue_check = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
         if queue_check.data and len(queue_check.data) > 0:
             queue_item = queue_check.data[0]
             if queue_item['status'] == 'pending':
                 # Get position in queue
-                position_result = await (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
+                position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
                 position = None
                 if position_result.data:
                     for idx, item in enumerate(position_result.data, 1):
@@ -2883,28 +1957,16 @@ async def queue_domain_for_dataforseo(domain: str):
                             position = idx
                             break
                 
-                queue_count = await get_queue_count()
-                return {
-                    "success": True,
-                    "message": "Domain already in queue",
-                    "queued": True,
-                    "position": position,
-                    "queue_count": queue_count
-                }
+                queue_count = get_queue_count()
+                return { "success": True, "message": "Domain already in queue", "queued": True, "position": position, "queue_count": queue_count }
         
         # Add to queue
-        queue_data = {
-            'domain': domain,
-            'status': 'pending',
-            'expiration_date': auction.get('expiration_date'),
-            'score': auction.get('score'),
-            'auction_id': auction.get('id')
-        }
+        queue_data = { 'domain': domain, 'status': 'pending', 'expiration_date': auction.get('expiration_date'), 'score': auction.get('score'), 'auction_id': auction.get('id') }
         
-        result = await (await db._get_client()).table('dataforseo_queue').insert(queue_data).execute()
+        result = (await db._get_client()).table('dataforseo_queue').insert(queue_data).execute()
         
         # Get queue count
-        queue_count = await get_queue_count()
+        queue_count = get_queue_count()
         
         # Check if we've reached 100 and trigger processing
         if queue_count >= 100:
@@ -2912,7 +1974,7 @@ async def queue_domain_for_dataforseo(domain: str):
             asyncio.create_task(process_dataforseo_queue())
         
         # Get position in queue (ordered by expiration_date ASC)
-        position_result = await (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
+        position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
         position = None
         if position_result.data:
             for idx, item in enumerate(position_result.data, 1):
@@ -2922,14 +1984,7 @@ async def queue_domain_for_dataforseo(domain: str):
         
         logger.info("Domain added to DataForSEO queue", domain=domain, position=position, queue_count=queue_count)
         
-        return {
-            "success": True,
-            "message": "Domain added to queue",
-            "queued": True,
-            "position": position,
-            "queue_count": queue_count,
-            "will_process": queue_count >= 100
-        }
+        return { "success": True, "message": "Domain added to queue", "queued": True, "position": position, "queue_count": queue_count, "will_process": queue_count >= 100 }
         
     except HTTPException:
         raise
@@ -2954,20 +2009,16 @@ async def get_dataforseo_queue_status(domain: Optional[str] = Query(None, descri
             raise HTTPException(status_code=503, detail="Database connection not available")
         
         # Get queue count
-        queue_count = await get_queue_count()
+        queue_count = get_queue_count()
         
-        result = {
-            "queue_count": queue_count,
-            "max_queue_size": 100,
-            "ready_to_process": queue_count >= 100
-        }
+        result = { "queue_count": queue_count, "max_queue_size": 100, "ready_to_process": queue_count >= 100 }
         
         # If domain provided, check position
         if domain:
-            queue_item = await (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).eq('status', 'pending').limit(1).execute()
+            queue_item = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).eq('status', 'pending').limit(1).execute()
             if queue_item.data and len(queue_item.data) > 0:
                 # Calculate position
-                position_result = await (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
+                position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
                 position = None
                 if position_result.data:
                     for idx, item in enumerate(position_result.data, 1):
@@ -2995,9 +2046,7 @@ async def cancel_domain_queue_request(domain: str):
     Remove a domain from the DataForSEO queue (cancel queue request)
     
     Only removes domains with 'pending' status. Domains that are already 'processing'
-    cannot be cancelled.
-    
-    Returns success status
+    cannot be cancelled. Returns success status
     """
     try:
         db = get_database()
@@ -3005,35 +2054,23 @@ async def cancel_domain_queue_request(domain: str):
             raise HTTPException(status_code=503, detail="Database connection not available")
         
         # Check if domain is in queue
-        queue_check = await (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
+        queue_check = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
         
         if not queue_check.data or len(queue_check.data) == 0:
-            return {
-                "success": False,
-                "message": "Domain not found in queue",
-                "cancelled": False
-            }
+            return { "success": False, "message": "Domain not found in queue", "cancelled": False }
         
         queue_item = queue_check.data[0]
         
         # Only allow cancelling pending items
         if queue_item['status'] != 'pending':
-            return {
-                "success": False,
-                "message": f"Cannot cancel domain with status '{queue_item['status']}'. Only pending requests can be cancelled.",
-                "cancelled": False
-            }
+            return { "success": False, "message": f"Cannot cancel domain with status '{queue_item['status']}'. Only pending requests can be cancelled.", "cancelled": False }
         
         # Delete from queue
-        result = await (await db._get_client()).table('dataforseo_queue').delete().eq('id', queue_item['id']).execute()
+        result = (await db._get_client()).table('dataforseo_queue').delete().eq('id', queue_item['id']).execute()
         
         logger.info("Domain removed from DataForSEO queue", domain=domain)
         
-        return {
-            "success": True,
-            "message": "Domain removed from queue",
-            "cancelled": True
-        }
+        return { "success": True, "message": "Domain removed from queue", "cancelled": True }
         
     except HTTPException:
         raise
@@ -3047,20 +2084,14 @@ async def cancel_domain_queue_request(domain: str):
 async def delete_expired_auctions():
     """
     Manually delete all expired auctions (expiration_date < NOW())
-    This endpoint can be called to clean up expired records at any time.
-    
-    Returns:
+    This endpoint can be called to clean up expired records at any time. Returns:
         Number of records deleted
     """
     try:
         db = get_database()
         deleted_count = await db.delete_expired_auctions()
         
-        return {
-            "success": True,
-            "message": f"Deleted {deleted_count} expired auction(s)",
-            "deleted_count": deleted_count
-        }
+        return { "success": True, "message": f"Deleted {deleted_count} expired auction(s)", "deleted_count": deleted_count }
     except Exception as e:
         error_msg = str(e)
         logger.error("Failed to delete expired auctions", error=error_msg, exc_info=True)
@@ -3073,20 +2104,16 @@ async def get_refresh_costs(current_user = Depends(get_current_user)):
     try:
         from services.marketplace_batch_service import MarketplaceBatchService
         service = MarketplaceBatchService()
-        costs = await service.get_refresh_costs()
+        costs = service.get_refresh_costs()
         return costs
     except Exception as e:
         logger.error("Failed to get refresh costs", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/auctions/refresh-preview")
-async def get_refresh_preview(
-    payload: Dict[str, Any] = Body(...),
-    current_user = Depends(get_current_user)
-):
+async def get_refresh_preview( payload: Dict[str, Any] = Body(...), current_user = Depends(get_current_user) ):
     """
-    Preview how many domains would be refreshed with the given filters.
-    Body: { filters: {...}, force: bool }
+    Preview how many domains would be refreshed with the given filters. Body: { filters: {...}, force: bool }
 
     Returns: { domain_count: int, would_refresh: bool, filters: {...} }
     """
@@ -3097,36 +2124,19 @@ async def get_refresh_preview(
         filters = payload.get("filters", payload)
         force = payload.get("force", False)
 
-        domains_data = await service.get_auctions_missing_any_metric_with_filters(
-            filters=filters,
-            limit=1000,
-            force_refresh=force
-        )
+        domains_data = await service.get_auctions_missing_any_metric_with_filters( filters=filters, limit=1000, force_refresh=force )
 
-        return {
-            "success": True,
-            "domain_count": len(domains_data),
-            "would_refresh": len(domains_data) > 0,
-            "filters": filters,
-            "force": force,
-            "message": f"Found {len(domains_data)} domains that would be refreshed" if domains_data else "No domains need refreshing - all have fresh metrics"
-        }
+        return { "success": True, "domain_count": len(domains_data), "would_refresh": len(domains_data) > 0, "filters": filters, "force": force, "message": f"Found {len(domains_data)} domains that would be refreshed" if domains_data else "No domains need refreshing - all have fresh metrics" }
     except Exception as e:
         logger.error("Failed to get refresh preview", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/auctions/bulk-refresh")
-async def trigger_bulk_refresh(
-    payload: Dict[str, Any] = Body(...),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    current_user = Depends(get_current_user)
-):
+async def trigger_bulk_refresh( payload: Dict[str, Any] = Body(...), background_tasks: BackgroundTasks = BackgroundTasks(), current_user = Depends(get_current_user) ):
     """
-    'Find and Fill' — refresh up to 1,000 domains with missing metrics.
-    Body: { filters: {...}, force: bool }
+    'Find and Fill' — refresh up to 1,000 domains with missing metrics. Body: { filters: {...}, force: bool }
 
-    Returns immediately with 'in_progress' status; processing continues in background.
-    """
+    Returns immediately with 'in_progress' status; processing continues in background. """
     try:
         from services.marketplace_batch_service import MarketplaceBatchService
         from services.progress_tracker import ProgressTracker
@@ -3140,45 +2150,23 @@ async def trigger_bulk_refresh(
         user_id = current_user.id
 
         # Create a progress job (will be updated once domains are found)
-        job_id = await ProgressTracker.create_job(
-            user_id=str(user_id),
-            job_type="bulk_refresh",
-            total_items=1000,  # Will be updated when actual count is known
-            metadata={"filters": filters, "force": False}
-        )
+        job_id = ProgressTracker.create_job( user_id=str(user_id), job_type="bulk_refresh", total_items=1000,  # Will be updated when actual count is known
+            metadata={"filters": filters, "force": False} )
 
         # Start processing in background and return immediately
-        background_tasks.add_task(
-            service.process_marketplace_refresh,
-            user_id=user_id,
-            filters=filters,
-            force=False,
-            job_id=job_id
-        )
+        background_tasks.add_task( service.process_marketplace_refresh, user_id=user_id, filters=filters, force=False, job_id=job_id )
 
-        return {
-            "success": True,
-            "in_progress": True,
-            "job_id": job_id,
-            "message": "Fill Gaps refresh started — processing up to 1,000 domains in the background. Results will appear shortly."
-        }
+        return { "success": True, "in_progress": True, "job_id": job_id, "message": "Fill Gaps refresh started — processing up to 1,000 domains in the background. Results will appear shortly." }
     except Exception as e:
         logger.error("Failed to trigger bulk refresh", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/auctions/force-refresh")
-async def trigger_force_refresh(
-    payload: Dict[str, Any] = Body(...),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    current_user = Depends(get_current_user)
-):
+async def trigger_force_refresh( payload: Dict[str, Any] = Body(...), background_tasks: BackgroundTasks = BackgroundTasks(), current_user = Depends(get_current_user) ):
     """
-    Force Refresh — get fresh SEO metrics for up to 1,000 domains matching filters,
-    overriding any existing metrics regardless of when they were last refreshed.
-    Body: { filters: {...}, force: bool }
+    Force Refresh — get fresh SEO metrics for up to 1,000 domains matching filters, overriding any existing metrics regardless of when they were last refreshed. Body: { filters: {...}, force: bool }
 
-    Returns immediately with 'in_progress' status; processing continues in background.
-    """
+    Returns immediately with 'in_progress' status; processing continues in background. """
     try:
         from services.marketplace_batch_service import MarketplaceBatchService
         from services.progress_tracker import ProgressTracker
@@ -3191,46 +2179,26 @@ async def trigger_force_refresh(
         user_id = current_user.id
 
         # Create a progress job (will be updated once domains are found)
-        job_id = await ProgressTracker.create_job(
-            user_id=str(user_id),
-            job_type="force_refresh",
-            total_items=1000,  # Will be updated when actual count is known
-            metadata={"filters": filters, "force": True}
-        )
+        job_id = ProgressTracker.create_job( user_id=str(user_id), job_type="force_refresh", total_items=1000,  # Will be updated when actual count is known
+            metadata={"filters": filters, "force": True} )
 
         # Start processing in background and return immediately
-        background_tasks.add_task(
-            service.process_marketplace_refresh,
-            user_id=user_id,
-            filters=filters,
-            force=True,
-            job_id=job_id
-        )
+        background_tasks.add_task( service.process_marketplace_refresh, user_id=user_id, filters=filters, force=True, job_id=job_id )
 
-        return {
-            "success": True,
-            "in_progress": True,
-            "job_id": job_id,
-            "message": "Force Refresh started — processing up to 1,000 domains in the background. Results will appear shortly."
-        }
+        return { "success": True, "in_progress": True, "job_id": job_id, "message": "Force Refresh started — processing up to 1,000 domains in the background. Results will appear shortly." }
     except Exception as e:
         logger.error("Failed to trigger force refresh", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/auctions/refresh-status/{job_id}")
-async def get_refresh_status(
-    job_id: str,
-    current_user = Depends(get_current_user)
-):
+async def get_refresh_status( job_id: str, current_user = Depends(get_current_user) ):
     """
-    Get the status of a running refresh job.
-    Returns progress information including percent complete and current status.
-    """
+    Get the status of a running refresh job. Returns progress information including percent complete and current status. """
     try:
         from services.progress_tracker import ProgressTracker
 
-        status = await ProgressTracker.get_job_status(job_id)
+        status = ProgressTracker.get_job_status(job_id)
 
         if not status:
             raise HTTPException(status_code=404, detail="Job not found or expired")
@@ -3239,20 +2207,7 @@ async def get_refresh_status(
         if status.get("user_id") != str(current_user.id):
             raise HTTPException(status_code=403, detail="Not authorized to view this job")
 
-        return {
-            "success": True,
-            "job_id": job_id,
-            "status": status.get("status"),
-            "progress_percent": status.get("progress_percent", 0),
-            "total_items": status.get("total_items", 0),
-            "processed_items": status.get("processed_items", 0),
-            "failed_items": status.get("failed_items", 0),
-            "current_batch": status.get("current_batch", 0),
-            "total_batches": status.get("total_batches", 0),
-            "message": status.get("message", ""),
-            "started_at": status.get("started_at"),
-            "completed_at": status.get("completed_at")
-        }
+        return { "success": True, "job_id": job_id, "status": status.get("status"), "progress_percent": status.get("progress_percent", 0), "total_items": status.get("total_items", 0), "processed_items": status.get("processed_items", 0), "failed_items": status.get("failed_items", 0), "current_batch": status.get("current_batch", 0), "total_batches": status.get("total_batches", 0), "message": status.get("message", ""), "started_at": status.get("started_at"), "completed_at": status.get("completed_at") }
     except HTTPException:
         raise
     except Exception as e:
@@ -3261,25 +2216,19 @@ async def get_refresh_status(
 
 
 @router.get("/auctions/refresh-history")
-async def get_refresh_history(
-    limit: int = Query(20, ge=1, le=100),
-    current_user = Depends(get_current_user)
-):
+async def get_refresh_history( limit: int = Query(20, ge=1, le=100), current_user = Depends(get_current_user) ):
     """Get the batch refresh history for the current user"""
     try:
         from services.marketplace_batch_service import MarketplaceBatchService
         service = MarketplaceBatchService()
-        history = await service.get_refresh_history(user_id=current_user.id, limit=limit)
+        history = service.get_refresh_history(user_id=current_user.id, limit=limit)
         return history
     except Exception as e:
         logger.error("Failed to get refresh history", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/auctions/domain-refresh")
-async def trigger_domain_refresh(
-    payload: Dict[str, Any] = Body(...),
-    current_user = Depends(get_current_user)
-):
+async def trigger_domain_refresh( payload: Dict[str, Any] = Body(...), current_user = Depends(get_current_user) ):
     """Trigger a refresh for a single domain"""
     try:
         domain = payload.get("domain")
@@ -3288,10 +2237,7 @@ async def trigger_domain_refresh(
             
         from services.marketplace_batch_service import MarketplaceBatchService
         service = MarketplaceBatchService()
-        result = await service.refresh_single_domain(
-            user_id=current_user.id,
-            domain=domain
-        )
+        result = service.refresh_single_domain( user_id=current_user.id, domain=domain )
         if not result.get("success"):
             raise HTTPException(status_code=400, detail=result.get("error"))
         return result
@@ -3302,36 +2248,21 @@ async def trigger_domain_refresh(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/auctions/{auction_id}/preferred")
-async def toggle_preferred_auction(
-    auction_id: str,
-    payload: Dict[str, Any] = Body(...),
-    db = Depends(get_database),
-    current_user = Depends(get_current_user)
-):
+async def toggle_preferred_auction( auction_id: str, payload: Dict[str, Any] = Body(...), db = Depends(get_database), current_user = Depends(get_current_user) ):
     """Toggle the preferred status of an auction"""
     try:
         preferred = payload.get("preferred", False)
         
-        # We don't check for ownership here since auctions are shared across users in the base table.
-        # But this flag affects how they are filtered/shown. 
-        # In this system, 'preferred' is usually global or we'd need a sub-table per user.
-        # Given the current schema, we update the auctions table.
-        # DO NOT update `updated_at` here, because `updated_at` is used by the frontend
+        # We don't check for ownership here since auctions are shared across users in the base table. # But this flag affects how they are filtered/shown. # In this system, 'preferred' is usually global or we'd need a sub-table per user. # Given the current schema, we update the auctions table. # DO NOT update `updated_at` here, because `updated_at` is used by the frontend
         # to determine if SEO metrics are "fresh" or "stale". Toggling a favorite 
-        # is just a UI metadata change and should not trigger a "fresh" state.
-        result = (await db._get_client()).table('auctions').update({
-            'preferred': preferred
-        }).eq('id', auction_id).execute()
+        # is just a UI metadata change and should not trigger a "fresh" state. result = (await db._get_client()).table('auctions').update({ 'preferred': preferred }).eq('id', auction_id).execute()
         
         if not result.data:
-            # If no auction with that ID, it might be a UUID mismatch or domain-based update needed.
-            # But normally auctions have a UUID ID.
-            logger.warning("No auction found to toggle preferred", auction_id=auction_id)
+            # If no auction with that ID, it might be a UUID mismatch or domain-based update needed. # But normally auctions have a UUID ID. logger.warning("No auction found to toggle preferred", auction_id=auction_id)
             return {"success": False, "message": "Auction not found"}
             
         return {"success": True, "preferred": preferred}
         
     except Exception as e:
-        logger.error("Failed to toggle preferred auction", 
-                    auction_id=auction_id, error=str(e))
+        logger.error("Failed to toggle preferred auction", auction_id=auction_id, error=str(e))
         raise HTTPException(status_code=500, detail=str(e))

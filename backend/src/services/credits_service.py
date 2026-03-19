@@ -17,17 +17,14 @@ class CreditsService:
     async def get_balance(self, user_id: UUID) -> float:
         """Get current credit balance for a user"""
         try:
-            response = await (await self.db._get_client()).table('user_credits').select('balance').eq('user_id', str(user_id)).execute()
+            response = (await self.await db._get_client()).table('user_credits').select('balance').eq('user_id', str(user_id)).execute()
             if response.data:
                 return float(response.data[0]['balance'])
             
             # If no record exists, create one with 0 balance
             # This handles new users gracefully
             try:
-                await (await self.db._get_client()).table('user_credits').insert({
-                    'user_id': str(user_id), 
-                    'balance': 0.0
-                }).execute()
+                await (await self.await db._get_client()).table('user_credits').insert({ 'user_id': str(user_id), 'balance': 0.0 }).execute()
                 return 0.0
             except Exception as e:
                 logger.error("Failed to initialize user credits", user_id=str(user_id), error=str(e))
@@ -37,29 +34,14 @@ class CreditsService:
             logger.error("Failed to get credit balance", user_id=str(user_id), error=str(e))
             raise
 
-    async def deduct_credits(
-        self, 
-        user_id: UUID, 
-        amount: float, 
-        description: str, 
-        reference_id: Optional[str] = None,
-        dollar_amount: float = 0.0
-    ) -> bool:
+    async def deduct_credits( self, user_id: UUID, amount: float, description: str, reference_id: Optional[str] = None, dollar_amount: float = 0.0 ) -> bool:
         """
-        Deduct credits from user's balance.
-        Returns True if successful, False if insufficient funds.
-        """
+        Deduct credits from user's balance. Returns True if successful, False if insufficient funds. """
         try:
             # key for RPC
-            params = {
-                'p_user_id': str(user_id),
-                'p_amount': float(amount),
-                'p_description': description,
-                'p_reference_id': reference_id,
-                'p_dollar_amount': float(dollar_amount)
-            }
+            params = { 'p_user_id': str(user_id), 'p_amount': float(amount), 'p_description': description, 'p_reference_id': reference_id, 'p_dollar_amount': float(dollar_amount) }
             
-            response = await (await self.db._get_client()).rpc('deduct_credits', params).execute()
+            response = (await self.await db._get_client()).rpc('deduct_credits', params).execute()
             
             if response.data:
                 success = response.data.get('success', False)
@@ -80,53 +62,39 @@ class CreditsService:
     async def _deduct_credits_fallback(self, user_id: UUID, amount: float, description: str, reference_id: str, dollar_amount: float = 0.0) -> bool:
         """Fallback method for deduction if RPC is missing"""
         # This is not thread-safe!
-        balance = await self.get_balance(user_id)
+        balance = self.get_balance(user_id)
         if balance < amount:
             return False
         
         new_balance = balance - amount
         
         # Update balance
-        await (await self.db._get_client()).table('user_credits').update({'balance': new_balance}).eq('user_id', str(user_id)).execute()
+        await (await self.await db._get_client()).table('user_credits').update({'balance': new_balance}).eq('user_id', str(user_id)).execute()
         
         # Record transaction
-        await (await self.db._get_client()).table('credit_transactions').insert({
-            'user_id': str(user_id),
-            'amount': -float(amount),
-            'transaction_type': 'usage',
-            'reference_id': reference_id,
-            'description': description,
-            'balance_after': float(new_balance)
-        }).execute()
+        await (await self.await db._get_client()).table('credit_transactions').insert({ 'user_id': str(user_id), 'amount': -float(amount), 'transaction_type': 'usage', 'reference_id': reference_id, 'description': description, 'balance_after': float(new_balance) }).execute()
         
         return True
 
     async def add_credits(self, user_id: UUID, amount: float, description: str, reference_id: str, dollar_amount: float = 0.0) -> float:
         """Add credits to user (e.g. purchase)"""
-        current_balance = await self.get_balance(user_id)
+        current_balance = self.get_balance(user_id)
         new_balance = current_balance + amount
         
-        await (await self.db._get_client()).table('user_credits').update({'balance': new_balance}).eq('user_id', str(user_id)).execute()
+        await (await self.await db._get_client()).table('user_credits').update({'balance': new_balance}).eq('user_id', str(user_id)).execute()
         
-        await (await self.db._get_client()).table('credit_transactions').insert({
-            'user_id': str(user_id),
-            'amount': amount,
-            'transaction_type': 'purchase',
-            'reference_id': reference_id,
-            'description': description,
-            'balance_after': new_balance
-        }).execute()
+        await (await self.await db._get_client()).table('credit_transactions').insert({ 'user_id': str(user_id), 'amount': amount, 'transaction_type': 'purchase', 'reference_id': reference_id, 'description': description, 'balance_after': new_balance }).execute()
         
         return new_balance
 
     async def get_pricing_plans(self) -> List[Dict[str, Any]]:
         """Get active pricing plans"""
-        response = await (await self.db._get_client()).table('pricing_plans').select('*').eq('is_active', True).execute()
+        response = (await self.await db._get_client()).table('pricing_plans').select('*').eq('is_active', True).execute()
         return response.data
 
     async def get_global_settings(self) -> Dict[str, Any]:
         """Get all global settings as a dictionary"""
-        response = await (await self.db._get_client()).table('global_settings').select('*').execute()
+        response = (await self.await db._get_client()).table('global_settings').select('*').execute()
         settings = {}
         for row in response.data:
             settings[row['key']] = row['value']
@@ -134,18 +102,12 @@ class CreditsService:
 
     async def check_and_reset_monthly_credits(self, user_id: UUID):
         """
-        Logic to reset credits every month.
-        Checks last_reset_at and updates it if more than 30 days have passed.
-        """
+        Logic to reset credits every month. Checks last_reset_at and updates it if more than 30 days have passed. """
         try:
-            response = await (await self.db._get_client()).table('user_credits').select('*').eq('user_id', str(user_id)).execute()
+            response = (await self.await db._get_client()).table('user_credits').select('*').eq('user_id', str(user_id)).execute()
             if not response.data:
                 # Initialize credits if not exists
-                await (await self.db._get_client()).table('user_credits').insert({
-                    'user_id': str(user_id),
-                    'balance': 0.0,
-                    'last_reset_at': datetime.utcnow().isoformat()
-                }).execute()
+                await (await self.await db._get_client()).table('user_credits').insert({ 'user_id': str(user_id), 'balance': 0.0, 'last_reset_at': datetime.utcnow().isoformat() }).execute()
                 return
 
             user_data = response.data[0]
@@ -167,18 +129,13 @@ class CreditsService:
 
             if should_reset:
                 logger.info("Performing monthly credit reset/update", user_id=str(user_id))
-                # For now, we just update the timestamp. 
-                # Actual credit allocation logic would go here if we had monthly subscriptions.
-                await (await self.db._get_client()).table('user_credits').update({
-                    'last_reset_at': now.isoformat(),
-                    'updated_at': now.isoformat()
-                }).eq('user_id', str(user_id)).execute()
+                # For now, we just update the timestamp. # Actual credit allocation logic would go here if we had monthly subscriptions. await (await self.await db._get_client()).table('user_credits').update({ 'last_reset_at': now.isoformat(), 'updated_at': now.isoformat() }).eq('user_id', str(user_id)).execute()
                 
         except Exception as e:
             logger.error("Failed to check/reset monthly credits", user_id=str(user_id), error=str(e))
 
     async def get_transactions(self, user_id: UUID, limit: int = 20, offset: int = 0) -> List[Dict[str, Any]]:
         """Get transaction history"""
-        response = await (await self.db._get_client()).table('credit_transactions')\.select('*')\.eq('user_id', str(user_id))\.order('created_at', desc=True)\.range(offset, offset + limit - 1)\.execute()
+        response = (await self.await db._get_client()).table('credit_transactions')\.select('*')\.eq('user_id', str(user_id))\.order('created_at', desc=True)\.range(offset, offset + limit - 1)\.execute()
             
         return response.data

@@ -10,13 +10,7 @@ from datetime import datetime, timedelta, timezone
 
 from utils.config import get_settings
 from utils.date_utils import parse_iso_datetime
-from models.domain_analysis import (
-    DomainAnalysisReport, RawDataCache, DataSource, 
-    DetailedAnalysisData, AsyncTask, AsyncTaskStatus, 
-    DetailedDataType, AnalysisModeConfig, ProgressInfo,
-    BulkDomainInput, BulkDomainAnalysis, BulkDomainSyncResult,
-    NamecheapDomain
-)
+from models.domain_analysis import ( DomainAnalysisReport, RawDataCache, DataSource, DetailedAnalysisData, AsyncTask, AsyncTaskStatus, DetailedDataType, AnalysisModeConfig, ProgressInfo, BulkDomainInput, BulkDomainAnalysis, BulkDomainSyncResult, NamecheapDomain )
 
 logger = structlog.get_logger()
 
@@ -44,20 +38,12 @@ class DatabaseService:
                 logger.debug("Initializing Supabase Async client with SERVICE_ROLE_KEY")
 
             # Configure options
-            options = ClientOptions(
-                postgrest_client_timeout=600,
-                storage_client_timeout=600,
-                schema="public"
-            )
+            options = ClientOptions( postgrest_client_timeout=600, storage_client_timeout=600, schema="public" )
             
             # Check for SSL verification override
             verify_ssl = getattr(self.settings, 'SUPABASE_VERIFY_SSL', True)
             
-            self.client = await create_client(
-                self.settings.SUPABASE_URL,
-                key,
-                options=options
-            )
+            self.client = create_client( self.settings.SUPABASE_URL, key, options=options )
             
             # Monkey-patch the httpx client if needed for SSL verification
             if not verify_ssl:
@@ -102,32 +88,10 @@ class DatabaseService:
         # For now, we'll assume tables exist or create them via SQL
         tables_sql = """
         -- Create reports table
-        CREATE TABLE IF NOT EXISTS reports (
-            id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-            domain_name VARCHAR(255) NOT NULL UNIQUE,
-            analysis_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            status VARCHAR(50) NOT NULL DEFAULT 'pending',
-            data_for_seo_metrics JSONB,
-            wayback_machine_summary JSONB,
-            llm_analysis JSONB,
-            historical_data JSONB,
-            raw_data_links JSONB,
-            processing_time_seconds FLOAT,
-            error_message TEXT,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        );
+        CREATE TABLE IF NOT EXISTS reports ( id UUID DEFAULT gen_random_uuid() PRIMARY KEY, domain_name VARCHAR(255) NOT NULL UNIQUE, analysis_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(), status VARCHAR(50) NOT NULL DEFAULT 'pending', data_for_seo_metrics JSONB, wayback_machine_summary JSONB, llm_analysis JSONB, historical_data JSONB, raw_data_links JSONB, processing_time_seconds FLOAT, error_message TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() );
         
         -- Create raw_data_cache table
-        CREATE TABLE IF NOT EXISTS raw_data_cache (
-            id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-            domain_name VARCHAR(255) NOT NULL,
-            api_source VARCHAR(50) NOT NULL,
-            json_data JSONB NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            expires_at TIMESTAMP WITH TIME ZONE,
-            UNIQUE(domain_name, api_source)
-        );
+        CREATE TABLE IF NOT EXISTS raw_data_cache ( id UUID DEFAULT gen_random_uuid() PRIMARY KEY, domain_name VARCHAR(255) NOT NULL, api_source VARCHAR(50) NOT NULL, json_data JSONB NOT NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), expires_at TIMESTAMP WITH TIME ZONE, UNIQUE(domain_name, api_source) );
         
         -- Create indexes
         CREATE INDEX IF NOT EXISTS idx_reports_domain_name ON reports(domain_name);
@@ -160,22 +124,7 @@ class DatabaseService:
                 if hasattr(report_data['wayback_machine_summary']['last_capture_date'], 'isoformat'):
                     report_data['wayback_machine_summary']['last_capture_date'] = report_data['wayback_machine_summary']['last_capture_date'].isoformat()
             
-            result = client.table('reports').upsert({
-                'domain_name': report.domain_name,
-                'analysis_timestamp': report_data['analysis_timestamp'],
-                'status': report.status.value,
-                'data_for_seo_metrics': report_data.get('data_for_seo_metrics'),
-                'wayback_machine_summary': report_data.get('wayback_machine_summary'),
-                'llm_analysis': report_data.get('llm_analysis'),
-                'historical_data': report.historical_data.model_dump(mode='json') if report.historical_data else None,
-                'raw_data_links': report_data.get('raw_data_links'),
-                'detailed_data_available': report_data.get('detailed_data_available'),
-                'analysis_phase': report_data.get('analysis_phase'),
-                'progress_data': report.progress_data.dict() if report.progress_data else None,
-                'processing_time_seconds': report.processing_time_seconds,
-                'error_message': report.error_message,
-                'updated_at': datetime.utcnow().isoformat()
-            }, on_conflict= await \'domain_name').execute()
+            result = await client.table('reports').upsert({ 'domain_name': report.domain_name, 'analysis_timestamp': report_data['analysis_timestamp'], 'status': report.status.value, 'data_for_seo_metrics': report_data.get('data_for_seo_metrics'), 'wayback_machine_summary': report_data.get('wayback_machine_summary'), 'llm_analysis': report_data.get('llm_analysis'), 'historical_data': report.historical_data.model_dump(mode='json') if report.historical_data else None, 'raw_data_links': report_data.get('raw_data_links'), 'detailed_data_available': report_data.get('detailed_data_available'), 'analysis_phase': report_data.get('analysis_phase'), 'progress_data': report.progress_data.dict() if report.progress_data else None, 'processing_time_seconds': report.processing_time_seconds, 'error_message': report.error_message, 'updated_at': datetime.utcnow().isoformat() }, on_conflict= 'domain_name').execute()
             
             report_id = result.data[0]['id'] if result.data else None
             logger.info("Report saved successfully", domain=report.domain_name, report_id=report_id)
@@ -197,21 +146,7 @@ class DatabaseService:
             report_data = result.data[0]
             
             # Convert back to DomainAnalysisReport object
-            report = DomainAnalysisReport(
-                domain_name=report_data['domain_name'],
-                analysis_timestamp=parse_iso_datetime(report_data['analysis_timestamp']),
-                status=report_data['status'],
-                data_for_seo_metrics=report_data.get('data_for_seo_metrics'),
-                wayback_machine_summary=report_data.get('wayback_machine_summary'),
-                llm_analysis=report_data.get('llm_analysis'),
-                historical_data=report_data.get('historical_data'),
-                raw_data_links=report_data.get('raw_data_links'),
-                detailed_data_available=report_data.get('detailed_data_available'),
-                analysis_phase=report_data.get('analysis_phase'),
-                progress_data=report_data.get('progress_data'),
-                processing_time_seconds=report_data.get('processing_time_seconds'),
-                error_message=report_data.get('error_message')
-            )
+            report = DomainAnalysisReport( domain_name=report_data['domain_name'], analysis_timestamp=parse_iso_datetime(report_data['analysis_timestamp']), status=report_data['status'], data_for_seo_metrics=report_data.get('data_for_seo_metrics'), wayback_machine_summary=report_data.get('wayback_machine_summary'), llm_analysis=report_data.get('llm_analysis'), historical_data=report_data.get('historical_data'), raw_data_links=report_data.get('raw_data_links'), detailed_data_available=report_data.get('detailed_data_available'), analysis_phase=report_data.get('analysis_phase'), progress_data=report_data.get('progress_data'), processing_time_seconds=report_data.get('processing_time_seconds'), error_message=report_data.get('error_message') )
             
             logger.info("Report retrieved successfully", domain=domain_name)
             return report
@@ -235,12 +170,7 @@ class DatabaseService:
                 existing.update(data)
                 data = existing
             
-            result = client.table('raw_data_cache').upsert({
-                'domain_name': domain_name,
-                'api_source': api_source.value,
-                'json_data': data,
-                'expires_at': expires_at.isoformat()
-            }, on_conflict= await \'domain_name,api_source').execute()
+            result = await client.table('raw_data_cache').upsert({ 'domain_name': domain_name, 'api_source': api_source.value, 'json_data': data, 'expires_at': expires_at.isoformat() }, on_conflict= 'domain_name,api_source').execute()
             
             cache_id = result.data[0]['id'] if result.data else None
             logger.info("Raw data cached successfully", domain=domain_name, source=api_source.value)
@@ -307,27 +237,14 @@ class DatabaseService:
             if detailed_data.expires_at:
                 expires_at = detailed_data.expires_at.isoformat()
             
-            result = client.table('detailed_analysis_data').upsert({
-                'domain_name': detailed_data.domain_name,
-                'data_type': detailed_data.data_type.value,
-                'json_data': detailed_data.json_data,
-                'task_id': detailed_data.task_id,
-                'data_source': detailed_data.data_source,
-                'expires_at': expires_at
-            }, on_conflict= await \'domain_name,data_type').execute()
+            result = await client.table('detailed_analysis_data').upsert({ 'domain_name': detailed_data.domain_name, 'data_type': detailed_data.data_type.value, 'json_data': detailed_data.json_data, 'task_id': detailed_data.task_id, 'data_source': detailed_data.data_source, 'expires_at': expires_at }, on_conflict= 'domain_name,data_type').execute()
             
             data_id = result.data[0]['id'] if result.data else None
-            logger.info("Detailed data saved successfully", 
-                       domain=detailed_data.domain_name, 
-                       data_type=detailed_data.data_type.value,
-                       data_id=data_id)
+            logger.info("Detailed data saved successfully", domain=detailed_data.domain_name, data_type=detailed_data.data_type.value, data_id=data_id)
             return data_id
             
         except Exception as e:
-            logger.error("Failed to save detailed data", 
-                        domain=detailed_data.domain_name, 
-                        data_type=detailed_data.data_type.value, 
-                        error=str(e))
+            logger.error("Failed to save detailed data", domain=detailed_data.domain_name, data_type=detailed_data.data_type.value, error=str(e))
             raise
     
     async def get_detailed_data(self, domain_name: str, data_type: DetailedDataType) -> Optional[DetailedAnalysisData]:
@@ -349,16 +266,7 @@ class DatabaseService:
                     await self.delete_detailed_data(domain_name, data_type)
                     return None
             
-            detailed_data = DetailedAnalysisData(
-                id=data['id'],
-                domain_name=data['domain_name'],
-                data_type=DetailedDataType(data['data_type']),
-                json_data=data['json_data'],
-                task_id=data.get('task_id'),
-                data_source=data.get('data_source', 'dataforseo'),
-                created_at=parse_iso_datetime(data.get('created_at')),
-                expires_at=parse_iso_datetime(data.get('expires_at'))
-            )
+            detailed_data = DetailedAnalysisData( id=data['id'], domain_name=data['domain_name'], data_type=DetailedDataType(data['data_type']), json_data=data['json_data'], task_id=data.get('task_id'), data_source=data.get('data_source', 'dataforseo'), created_at=parse_iso_datetime(data.get('created_at')), expires_at=parse_iso_datetime(data.get('expires_at')) )
             
             logger.info("Detailed data retrieved successfully", domain=domain_name, data_type=data_type.value)
             return detailed_data
@@ -382,27 +290,14 @@ class DatabaseService:
         """Save async task to database"""
         client = await self._get_client()
         try:
-            result = client.table('async_tasks').upsert({
-                'domain_name': async_task.domain_name,
-                'task_id': async_task.task_id,
-                'task_type': async_task.task_type.value,
-                'status': async_task.status.value,
-                'error_message': async_task.error_message,
-                'retry_count': async_task.retry_count
-            }, on_conflict= await \'task_id').execute()
+            result = await client.table('async_tasks').upsert({ 'domain_name': async_task.domain_name, 'task_id': async_task.task_id, 'task_type': async_task.task_type.value, 'status': async_task.status.value, 'error_message': async_task.error_message, 'retry_count': async_task.retry_count }, on_conflict= 'task_id').execute()
             
             task_id = result.data[0]['id'] if result.data else None
-            logger.info("Async task saved successfully", 
-                       domain=async_task.domain_name, 
-                       task_id=async_task.task_id,
-                       status=async_task.status.value)
+            logger.info("Async task saved successfully", domain=async_task.domain_name, task_id=async_task.task_id, status=async_task.status.value)
             return task_id
             
         except Exception as e:
-            logger.error("Failed to save async task", 
-                        domain=async_task.domain_name, 
-                        task_id=async_task.task_id, 
-                        error=str(e))
+            logger.error("Failed to save async task", domain=async_task.domain_name, task_id=async_task.task_id, error=str(e))
             raise
     
     async def get_async_task(self, task_id: str) -> Optional[AsyncTask]:
@@ -416,17 +311,7 @@ class DatabaseService:
             
             task_data = result.data[0]
             
-            async_task = AsyncTask(
-                id=task_data['id'],
-                domain_name=task_data['domain_name'],
-                task_id=task_data['task_id'],
-                task_type=DetailedDataType(task_data['task_type']),
-                status=AsyncTaskStatus(task_data['status']),
-                created_at=parse_iso_datetime(task_data.get('created_at')),
-                completed_at=parse_iso_datetime(task_data.get('completed_at')),
-                error_message=task_data.get('error_message'),
-                retry_count=task_data.get('retry_count', 0)
-            )
+            async_task = AsyncTask( id=task_data['id'], domain_name=task_data['domain_name'], task_id=task_data['task_id'], task_type=DetailedDataType(task_data['task_type']), status=AsyncTaskStatus(task_data['status']), created_at=parse_iso_datetime(task_data.get('created_at')), completed_at=parse_iso_datetime(task_data.get('completed_at')), error_message=task_data.get('error_message'), retry_count=task_data.get('retry_count', 0) )
             
             logger.info("Async task retrieved successfully", task_id=task_id)
             return async_task
@@ -446,17 +331,7 @@ class DatabaseService:
             
             task_data = result.data[0]
             
-            async_task = AsyncTask(
-                id=task_data['id'],
-                domain_name=task_data['domain_name'],
-                task_id=task_data['task_id'],
-                task_type=DetailedDataType(task_data['task_type']),
-                status=AsyncTaskStatus(task_data['status']),
-                created_at=parse_iso_datetime(task_data.get('created_at')),
-                completed_at=parse_iso_datetime(task_data.get('completed_at')),
-                error_message=task_data.get('error_message'),
-                retry_count=task_data.get('retry_count', 0)
-            )
+            async_task = AsyncTask( id=task_data['id'], domain_name=task_data['domain_name'], task_id=task_data['task_id'], task_type=DetailedDataType(task_data['task_type']), status=AsyncTaskStatus(task_data['status']), created_at=parse_iso_datetime(task_data.get('created_at')), completed_at=parse_iso_datetime(task_data.get('completed_at')), error_message=task_data.get('error_message'), retry_count=task_data.get('retry_count', 0) )
             
             logger.info("Pending async task retrieved", domain=domain_name, task_type=task_type.value)
             return async_task
@@ -469,10 +344,7 @@ class DatabaseService:
         """Update async task status"""
         client = await self._get_client()
         try:
-            update_data = {
-                'status': status.value,
-                'updated_at': datetime.utcnow().isoformat()
-            }
+            update_data = { 'status': status.value, 'updated_at': datetime.utcnow().isoformat() }
             
             if status == AsyncTaskStatus.COMPLETED:
                 update_data['completed_at'] = datetime.utcnow().isoformat()
@@ -506,17 +378,7 @@ class DatabaseService:
             
             config_data = result.data[0]
             
-            config = AnalysisModeConfig(
-                id=config_data['id'],
-                domain_name=config_data.get('domain_name'),
-                mode_preference=config_data['mode_preference'],
-                async_enabled=config_data['async_enabled'],
-                cache_ttl_hours=config_data['cache_ttl_hours'],
-                manual_refresh_enabled=config_data['manual_refresh_enabled'],
-                progress_indicators_enabled=config_data['progress_indicators_enabled'],
-                created_at=parse_iso_datetime(config_data.get('created_at')),
-                updated_at=parse_iso_datetime(config_data.get('updated_at'))
-            )
+            config = AnalysisModeConfig( id=config_data['id'], domain_name=config_data.get('domain_name'), mode_preference=config_data['mode_preference'], async_enabled=config_data['async_enabled'], cache_ttl_hours=config_data['cache_ttl_hours'], manual_refresh_enabled=config_data['manual_refresh_enabled'], progress_indicators_enabled=config_data['progress_indicators_enabled'], created_at=parse_iso_datetime(config_data.get('created_at')), updated_at=parse_iso_datetime(config_data.get('updated_at')) )
             
             logger.info("Mode config retrieved", domain=domain_name)
             return config
@@ -529,14 +391,7 @@ class DatabaseService:
         """Save analysis mode configuration"""
         client = await self._get_client()
         try:
-            result = client.table('analysis_mode_config').upsert({
-                'domain_name': config.domain_name,
-                'mode_preference': config.mode_preference.value,
-                'async_enabled': config.async_enabled,
-                'cache_ttl_hours': config.cache_ttl_hours,
-                'manual_refresh_enabled': config.manual_refresh_enabled,
-                'progress_indicators_enabled': config.progress_indicators_enabled
-            }, on_conflict= await \'domain_name').execute()
+            result = await client.table('analysis_mode_config').upsert({ 'domain_name': config.domain_name, 'mode_preference': config.mode_preference.value, 'async_enabled': config.async_enabled, 'cache_ttl_hours': config.cache_ttl_hours, 'manual_refresh_enabled': config.manual_refresh_enabled, 'progress_indicators_enabled': config.progress_indicators_enabled }, on_conflict= 'domain_name').execute()
             
             config_id = result.data[0]['id'] if result.data else None
             logger.info("Mode config saved successfully", domain=config.domain_name, config_id=config_id)
@@ -629,9 +484,7 @@ class DatabaseService:
                         existing_summary = existing_record.get('backlinks_bulk_page_summary')
                         
                         # Only update provider, preserve summary data
-                        update_data = {
-                            'updated_at': datetime.utcnow().isoformat()
-                        }
+                        update_data = { 'updated_at': datetime.utcnow().isoformat() }
                         
                         # Update provider if it's different
                         if domain_input.provider and existing_record.get('provider') != domain_input.provider:
@@ -648,11 +501,7 @@ class DatabaseService:
                             result.skipped_domains.append(domain_input.domain)
                     else:
                         # Domain doesn't exist - create new record
-                        new_record = {
-                            'domain_name': domain_input.domain,
-                            'provider': domain_input.provider,
-                            'backlinks_bulk_page_summary': None
-                        }
+                        new_record = { 'domain_name': domain_input.domain, 'provider': domain_input.provider, 'backlinks_bulk_page_summary': None }
                         await client.table('bulk_domain_analysis').insert(new_record).execute()
                         result.created_count += 1
                         result.created_domains.append(domain_input.domain)
@@ -663,10 +512,7 @@ class DatabaseService:
                     result.skipped_count += 1
                     result.skipped_domains.append(domain_input.domain)
             
-            logger.info("Bulk domain sync completed", 
-                       created=result.created_count, 
-                       updated=result.updated_count, 
-                       skipped=result.skipped_count)
+            logger.info("Bulk domain sync completed", created=result.created_count, updated=result.updated_count, skipped=result.skipped_count)
             return result
             
         except Exception as e:
@@ -729,14 +575,7 @@ class DatabaseService:
                             except Exception as e:
                                 logger.warning("Failed to parse summary", domain=row.get('domain_name'), error=str(e))
                         
-                        record = BulkDomainAnalysis(
-                            id=row.get('id'),
-                            domain_name=row['domain_name'],
-                            provider=row.get('provider'),
-                            backlinks_bulk_page_summary=summary,
-                            created_at=parse_iso_datetime(row.get('created_at')),
-                            updated_at=parse_iso_datetime(row.get('updated_at'))
-                        )
+                        record = BulkDomainAnalysis( id=row.get('id'), domain_name=row['domain_name'], provider=row.get('provider'), backlinks_bulk_page_summary=summary, created_at=parse_iso_datetime(row.get('created_at')), updated_at=parse_iso_datetime(row.get('updated_at')) )
                         all_records.append(record)
             
             logger.info("Retrieved bulk domains by names", requested=len(domain_names), found=len(all_records))
@@ -756,10 +595,7 @@ class DatabaseService:
             if not client:
                 raise Exception("Supabase client not available")
             
-            result = await client.table('bulk_domain_analysis').update({
-                'backlinks_bulk_page_summary': summary_data,
-                'updated_at': datetime.utcnow().isoformat()
-            }).eq('domain_name', domain).execute()
+            result = await client.table('bulk_domain_analysis').update({ 'backlinks_bulk_page_summary': summary_data, 'updated_at': datetime.utcnow().isoformat() }).eq('domain_name', domain).execute()
             
             record_id = result.data[0]['id'] if result.data else None
             logger.info("Saved bulk page summary", domain=domain, record_id=record_id)
@@ -809,14 +645,7 @@ class DatabaseService:
                         except Exception as e:
                             logger.warning("Failed to parse summary data", domain=row.get('domain_name'), error=str(e))
                     
-                    record = BulkDomainAnalysis(
-                        id=row['id'],
-                        domain_name=row['domain_name'],
-                        provider=row.get('provider'),
-                        backlinks_bulk_page_summary=summary,
-                        created_at=parse_iso_datetime(row.get('created_at')),
-                        updated_at=parse_iso_datetime(row.get('updated_at'))
-                    )
+                    record = BulkDomainAnalysis( id=row['id'], domain_name=row['domain_name'], provider=row.get('provider'), backlinks_bulk_page_summary=summary, created_at=parse_iso_datetime(row.get('created_at')), updated_at=parse_iso_datetime(row.get('updated_at')) )
                     records.append(record)
             
             logger.info("Retrieved bulk domains", count=len(records), sort_by=sort_by, order=order)
@@ -877,7 +706,7 @@ class DatabaseService:
             batch_size = 500  # Reduced batch size to avoid timeouts
             inserted_count = 0
             skipped_count = 0
-            total_batches = await (len(domains) + batch_size - 1) // batch_size
+            total_batches = (len(domains) + batch_size - 1) // batch_size
             
             logger.info("Starting bulk insert", total_domains=len(domains), batch_size=batch_size, total_batches=total_batches)
             
@@ -889,33 +718,7 @@ class DatabaseService:
                 logger.info("Preparing batch", batch_num=batch_num, total_batches=total_batches, batch_size=len(batch))
                 
                 for domain in batch:
-                    domain_data = {
-                        'url': domain.url,
-                        'name': domain.name,
-                        'start_date': domain.start_date.isoformat() if domain.start_date else None,
-                        'end_date': domain.end_date.isoformat() if domain.end_date else None,
-                        'price': domain.price,
-                        'start_price': domain.start_price,
-                        'renew_price': domain.renew_price,
-                        'bid_count': domain.bid_count,
-                        'ahrefs_domain_rating': domain.ahrefs_domain_rating,
-                        'umbrella_ranking': domain.umbrella_ranking,
-                        'cloudflare_ranking': domain.cloudflare_ranking,
-                        'estibot_value': domain.estibot_value,
-                        'extensions_taken': domain.extensions_taken,
-                        'keyword_search_count': domain.keyword_search_count,
-                        'registered_date': domain.registered_date.isoformat() if domain.registered_date else None,
-                        'last_sold_price': domain.last_sold_price,
-                        'last_sold_year': domain.last_sold_year,
-                        'is_partner_sale': domain.is_partner_sale,
-                        'semrush_a_score': domain.semrush_a_score,
-                        'majestic_citation': domain.majestic_citation,
-                        'ahrefs_backlinks': domain.ahrefs_backlinks,
-                        'semrush_backlinks': domain.semrush_backlinks,
-                        'majestic_backlinks': domain.majestic_backlinks,
-                        'majestic_trust_flow': domain.majestic_trust_flow,
-                        'go_value': domain.go_value
-                    }
+                    domain_data = { 'url': domain.url, 'name': domain.name, 'start_date': domain.start_date.isoformat() if domain.start_date else None, 'end_date': domain.end_date.isoformat() if domain.end_date else None, 'price': domain.price, 'start_price': domain.start_price, 'renew_price': domain.renew_price, 'bid_count': domain.bid_count, 'ahrefs_domain_rating': domain.ahrefs_domain_rating, 'umbrella_ranking': domain.umbrella_ranking, 'cloudflare_ranking': domain.cloudflare_ranking, 'estibot_value': domain.estibot_value, 'extensions_taken': domain.extensions_taken, 'keyword_search_count': domain.keyword_search_count, 'registered_date': domain.registered_date.isoformat() if domain.registered_date else None, 'last_sold_price': domain.last_sold_price, 'last_sold_year': domain.last_sold_year, 'is_partner_sale': domain.is_partner_sale, 'semrush_a_score': domain.semrush_a_score, 'majestic_citation': domain.majestic_citation, 'ahrefs_backlinks': domain.ahrefs_backlinks, 'semrush_backlinks': domain.semrush_backlinks, 'majestic_backlinks': domain.majestic_backlinks, 'majestic_trust_flow': domain.majestic_trust_flow, 'go_value': domain.go_value }
                     batch_data.append(domain_data)
                 
                 try:
@@ -927,8 +730,7 @@ class DatabaseService:
                     
                 except Exception as e:
                     # If batch insert fails (e.g., due to duplicates), fall back to individual inserts
-                    logger.warning("Batch insert failed, falling back to individual inserts", 
-                                 batch_num=batch_num, error=str(e), batch_start=i)
+                    logger.warning("Batch insert failed, falling back to individual inserts", batch_num=batch_num, error=str(e), batch_start=i)
                     for idx, domain_data in enumerate(batch_data):
                         try:
                             await client.table('namecheap_domains').insert(domain_data).execute()
@@ -943,27 +745,13 @@ class DatabaseService:
                                 skipped_count += 1
             
             logger.info("Bulk insert complete", inserted=inserted_count, skipped=skipped_count, total=len(domains))
-            return {
-                "inserted": inserted_count,
-                "skipped": skipped_count,
-                "total": len(domains)
-            }
+            return { "inserted": inserted_count, "skipped": skipped_count, "total": len(domains) }
             
         except Exception as e:
             logger.error("Failed to load namecheap domains", error=str(e), exc_info=True)
             raise
     
-    async def get_all_namecheap_domains(
-        self, 
-        sort_by: str = 'name', 
-        order: str = 'asc', 
-        search: str = None,
-        extensions: List[str] = None,
-        no_special_chars: bool = None,
-        no_numbers: bool = None,
-        limit: int = 1000,
-        offset: int = 0
-    ) -> List[NamecheapDomain]:
+    async def get_all_namecheap_domains( self, sort_by: str = 'name', order: str = 'asc', search: str = None, extensions: List[str] = None, no_special_chars: bool = None, no_numbers: bool = None, limit: int = 1000, offset: int = 0 ) -> List[NamecheapDomain]:
         """
         Get all Namecheap domains with optional search, sorting, and filtering
         """
@@ -973,11 +761,7 @@ class DatabaseService:
                 raise Exception("Supabase client not available")
             
             # Validate sort_by field - expanded list
-            valid_sort_fields = [
-                'name', 'price', 'end_date', 'ahrefs_domain_rating', 'estibot_value', 
-                'bid_count', 'created_at', 'keyword_search_count', 'last_sold_year',
-                'is_partner_sale', 'semrush_a_score', 'ahrefs_backlinks', 
-                'semrush_backlinks', 'majestic_trust_flow', 'go_value'
+            valid_sort_fields = [ 'name', 'price', 'end_date', 'ahrefs_domain_rating', 'estibot_value', 'bid_count', 'created_at', 'keyword_search_count', 'last_sold_year', 'is_partner_sale', 'semrush_a_score', 'ahrefs_backlinks', 'semrush_backlinks', 'majestic_trust_flow', 'go_value'
             ]
             if sort_by not in valid_sort_fields:
                 sort_by = 'name'
@@ -995,8 +779,7 @@ class DatabaseService:
             # Apply extension filter at database level using SQL pattern matching
             if extensions:
                 # Build OR conditions for each extension
-                # Use SQL LIKE pattern: name LIKE '%.com' OR name LIKE '%.net' etc.
-                extension_filters = []
+                # Use SQL LIKE pattern: name LIKE '%.com' OR name LIKE '%.net' etc. extension_filters = []
                 for ext in extensions:
                     # Remove leading dot if present for pattern matching
                     ext_clean = ext.lstrip('.')
@@ -1061,36 +844,7 @@ class DatabaseService:
                     # Stop if we've collected enough records after filtering
                     if len(records) >= limit:
                         break
-                    domain = NamecheapDomain(
-                        id=row['id'],
-                        url=row.get('url'),
-                        name=row['name'],
-                        start_date=datetime.fromisoformat(row['start_date'].replace('Z', '+00:00')) if row.get('start_date') else None,
-                        end_date=datetime.fromisoformat(row['end_date'].replace('Z', '+00:00')) if row.get('end_date') else None,
-                        price=float(row['price']) if row.get('price') is not None else None,
-                        start_price=float(row['start_price']) if row.get('start_price') is not None else None,
-                        renew_price=float(row['renew_price']) if row.get('renew_price') is not None else None,
-                        bid_count=row.get('bid_count'),
-                        ahrefs_domain_rating=float(row['ahrefs_domain_rating']) if row.get('ahrefs_domain_rating') is not None else None,
-                        umbrella_ranking=row.get('umbrella_ranking'),
-                        cloudflare_ranking=row.get('cloudflare_ranking'),
-                        estibot_value=float(row['estibot_value']) if row.get('estibot_value') is not None else None,
-                        extensions_taken=row.get('extensions_taken'),
-                        keyword_search_count=row.get('keyword_search_count'),
-                        registered_date=datetime.fromisoformat(row['registered_date'].replace('Z', '+00:00')) if row.get('registered_date') else None,
-                        last_sold_price=float(row['last_sold_price']) if row.get('last_sold_price') is not None else None,
-                        last_sold_year=row.get('last_sold_year'),
-                        is_partner_sale=row.get('is_partner_sale'),
-                        semrush_a_score=row.get('semrush_a_score'),
-                        majestic_citation=row.get('majestic_citation'),
-                        ahrefs_backlinks=row.get('ahrefs_backlinks'),
-                        semrush_backlinks=row.get('semrush_backlinks'),
-                        majestic_backlinks=row.get('majestic_backlinks'),
-                        majestic_trust_flow=float(row['majestic_trust_flow']) if row.get('majestic_trust_flow') is not None else None,
-                        go_value=float(row['go_value']) if row.get('go_value') is not None else None,
-                        created_at=datetime.fromisoformat(row['created_at'].replace('Z', '+00:00')) if row.get('created_at') else None,
-                        updated_at=datetime.fromisoformat(row['updated_at'].replace('Z', '+00:00')) if row.get('updated_at') else None
-                    )
+                    domain = NamecheapDomain( id=row['id'], url=row.get('url'), name=row['name'], start_date=datetime.fromisoformat(row['start_date'].replace('Z', '+00:00')) if row.get('start_date') else None, end_date=datetime.fromisoformat(row['end_date'].replace('Z', '+00:00')) if row.get('end_date') else None, price=float(row['price']) if row.get('price') is not None else None, start_price=float(row['start_price']) if row.get('start_price') is not None else None, renew_price=float(row['renew_price']) if row.get('renew_price') is not None else None, bid_count=row.get('bid_count'), ahrefs_domain_rating=float(row['ahrefs_domain_rating']) if row.get('ahrefs_domain_rating') is not None else None, umbrella_ranking=row.get('umbrella_ranking'), cloudflare_ranking=row.get('cloudflare_ranking'), estibot_value=float(row['estibot_value']) if row.get('estibot_value') is not None else None, extensions_taken=row.get('extensions_taken'), keyword_search_count=row.get('keyword_search_count'), registered_date=datetime.fromisoformat(row['registered_date'].replace('Z', '+00:00')) if row.get('registered_date') else None, last_sold_price=float(row['last_sold_price']) if row.get('last_sold_price') is not None else None, last_sold_year=row.get('last_sold_year'), is_partner_sale=row.get('is_partner_sale'), semrush_a_score=row.get('semrush_a_score'), majestic_citation=row.get('majestic_citation'), ahrefs_backlinks=row.get('ahrefs_backlinks'), semrush_backlinks=row.get('semrush_backlinks'), majestic_backlinks=row.get('majestic_backlinks'), majestic_trust_flow=float(row['majestic_trust_flow']) if row.get('majestic_trust_flow') is not None else None, go_value=float(row['go_value']) if row.get('go_value') is not None else None, created_at=datetime.fromisoformat(row['created_at'].replace('Z', '+00:00')) if row.get('created_at') else None, updated_at=datetime.fromisoformat(row['updated_at'].replace('Z', '+00:00')) if row.get('updated_at') else None )
                     records.append(domain)
             
             logger.info("Retrieved namecheap domains", count=len(records), sort_by=sort_by, order=order, search=search)
@@ -1115,36 +869,7 @@ class DatabaseService:
                 return None
             
             row = result.data[0]
-            domain = NamecheapDomain(
-                id=row['id'],
-                url=row.get('url'),
-                name=row['name'],
-                start_date=datetime.fromisoformat(row['start_date'].replace('Z', '+00:00')) if row.get('start_date') else None,
-                end_date=datetime.fromisoformat(row['end_date'].replace('Z', '+00:00')) if row.get('end_date') else None,
-                price=float(row['price']) if row.get('price') is not None else None,
-                start_price=float(row['start_price']) if row.get('start_price') is not None else None,
-                renew_price=float(row['renew_price']) if row.get('renew_price') is not None else None,
-                bid_count=row.get('bid_count'),
-                ahrefs_domain_rating=float(row['ahrefs_domain_rating']) if row.get('ahrefs_domain_rating') is not None else None,
-                umbrella_ranking=row.get('umbrella_ranking'),
-                cloudflare_ranking=row.get('cloudflare_ranking'),
-                estibot_value=float(row['estibot_value']) if row.get('estibot_value') is not None else None,
-                extensions_taken=row.get('extensions_taken'),
-                keyword_search_count=row.get('keyword_search_count'),
-                registered_date=datetime.fromisoformat(row['registered_date'].replace('Z', '+00:00')) if row.get('registered_date') else None,
-                last_sold_price=float(row['last_sold_price']) if row.get('last_sold_price') is not None else None,
-                last_sold_year=row.get('last_sold_year'),
-                is_partner_sale=row.get('is_partner_sale'),
-                semrush_a_score=row.get('semrush_a_score'),
-                majestic_citation=row.get('majestic_citation'),
-                ahrefs_backlinks=row.get('ahrefs_backlinks'),
-                semrush_backlinks=row.get('semrush_backlinks'),
-                majestic_backlinks=row.get('majestic_backlinks'),
-                majestic_trust_flow=float(row['majestic_trust_flow']) if row.get('majestic_trust_flow') is not None else None,
-                go_value=float(row['go_value']) if row.get('go_value') is not None else None,
-                created_at=datetime.fromisoformat(row['created_at'].replace('Z', '+00:00')) if row.get('created_at') else None,
-                updated_at=datetime.fromisoformat(row['updated_at'].replace('Z', '+00:00')) if row.get('updated_at') else None
-            )
+            domain = NamecheapDomain( id=row['id'], url=row.get('url'), name=row['name'], start_date=datetime.fromisoformat(row['start_date'].replace('Z', '+00:00')) if row.get('start_date') else None, end_date=datetime.fromisoformat(row['end_date'].replace('Z', '+00:00')) if row.get('end_date') else None, price=float(row['price']) if row.get('price') is not None else None, start_price=float(row['start_price']) if row.get('start_price') is not None else None, renew_price=float(row['renew_price']) if row.get('renew_price') is not None else None, bid_count=row.get('bid_count'), ahrefs_domain_rating=float(row['ahrefs_domain_rating']) if row.get('ahrefs_domain_rating') is not None else None, umbrella_ranking=row.get('umbrella_ranking'), cloudflare_ranking=row.get('cloudflare_ranking'), estibot_value=float(row['estibot_value']) if row.get('estibot_value') is not None else None, extensions_taken=row.get('extensions_taken'), keyword_search_count=row.get('keyword_search_count'), registered_date=datetime.fromisoformat(row['registered_date'].replace('Z', '+00:00')) if row.get('registered_date') else None, last_sold_price=float(row['last_sold_price']) if row.get('last_sold_price') is not None else None, last_sold_year=row.get('last_sold_year'), is_partner_sale=row.get('is_partner_sale'), semrush_a_score=row.get('semrush_a_score'), majestic_citation=row.get('majestic_citation'), ahrefs_backlinks=row.get('ahrefs_backlinks'), semrush_backlinks=row.get('semrush_backlinks'), majestic_backlinks=row.get('majestic_backlinks'), majestic_trust_flow=float(row['majestic_trust_flow']) if row.get('majestic_trust_flow') is not None else None, go_value=float(row['go_value']) if row.get('go_value') is not None else None, created_at=datetime.fromisoformat(row['created_at'].replace('Z', '+00:00')) if row.get('created_at') else None, updated_at=datetime.fromisoformat(row['updated_at'].replace('Z', '+00:00')) if row.get('updated_at') else None )
             
             return domain
             
@@ -1177,14 +902,7 @@ class DatabaseService:
                 except Exception as e:
                     logger.warning("Failed to parse summary data", domain=domain_name, error=str(e))
             
-            record = BulkDomainAnalysis(
-                id=row['id'],
-                domain_name=row['domain_name'],
-                provider=row.get('provider'),
-                backlinks_bulk_page_summary=summary,
-                created_at=datetime.fromisoformat(row['created_at'].replace('Z', '+00:00')) if row.get('created_at') else None,
-                updated_at=datetime.fromisoformat(row['updated_at'].replace('Z', '+00:00')) if row.get('updated_at') else None
-            )
+            record = BulkDomainAnalysis( id=row['id'], domain_name=row['domain_name'], provider=row.get('provider'), backlinks_bulk_page_summary=summary, created_at=datetime.fromisoformat(row['created_at'].replace('Z', '+00:00')) if row.get('created_at') else None, updated_at=datetime.fromisoformat(row['updated_at'].replace('Z', '+00:00')) if row.get('updated_at') else None )
             
             return record
             
@@ -1219,7 +937,7 @@ class DatabaseService:
                     truncate_url = getattr(self.settings, 'N8N_WEBHOOK_URL_TRUNCATE', None)
                     if n8n_service.enabled and truncate_url:
                         logger.info("Attempting truncate via N8N workflow", webhook_url=truncate_url)
-                        result = await n8n_service.trigger_truncate_auctions_workflow()
+                        result = n8n_service.trigger_truncate_auctions_workflow()
                         if result:
                             logger.info("Truncate triggered via N8N workflow", request_id=result.get('request_id'))
                             # Wait for N8N to complete (SQL truncate is fast, but give it time)
@@ -1246,8 +964,7 @@ class DatabaseService:
             # For very large tables, skip truncation and use upsert instead
             # This is much faster than trying to delete 867k+ records
             if total_count and total_count > 100000:
-                logger.info("Skipping truncation for large table - will use upsert to handle duplicates", 
-                           total_records=total_count)
+                logger.info("Skipping truncation for large table - will use upsert to handle duplicates", total_records=total_count)
                 return True
             
             # For smaller tables, use simple DELETE
@@ -1294,10 +1011,8 @@ class DatabaseService:
             logger.info("Starting bulk upsert auctions", total=len(auctions), batch_size=batch_size, total_batches=total_batches)
             
             # Process in batches - upsert handles both inserts and updates
-            # Note: We can't easily distinguish inserts from updates without pre-checking,
-            # which is expensive for large files. We'll approximate by assuming all are inserts
-            # and let the database handle the upsert logic.
-            for batch_num, i in enumerate(range(0, len(auctions), batch_size), 1):
+            # Note: We can't easily distinguish inserts from updates without pre-checking, # which is expensive for large files. We'll approximate by assuming all are inserts
+            # and let the database handle the upsert logic. for batch_num, i in enumerate(range(0, len(auctions), batch_size), 1):
                 batch = auctions[i:i + batch_size]
                 
                 try:
@@ -1305,30 +1020,21 @@ class DatabaseService:
                     # The unique constraint is on (domain, auction_site, expiration_date)
                     # Note: backlinks_bulk_page_summary is in bulk_domain_analysis table, not auctions
                     # So it's automatically preserved when we update auctions
-                    result = await client.table('auctions').upsert(
-                        batch,
-                        on_conflict='domain,auction_site,expiration_date'
-                    ).execute()
+                    result = await client.table('auctions').upsert( batch, on_conflict='domain,auction_site,expiration_date' ).execute()
                     
                     # Approximate: assume all are inserts (upsert will update if exists)
                     # For accurate counts, we'd need to check each record first, which is expensive
                     inserted_count += len(batch)
                     
                     if batch_num % 10 == 0:
-                        logger.info("Batch upsert progress", 
-                                   batch_num=batch_num, 
-                                   total_batches=total_batches, 
-                                   processed=inserted_count)
+                        logger.info("Batch upsert progress", batch_num=batch_num, total_batches=total_batches, processed=inserted_count)
                     
                 except Exception as e:
                     # Fall back to individual upserts on batch failure
                     logger.warning("Batch upsert failed, using individual upserts", batch_num=batch_num, error=str(e))
                     for auction_data in batch:
                         try:
-                            client.table('auctions').upsert(
-                                auction_data,
-                                on_conflict='domain,auction_site,expiration_date'
-                            ).execute()
+                            client.table('auctions').upsert( auction_data, on_conflict= await 'domain,auction_site,expiration_date' ).execute()
                             inserted_count += 1
                         except Exception as e2:
                             if 'duplicate' in str(e2).lower() or 'unique' in str(e2).lower():
@@ -1337,18 +1043,12 @@ class DatabaseService:
                                 logger.warning("Failed to upsert auction", domain=auction_data.get('domain'), error=str(e2))
                                 skipped_count += 1
             
-            logger.info("Bulk upsert auctions complete", 
-                       processed=inserted_count,
-                       skipped=skipped_count, 
-                       total=len(auctions))
+            logger.info("Bulk upsert auctions complete", processed=inserted_count, skipped=skipped_count, total=len(auctions))
             # Note: We can't easily distinguish inserts from updates without expensive pre-checks
             # Return processed count (which includes both inserts and updates)
-            return {
-                "inserted": inserted_count,  # Actually processed (inserts + updates)
+            return { "inserted": inserted_count,  # Actually processed (inserts + updates)
                 "updated": 0,  # Not tracked separately for performance
-                "skipped": skipped_count,
-                "total": len(auctions)
-            }
+                "skipped": skipped_count, "total": len(auctions) }
             
         except Exception as e:
             logger.error("Failed to bulk insert auctions", error=str(e))
@@ -1401,8 +1101,7 @@ class DatabaseService:
             if not client:
                 raise Exception("Supabase client not available")
             
-            result = await (client.table('auctions').select('*').eq('preferred', True).eq('has_statistics', False).order('expiration_date', desc= False).limit(limit).execute()
-            )
+            result = await (client.table('auctions').select('*').eq('preferred', True).eq('has_statistics', False).order('expiration_date', desc= False).limit(limit).execute() )
             
             auctions = result.data if result.data else []
             logger.info("Fetched preferred auctions without stats", count=len(auctions), limit=limit)
@@ -1438,10 +1137,7 @@ class DatabaseService:
                 
                 for domain_name in batch:
                     try:
-                        await client.table('auctions').update({
-                            'has_statistics': True,
-                            'updated_at': datetime.utcnow().isoformat()
-                        }).eq('domain', domain_name).execute()
+                        await client.table('auctions').update({ 'has_statistics': True, 'updated_at': datetime.utcnow().isoformat() }).eq('domain', domain_name).execute()
                         updated_count += 1
                     except Exception as e:
                         logger.warning("Failed to mark has_statistics", domain=domain_name, error=str(e))
@@ -1454,14 +1150,7 @@ class DatabaseService:
             logger.error("Failed to mark has_statistics", error=str(e))
             raise
     
-    async def get_auctions_with_statistics(
-        self, 
-        filters: Optional[Dict[str, Any]] = None,
-        sort_by: str = 'expiration_date',
-        order: str = 'asc',
-        limit: int = 100,
-        offset: int = 0
-    ) -> Dict[str, Any]:
+    async def get_auctions_with_statistics( self, filters: Optional[Dict[str, Any]] = None, sort_by: str = 'expiration_date', order: str = 'asc', limit: int = 100, offset: int = 0 ) -> Dict[str, Any]:
         """
         Get auctions with joined statistics from bulk_domain_analysis
         
@@ -1512,8 +1201,7 @@ class DatabaseService:
                     if isinstance(tlds, list) and len(tlds) > 0:
                         # Normalize TLDs (ensure they start with .)
                         normalized_tlds = [tld if tld.startswith('.') else f'.{tld}' for tld in tlds if tld]
-                        # Use OR condition for multiple TLDs - PostgREST doesn't support OR directly,
-                        # so we'll use a workaround with multiple ilike filters
+                        # Use OR condition for multiple TLDs - PostgREST doesn't support OR directly, # so we'll use a workaround with multiple ilike filters
                         # For now, we'll filter by the first TLD and let the frontend handle multiple
                         # TODO: Implement proper OR filtering for multiple TLDs
                         if normalized_tlds:
@@ -1598,10 +1286,7 @@ class DatabaseService:
             # Return auctions directly
             report_items = []
             for auction in auctions:
-                report_item = {
-                    **auction,
-                    'statistics': auction.get('page_statistics')  # Get statistics from auctions table if available
-                }
+                report_item = { **auction, 'statistics': auction.get('page_statistics')  # Get statistics from auctions table if available }
                 report_items.append(report_item)
             
             # For better accuracy, check if there are more records
@@ -1609,34 +1294,19 @@ class DatabaseService:
             
             logger.info("Fetched auctions with statistics", count=len(report_items), total_estimate=total_count, offset=offset, has_more=has_more, filters=filters)
             
-            return {
-                "auctions": report_items,
-                "total_count": total_count,
-                "count": len(report_items),
-                "has_more": has_more
-            }
+            return { "auctions": report_items, "total_count": total_count, "count": len(report_items), "has_more": has_more }
             
         except Exception as e:
             logger.error("Failed to get auctions with statistics", error=str(e))
             raise
     
-    async def get_auctions_missing_any_metric_with_filters(
-        self,
-        filters: Optional[Dict[str, Any]] = None,
-        sort_by: str = 'expiration_date',
-        sort_order: str = 'asc',
-        limit: int = 1000,
-        force_refresh: bool = False
-    ) -> List[Dict[str, Any]]:
+    async def get_auctions_missing_any_metric_with_filters( self, filters: Optional[Dict[str, Any]] = None, sort_by: str = 'expiration_date', sort_order: str = 'asc', limit: int = 1000, force_refresh: bool = False ) -> List[Dict[str, Any]]:
         """
         "Find and Fill" — Get up to `limit` domains that:
           1. Have a score > 0 (only domains we care about)
           2. Are missing ANY of the four DataForSEO metrics (traffic, rank, backlinks, spam_score)
           3. Have NOT been refreshed in the last 7 days (updated_at < now - 7 days)
-        Ordered by closest expiry date (ascending) so the most time-sensitive domains are filled first.
-
-        When force_refresh=True, skips the missing-metrics and staleness checks (force-fills all matched domains).
-        """
+        Ordered by closest expiry date (ascending) so the most time-sensitive domains are filled first. When force_refresh=True, skips the missing-metrics and staleness checks (force-fills all matched domains). """
         client = await self._get_client()
         from datetime import timedelta
 
@@ -1645,7 +1315,7 @@ class DatabaseService:
                 raise Exception("Supabase client not available")
 
             # 7-day staleness cutoff
-            cutoff_7d = await (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+            cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
             # --- Build base query ---
             # Always filter out records marked for deletion
@@ -1740,21 +1410,17 @@ class DatabaseService:
                 sql = f"""
                 SELECT * FROM auctions
                 WHERE {where_clause}
-                  AND (
-                    -- Include if missing any metric (regardless of updated_at)
+                  AND ( -- Include if missing any metric (regardless of updated_at)
                     (organic_traffic IS NULL AND (page_statistics IS NULL OR (page_statistics->>'traffic') IS NULL))
                     OR (ranking IS NULL AND (page_statistics IS NULL OR (page_statistics->>'rank') IS NULL))
                     OR (backlinks IS NULL AND (page_statistics IS NULL OR (page_statistics->>'backlinks') IS NULL))
                     OR (backlinks_spam_score IS NULL AND (page_statistics IS NULL OR (page_statistics->>'backlinks_spam_score') IS NULL))
                     -- OR include if has all metrics but is stale (>7 days)
-                    OR (
-                      organic_traffic IS NOT NULL
+                    OR ( organic_traffic IS NOT NULL
                       AND ranking IS NOT NULL
                       AND backlinks IS NOT NULL
                       AND backlinks_spam_score IS NOT NULL
-                      AND (updated_at IS NULL OR updated_at < '{cutoff_7d}')
-                    )
-                  )
+                      AND (updated_at IS NULL OR updated_at < '{cutoff_7d}') ) )
                 ORDER BY expiration_date ASC NULLS LAST
                 LIMIT {limit}
                 """
@@ -1787,27 +1453,19 @@ class DatabaseService:
                     skipped_has_all_metrics = 0
                     for auction in candidates:
                         stats = auction.get('page_statistics') or {}
-                        has_traffic = (
-                            auction.get('organic_traffic') is not None or
+                        has_traffic = ( auction.get('organic_traffic') is not None or
                             stats.get('traffic') is not None or
                             stats.get('etv') is not None or
-                            stats.get('organic_traffic') is not None
-                        )
-                        has_rank = (
-                            auction.get('ranking') is not None or
+                            stats.get('organic_traffic') is not None )
+                        has_rank = ( auction.get('ranking') is not None or
                             stats.get('rank') is not None or
-                            stats.get('ranking') is not None
-                        )
-                        has_backlinks = (
-                            auction.get('backlinks') is not None or
+                            stats.get('ranking') is not None )
+                        has_backlinks = ( auction.get('backlinks') is not None or
                             stats.get('backlinks') is not None or
-                            stats.get('total_backlinks') is not None
-                        )
-                        has_spam_score = (
-                            auction.get('backlinks_spam_score') is not None or
+                            stats.get('total_backlinks') is not None )
+                        has_spam_score = ( auction.get('backlinks_spam_score') is not None or
                             stats.get('backlinks_spam_score') is not None or
-                            stats.get('spam_score') is not None
-                        )
+                            stats.get('spam_score') is not None )
 
                         has_all_metrics = has_traffic and has_rank and has_backlinks and has_spam_score
 
@@ -1882,11 +1540,7 @@ class DatabaseService:
             updated_stats.update(page_statistics)
             
             # Prepare update data with top-level columns for sorting
-            update_data = {
-                'page_statistics': updated_stats,
-                'has_statistics': True,
-                'updated_at': datetime.now(timezone.utc).isoformat()
-            }
+            update_data = { 'page_statistics': updated_stats, 'has_statistics': True, 'updated_at': datetime.now(timezone.utc).isoformat() }
             
             # Helper to get first non-None value from a list of keys
             def get_metric(data, keys):
@@ -1970,8 +1624,7 @@ class DatabaseService:
                 # Handle missing column gracefully (especially keywords_count which might be new)
                 error_str = str(e)
                 if 'keywords_count' in error_str or 'PGRST204' in error_str:
-                    logger.warning("keywords_count column missing or update failed, retrying without it", 
-                                 domain=domain, error=error_str)
+                    logger.warning("keywords_count column missing or update failed, retrying without it", domain=domain, error=error_str)
                     update_data.pop('keywords_count', None)
                     if not update_data:
                         return True
@@ -2008,8 +1661,7 @@ class DatabaseService:
             # Fetch domains and extract TLDs
             # Note: With 1.6M+ rows, fetching all domains is a performance disaster (OOM risk)
             # We'll limit to a large enough sample of recent auctions to get the current TLDs
-            result = await (client.table('auctions').select('domain').limit(10000)  # Moderate sample for performance.execute()
-            )
+            result = await (client.table('auctions').select('domain').limit(10000)  # Moderate sample for performance.execute() )
             
             tlds = set()
             for auction in result.data if result.data else []:
@@ -2046,57 +1698,31 @@ class DatabaseService:
             file_size = len(file_content)
             file_size_mb = file_size / (1024 * 1024)
             
-            logger.info("Starting storage upload", 
-                       bucket=bucket, 
-                       filename=filename, 
-                       size_bytes=file_size,
-                       size_mb=round(file_size_mb, 2))
+            logger.info("Starting storage upload", bucket=bucket, filename=filename, size_bytes=file_size, size_mb=round(file_size_mb, 2))
             
             # Upload to storage with timeout handling
             # Supabase storage upload accepts bytes directly, not BytesIO
             try:
-                storage_response = await client.storage.from_(bucket).upload(
-                    path=filename,
-                    file=file_content,  # Pass bytes directly, not BytesIO
-                    file_options={
-                        "content-type": "text/csv", 
-                        "upsert": "true",
-                        "cache-control": "3600"
-                    }
-                )
+                storage_response = client.storage.from_(bucket).upload( path=filename, file=file_content,  # Pass bytes directly, not BytesIO
+                    file_options={ "content-type": "text/csv", "upsert": "true", "cache-control": "3600" } )
                 
-                logger.info("Uploaded CSV to storage successfully", 
-                           bucket=bucket, 
-                           filename=filename,
-                           size_mb=round(file_size_mb, 2))
+                logger.info("Uploaded CSV to storage successfully", bucket=bucket, filename=filename, size_mb=round(file_size_mb, 2))
                 return filename
                 
             except Exception as upload_error:
                 # Check if it's a timeout or size-related error
                 error_str = str(upload_error).lower()
                 if "timeout" in error_str or "timed out" in error_str:
-                    logger.error("Storage upload timed out", 
-                               bucket=bucket, 
-                               filename=filename,
-                               size_mb=round(file_size_mb, 2),
-                               error=str(upload_error))
+                    logger.error("Storage upload timed out", bucket=bucket, filename=filename, size_mb=round(file_size_mb, 2), error=str(upload_error))
                     raise Exception(f"Upload timed out for file {filename} ({round(file_size_mb, 2)}MB). The file may be too large.")
                 elif "size" in error_str or "too large" in error_str:
-                    logger.error("File too large for storage", 
-                               bucket=bucket, 
-                               filename=filename,
-                               size_mb=round(file_size_mb, 2),
-                               error=str(upload_error))
+                    logger.error("File too large for storage", bucket=bucket, filename=filename, size_mb=round(file_size_mb, 2), error=str(upload_error))
                     raise Exception(f"File {filename} ({round(file_size_mb, 2)}MB) is too large for storage upload.")
                 else:
                     raise
             
         except Exception as e:
-            logger.error("Failed to upload CSV to storage", 
-                        bucket=bucket, 
-                        filename=filename, 
-                        error=str(e),
-                        error_type=type(e).__name__)
+            logger.error("Failed to upload CSV to storage", bucket=bucket, filename=filename, error=str(e), error_type=type(e).__name__)
             raise
     
     async def delete_file_from_storage(self, bucket: str, path: str) -> bool:
@@ -2126,17 +1752,11 @@ class DatabaseService:
                 return True
             else:
                 # Note: Supabase implementation of storage.remove might return empty list 
-                # even if successful if it doesn't return metadata, or if file didn't exist.
-                # But typically it returns the deleted object metadata.
-                logger.warning("Storage delete response empty (file might not exist)", bucket=bucket, path=path)
+                # even if successful if it doesn't return metadata, or if file didn't exist. # But typically it returns the deleted object metadata. logger.warning("Storage delete response empty (file might not exist)", bucket=bucket, path=path)
                 return False
                 
         except Exception as e:
-            logger.error("Failed to delete file from storage", 
-                        bucket=bucket, 
-                        path=path, 
-                        error=str(e),
-                        error_type=type(e).__name__)
+            logger.error("Failed to delete file from storage", bucket=bucket, path=path, error=str(e), error_type=type(e).__name__)
             # Don't raise, just return False so we don't break the calling process
             return False
 
@@ -2165,20 +1785,11 @@ class DatabaseService:
             # Get service role key for authentication
             service_role_key = self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY
             
-            logger.info("Downloading file from storage", 
-                       bucket=bucket, 
-                       path=path,
-                       url=storage_url)
+            logger.info("Downloading file from storage", bucket=bucket, path=path, url=storage_url)
             
             # Use httpx.AsyncClient for async download
             async with httpx.AsyncClient(timeout=300.0, verify=bool(getattr(self.settings, 'SUPABASE_VERIFY_SSL', True))) as client:
-                response = await client.get(
-                    storage_url,
-                    headers={
-                        "Authorization": f"Bearer {service_role_key}",
-                        "apikey": service_role_key
-                    }
-                )
+                response = client.get( storage_url, headers={ "Authorization": f"Bearer {service_role_key}", "apikey": service_role_key } )
                 
                 if response.status_code == 404:
                     raise Exception(f"File not found in storage: bucket={bucket}, path={path}")
@@ -2188,35 +1799,21 @@ class DatabaseService:
                 file_size = len(response.content)
                 file_size_mb = file_size / (1024 * 1024)
                 
-                logger.info("Downloaded file from storage successfully", 
-                           bucket=bucket, 
-                           path=path,
-                           size_bytes=file_size,
-                           size_mb=round(file_size_mb, 2))
+                logger.info("Downloaded file from storage successfully", bucket=bucket, path=path, size_bytes=file_size, size_mb=round(file_size_mb, 2))
                 
                 return response.content
                 
         except httpx.HTTPStatusError as e:
             error_msg = f"HTTP {e.response.status_code} error downloading from storage: {e.response.text}"
-            logger.error("Failed to download from storage (HTTP error)", 
-                        bucket=bucket, 
-                        path=path,
-                        status_code=e.response.status_code,
-                        error=error_msg)
+            logger.error("Failed to download from storage (HTTP error)", bucket=bucket, path=path, status_code=e.response.status_code, error=error_msg)
             raise Exception(error_msg)
         except Exception as e:
-            logger.error("Failed to download from storage", 
-                        bucket=bucket, 
-                        path=path,
-                        error=str(e),
-                        error_type=type(e).__name__)
+            logger.error("Failed to download from storage", bucket=bucket, path=path, error=str(e), error_type=type(e).__name__)
             raise
 
     async def download_to_file(self, bucket: str, path: str, target_path: str, max_retries: int = 5) -> int:
         """
-        Download file from Supabase storage into a local file using streaming and retries with resume support.
-        
-        Args:
+        Download file from Supabase storage into a local file using streaming and retries with resume support. Args:
             bucket: Storage bucket name
             path: File path in storage
             target_path: Local path to save the file
@@ -2239,10 +1836,7 @@ class DatabaseService:
         
         service_role_key = self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY
         
-        headers = {
-            "Authorization": f"Bearer {service_role_key}",
-            "apikey": service_role_key
-        }
+        headers = { "Authorization": f"Bearer {service_role_key}", "apikey": service_role_key }
         
         last_error = None
         for attempt in range(max_retries + 1):
@@ -2291,11 +1885,7 @@ class DatabaseService:
                         if total_bytes == 0:
                             logger.warning("Downloaded 0 bytes from storage", bucket=bucket, path=path)
                         
-                        logger.info("Downloaded file to disk successfully", 
-                                   bucket=bucket, 
-                                   path=path, 
-                                   local_path=target_path,
-                                   size_mb=round(total_bytes / (1024 * 1024), 2))
+                        logger.info("Downloaded file to disk successfully", bucket=bucket, path=path, local_path=target_path, size_mb=round(total_bytes / (1024 * 1024), 2))
                         return total_bytes
             
             except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.StreamError, httpx.NetworkError) as e:
@@ -2308,13 +1898,7 @@ class DatabaseService:
         
         raise Exception(f"Failed to download from storage after {max_retries} retries: {str(last_error)}")
     
-    async def create_csv_upload_job(
-        self, 
-        job_id: str, 
-        filename: str, 
-        auction_site: str,
-        offering_type: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def create_csv_upload_job( self, job_id: str, filename: str, auction_site: str, offering_type: Optional[str] = None ) -> Dict[str, Any]:
         """
         Create a new CSV upload progress tracking job
         
@@ -2332,20 +1916,7 @@ class DatabaseService:
             if not client:
                 raise Exception("Supabase client not available")
             
-            job_data = {
-                'job_id': job_id,
-                'filename': filename,
-                'auction_site': auction_site,
-                'status': 'pending',
-                'total_records': 0,
-                'processed_records': 0,
-                'inserted_count': 0,
-                'updated_count': 0,
-                'skipped_count': 0,
-                'deleted_expired_count': 0,
-                'current_stage': None,
-                'progress_percentage': 0.00
-            }
+            job_data = { 'job_id': job_id, 'filename': filename, 'auction_site': auction_site, 'status': 'pending', 'total_records': 0, 'processed_records': 0, 'inserted_count': 0, 'updated_count': 0, 'skipped_count': 0, 'deleted_expired_count': 0, 'current_stage': None, 'progress_percentage': 0.00 }
             # Include offering_type if provided
             if offering_type:
                 job_data['offering_type'] = offering_type
@@ -2408,64 +1979,39 @@ class DatabaseService:
                 import json
                 
                 # Use the service role key for admin operations
-                headers = {
-                    'apikey': self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY,
-                    'Authorization': f'Bearer {self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY}',
-                    'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal'
-                }
+                headers = { 'apikey': self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY, 'Authorization': f'Bearer {self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY}', 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
                 
                 # Try to execute via REST API (this may not work for all Supabase instances)
                 # For self-hosted Supabase, you typically need to use psql or Supabase Studio
-                logger.warning(
-                    "csv_upload_progress table does not exist. Attempting automatic creation...",
-                    migration_file=str(migration_file)
-                )
+                logger.warning( "csv_upload_progress table does not exist. Attempting automatic creation...", migration_file=str(migration_file) )
                 
                 # Note: Supabase REST API doesn't support direct SQL execution
                 # We'll provide helpful error message instead
-                raise Exception(
-                    "MIGRATION_REQUIRED: The csv_upload_progress table does not exist. "
+                raise Exception( "MIGRATION_REQUIRED: The csv_upload_progress table does not exist. "
                     "Please apply the migration manually:\n\n"
                     "1. Run: python backend/apply_csv_progress_migration.py\n"
                     "   OR\n"
                     "2. Open Supabase Studio → SQL Editor → Paste and run the SQL from:\n"
                     f"   {migration_file}\n\n"
-                    "After applying the migration, the CSV upload progress tracking will work."
-                )
+                    "After applying the migration, the CSV upload progress tracking will work." )
                 
             except Exception as e:
                 if "MIGRATION_REQUIRED" in str(e):
                     raise
                 logger.error("Failed to create table automatically", error=str(e))
-                raise Exception(
-                    "MIGRATION_REQUIRED: The csv_upload_progress table does not exist. "
+                raise Exception( "MIGRATION_REQUIRED: The csv_upload_progress table does not exist. "
                     "Please apply the migration manually:\n\n"
                     "1. Run: python backend/apply_csv_progress_migration.py\n"
                     "   OR\n"
                     "2. Open Supabase Studio → SQL Editor → Paste and run the SQL from:\n"
                     f"   {migration_file}\n\n"
-                    "After applying the migration, the CSV upload progress tracking will work."
-                )
+                    "After applying the migration, the CSV upload progress tracking will work." )
             
         except Exception as e:
             logger.error("Failed to ensure csv_upload_progress table exists", error=str(e))
             raise
     
-    async def update_csv_upload_progress(
-        self,
-        job_id: str,
-        status: Optional[str] = None,
-        total_records: Optional[int] = None,
-        processed_records: Optional[int] = None,
-        inserted_count: Optional[int] = None,
-        updated_count: Optional[int] = None,
-        skipped_count: Optional[int] = None,
-        deleted_expired_count: Optional[int] = None,
-        current_stage: Optional[str] = None,
-        error_message: Optional[str] = None,
-        completed: bool = False
-    ) -> Dict[str, Any]:
+    async def update_csv_upload_progress( self, job_id: str, status: Optional[str] = None, total_records: Optional[int] = None, processed_records: Optional[int] = None, inserted_count: Optional[int] = None, updated_count: Optional[int] = None, skipped_count: Optional[int] = None, deleted_expired_count: Optional[int] = None, current_stage: Optional[str] = None, error_message: Optional[str] = None, completed: bool = False ) -> Dict[str, Any]:
         """
         Update CSV upload progress
         
@@ -2525,16 +2071,10 @@ class DatabaseService:
                 # No updates to make
                 return await self.get_csv_upload_progress(job_id)
             
-            result = await (
-                await client.table('csv_upload_progress').update(update_data).eq('job_id', job_id).execute()
-            )
+            result = ( await client.table('csv_upload_progress').update(update_data).eq('job_id', job_id).execute() )
             
             if result.data and len(result.data) > 0:
-                logger.debug("Updated CSV upload progress", 
-                           job_id=job_id, 
-                           status=status,
-                           processed=processed_records,
-                           total=total_records)
+                logger.debug("Updated CSV upload progress", job_id=job_id, status=status, processed=processed_records, total=total_records)
                 return result.data[0]
             else:
                 logger.warning("No data returned from progress update", job_id=job_id)
@@ -2560,9 +2100,7 @@ class DatabaseService:
                 raise Exception("Supabase client not available")
             
             # Use execute() instead of single() to avoid PGRST116 error if not found
-            result = await (
-                await client.table('csv_upload_progress').select('*').eq('job_id', job_id).execute()
-            )
+            result = ( await client.table('csv_upload_progress').select('*').eq('job_id', job_id).execute() )
             
             if result.data and len(result.data) > 0:
                 return result.data[0]
@@ -2589,9 +2127,7 @@ class DatabaseService:
             if not client:
                 raise Exception("Supabase client not available")
             
-            result = await (
-                client.table('csv_upload_progress').select('*').not_.eq('status', 'completed').not_.eq('status', 'failed').order('created_at', desc= True).limit(1).execute()
-            )
+            result = await ( client.table('csv_upload_progress').select('*').not_.eq('status', 'completed').not_.eq('status', 'failed').order('created_at', desc= True).limit(1).execute() )
             
             if result.data and len(result.data) > 0:
                 return result.data[0]
@@ -2604,9 +2140,7 @@ class DatabaseService:
     
     async def get_default_llm_provider(self) -> Optional[Dict[str, Any]]:
         """
-        Get the default LLM provider configuration from the database.
-        Returns a dictionary with provider details and the associated API key.
-        """
+        Get the default LLM provider configuration from the database. Returns a dictionary with provider details and the associated API key. """
         client = await self._get_client()
         try:
             if not client:
@@ -2635,12 +2169,7 @@ class DatabaseService:
             
             key_row = key_result.data[0]
             
-            return {
-                "provider": provider_row.get('provider'),
-                "model_name": provider_row.get('model_name'),
-                "api_key": key_row.get('key_value'),
-                "base_url": key_row.get('base_url')
-            }
+            return { "provider": provider_row.get('provider'), "model_name": provider_row.get('model_name'), "api_key": key_row.get('key_value'), "base_url": key_row.get('base_url') }
 
         except Exception as e:
             logger.error("Failed to fetch default LLM provider", error=str(e))
@@ -2648,8 +2177,7 @@ class DatabaseService:
 
     async def get_dataforseo_key(self) -> Optional[Dict[str, str]]:
         """
-        Get the active DataForSEO credentials from the api_keys table.
-        """
+        Get the active DataForSEO credentials from the api_keys table. """
         client = await self._get_client()
         try:
             if not client:
@@ -2663,11 +2191,7 @@ class DatabaseService:
                 return None
             
             row = result.data[0]
-            return {
-                "key_value": row.get('key_value'),
-                "base_url": row.get('base_url'),
-                "user_name": row.get('user_name')
-            }
+            return { "key_value": row.get('key_value'), "base_url": row.get('base_url'), "user_name": row.get('user_name') }
             
         except Exception as e:
             logger.error("Failed to fetch DataForSEO key", error=str(e))
@@ -2683,7 +2207,7 @@ async def init_database():
     global _db_service
     if _db_service is None:
         _db_service = DatabaseService()
-        await _db_service.init_database()
+        await _await db_service.init_database()
     return _db_service
 
 

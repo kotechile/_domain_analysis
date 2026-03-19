@@ -27,86 +27,27 @@ class PDFService:
     def _setup_custom_styles(self):
         """Setup custom paragraph styles for the PDF"""
         # Title style
-        self.styles.add(ParagraphStyle(
-            name='CustomTitle',
-            parent=self.styles['Title'],
-            fontSize=24,
-            textColor=darkblue,
-            spaceAfter=30,
-            alignment=TA_CENTER
-        ))
+        self.styles.add(ParagraphStyle( name='CustomTitle', parent=self.styles['Title'], fontSize=24, textColor=darkblue, spaceAfter=30, alignment=TA_CENTER ))
         
         # Section header style
-        self.styles.add(ParagraphStyle(
-            name='SectionHeader',
-            parent=self.styles['Heading2'],
-            fontSize=16,
-            textColor=darkblue,
-            spaceBefore=20,
-            spaceAfter=12,
-            borderWidth=1,
-            borderColor=darkblue,
-            borderPadding=8,
-            backColor=HexColor('#f0f8ff')
-        ))
+        self.styles.add(ParagraphStyle( name='SectionHeader', parent=self.styles['Heading2'], fontSize=16, textColor=darkblue, spaceBefore=20, spaceAfter=12, borderWidth=1, borderColor=darkblue, borderPadding=8, backColor=HexColor('#f0f8ff') ))
         
         # Subsection header style
-        self.styles.add(ParagraphStyle(
-            name='SubsectionHeader',
-            parent=self.styles['Heading3'],
-            fontSize=14,
-            textColor=darkblue,
-            spaceBefore=15,
-            spaceAfter=8
-        ))
+        self.styles.add(ParagraphStyle( name='SubsectionHeader', parent=self.styles['Heading3'], fontSize=14, textColor=darkblue, spaceBefore=15, spaceAfter=8 ))
         
         # Recommendation style
-        self.styles.add(ParagraphStyle(
-            name='Recommendation',
-            parent=self.styles['Normal'],
-            fontSize=14,
-            textColor=black,
-            spaceBefore=10,
-            spaceAfter=10,
-            borderWidth=1,
-            borderColor=black,
-            borderPadding=10,
-            backColor=HexColor('#f9f9f9')
-        ))
+        self.styles.add(ParagraphStyle( name='Recommendation', parent=self.styles['Normal'], fontSize=14, textColor=black, spaceBefore=10, spaceAfter=10, borderWidth=1, borderColor=black, borderPadding=10, backColor=HexColor('#f9f9f9') ))
         
         # Pro/Con style
-        self.styles.add(ParagraphStyle(
-            name='ProItem',
-            parent=self.styles['Normal'],
-            fontSize=11,
-            textColor=darkgreen,
-            spaceBefore=5,
-            spaceAfter=5,
-            leftIndent=20
-        ))
+        self.styles.add(ParagraphStyle( name='ProItem', parent=self.styles['Normal'], fontSize=11, textColor=darkgreen, spaceBefore=5, spaceAfter=5, leftIndent=20 ))
         
-        self.styles.add(ParagraphStyle(
-            name='ConItem',
-            parent=self.styles['Normal'],
-            fontSize=11,
-            textColor=darkred,
-            spaceBefore=5,
-            spaceAfter=5,
-            leftIndent=20
-        ))
+        self.styles.add(ParagraphStyle( name='ConItem', parent=self.styles['Normal'], fontSize=11, textColor=darkred, spaceBefore=5, spaceAfter=5, leftIndent=20 ))
     
     def generate_domain_analysis_pdf(self, domain: str, report_data: Dict[str, Any]) -> bytes:
         """Generate a comprehensive PDF report for domain analysis"""
         try:
             buffer = io.BytesIO()
-            doc = SimpleDocTemplate(
-                buffer,
-                pagesize=A4,
-                rightMargin=72,
-                leftMargin=72,
-                topMargin=72,
-                bottomMargin=72
-            )
+            doc = SimpleDocTemplate( buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72 )
             
             # Build the story (content)
             story = []
@@ -371,25 +312,11 @@ class PDFService:
         if data_for_seo_metrics:
             story.append(Paragraph("<b>SEO Metrics:</b>", self.styles['SubsectionHeader']))
             
-            metrics_data = [
-                ['Metric', 'Value'],
-                ['Domain Authority (DR)', str(data_for_seo_metrics.get('domain_rating_dr', 'N/A'))],
-                ['Organic Traffic', f"{data_for_seo_metrics.get('organic_traffic_est', 0):,.0f}"],
-                ['Total Keywords', str(data_for_seo_metrics.get('total_keywords', 'N/A'))],
-                ['Total Backlinks', f"{data_for_seo_metrics.get('total_backlinks', 0):,}"],
-                ['Referring Domains', str(data_for_seo_metrics.get('referring_domains', 'N/A'))]
+            metrics_data = [ ['Metric', 'Value'], ['Domain Authority (DR)', str(data_for_seo_metrics.get('domain_rating_dr', 'N/A'))], ['Organic Traffic', f"{data_for_seo_metrics.get('organic_traffic_est', 0):,.0f}"], ['Total Keywords', str(data_for_seo_metrics.get('total_keywords', 'N/A'))], ['Total Backlinks', f"{data_for_seo_metrics.get('total_backlinks', 0):,}"], ['Referring Domains', str(data_for_seo_metrics.get('referring_domains', 'N/A'))]
             ]
             
             metrics_table = Table(metrics_data)
-            metrics_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 12),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            metrics_table.setStyle(TableStyle([ ('BACKGROUND', (0, 0), (-1, 0), colors.grey), ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke), ('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'), ('FONTSIZE', (0, 0), (-1, 0), 12), ('BOTTOMPADDING', (0, 0), (-1, 0), 12), ('BACKGROUND', (0, 1), (-1, -1), colors.beige), ('GRID', (0, 0), (-1, -1), 1, colors.black)
             ]))
             
             story.append(metrics_table)

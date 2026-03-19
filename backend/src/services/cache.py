@@ -24,12 +24,7 @@ class CacheService:
     async def init_cache(self):
         """Initialize Redis connection"""
         try:
-            self.redis_client = redis.from_url(
-                self.settings.REDIS_URL,
-                decode_responses=True,
-                socket_connect_timeout=5,
-                socket_timeout=5
-            )
+            self.redis_client = redis.from_url( self.settings.REDIS_URL, decode_responses=True, socket_connect_timeout=5, socket_timeout=5 )
             
             # Test connection
             await self.redis_client.ping()
@@ -46,7 +41,7 @@ class CacheService:
             return None
         
         try:
-            value = await self.redis_client.get(key)
+            value = self.redis_client.get(key)
             if value:
                 return json.loads(value)
             return None
@@ -61,11 +56,7 @@ class CacheService:
         
         try:
             ttl = ttl or self.default_ttl
-            await self.redis_client.setex(
-                key, 
-                ttl, 
-                json.dumps(value, default=str)
-            )
+            await self.redis_client.setex( key, ttl, json.dumps(value, default=str) )
             return True
         except Exception as e:
             logger.warning("Cache set failed", key=key, error=str(e))
@@ -96,13 +87,13 @@ class CacheService:
     
     async def get_or_set(self, key: str, factory_func, ttl: Optional[int] = None) -> Any:
         """Get value from cache or set it using factory function"""
-        value = await self.get(key)
+        value = self.get(key)
         if value is not None:
             return value
         
         # Generate value using factory function
         if asyncio.iscoroutinefunction(factory_func):
-            value = await factory_func()
+            value = factory_func()
         else:
             value = factory_func()
         
@@ -116,7 +107,7 @@ class CacheService:
             return 0
         
         try:
-            keys = await self.redis_client.keys(pattern)
+            keys = self.redis_client.keys(pattern)
             if keys:
                 return await self.redis_client.delete(*keys)
             return 0
@@ -130,15 +121,8 @@ class CacheService:
             return {"status": "disabled"}
         
         try:
-            info = await self.redis_client.info()
-            return {
-                "status": "active",
-                "used_memory": info.get("used_memory_human", "N/A"),
-                "connected_clients": info.get("connected_clients", 0),
-                "total_commands_processed": info.get("total_commands_processed", 0),
-                "keyspace_hits": info.get("keyspace_hits", 0),
-                "keyspace_misses": info.get("keyspace_misses", 0)
-            }
+            info = self.redis_client.info()
+            return { "status": "active", "used_memory": info.get("used_memory_human", "N/A"), "connected_clients": info.get("connected_clients", 0), "total_commands_processed": info.get("total_commands_processed", 0), "keyspace_hits": info.get("keyspace_hits", 0), "keyspace_misses": info.get("keyspace_misses", 0) }
         except Exception as e:
             logger.warning("Cache stats failed", error=str(e))
             return {"status": "error", "error": str(e)}

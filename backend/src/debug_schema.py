@@ -9,16 +9,11 @@ async def debug_schema():
     # Try inserting a dummy record with job_id
     test_job_id = "00000000-0000-0000-0000-000000000000"
     try:
-        res = (await db._get_client()).table('auctions_staging').insert({
-            'domain': 'test-isolation.com',
-            'expiration_date': '2099-01-01',
-            'auction_site': 'test',
-            'job_id': test_job_id
-        }).execute()
+        res = (await db._get_client()).table('auctions_staging').insert({ 'domain': 'test-isolation.com', 'expiration_date': '2099-01-01', 'auction_site': 'test', 'job_id': test_job_id }).execute()
         print("✅ Successfully inserted test record with job_id")
         
         # Verify it has the job_id
-        res_check = await (await db._get_client()).table('auctions_staging').select('job_id').eq('domain', 'test-isolation.com').execute()
+        res_check = (await db._get_client()).table('auctions_staging').select('job_id').eq('domain', 'test-isolation.com').execute()
         print("Verification result:", res_check.data)
         
         # Cleanup

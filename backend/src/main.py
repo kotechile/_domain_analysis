@@ -30,23 +30,8 @@ from services.cache import init_cache
 from utils.config import get_settings
 
 # Configure structured logging
-structlog.configure(
-    processors=[
-        structlog.stdlib.filter_by_level,
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-        structlog.processors.UnicodeDecoder(),
-        structlog.processors.JSONRenderer()
-    ],
-    context_class=dict,
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    wrapper_class=structlog.stdlib.BoundLogger,
-    cache_logger_on_first_use=True,
-)
+structlog.configure( processors=[ structlog.stdlib.filter_by_level, structlog.stdlib.add_logger_name, structlog.stdlib.add_log_level, structlog.stdlib.PositionalArgumentsFormatter(), structlog.processors.TimeStamper(fmt="iso"), structlog.processors.StackInfoRenderer(), structlog.processors.format_exc_info, structlog.processors.UnicodeDecoder(), structlog.processors.JSONRenderer()
+    ], context_class=dict, logger_factory=structlog.stdlib.LoggerFactory(), wrapper_class=structlog.stdlib.BoundLogger, cache_logger_on_first_use=True, )
 
 logger = structlog.get_logger()
 
@@ -77,33 +62,17 @@ async def lifespan(app: FastAPI):
 
 
 # Initialize FastAPI application
-app = FastAPI(
-    title="Domain Analysis System",
-    description="Comprehensive domain analysis with SEO data, backlinks, and LLM-powered insights",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan
-)
+app = FastAPI( title="Domain Analysis System", description="Comprehensive domain analysis with SEO data, backlinks, and LLM-powered insights", version="1.0.0", docs_url="/docs", redoc_url="/redoc", lifespan=lifespan )
 
 # Configure CORS
 settings = get_settings()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
-)
+app.add_middleware( CORSMiddleware, allow_origins=settings.ALLOWED_ORIGINS, allow_credentials=True, allow_methods=["GET", "POST", "PUT", "DELETE"], allow_headers=["*"], )
 
 # Add trusted host middleware for security
 # Note: Disable when N8N is enabled (requests come through ngrok with dynamic domains)
 # In production with a fixed domain, re-enable this with your actual domain
 if not settings.N8N_ENABLED:
-    app.add_middleware(
-        TrustedHostMiddleware,
-        allowed_hosts=settings.ALLOWED_HOSTS
-    )
+    app.add_middleware( TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS )
 else:
     logger.warning("TrustedHostMiddleware disabled - N8N enabled, requests come through ngrok")
 
@@ -125,20 +94,9 @@ app.include_router(debug_offer_type.router, prefix="/api/v1", tags=["debug"])
 @app.get("/")
 async def root():
     """Root endpoint with basic API information"""
-    return {
-        "message": "Domain Analysis System API",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/api/v1/health"
-    }
+    return { "message": "Domain Analysis System API", "version": "1.0.0", "docs": "/docs", "health": "/api/v1/health" }
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    uvicorn.run( "main:app", host="0.0.0.0", port=8000, reload=True, log_level="info" )

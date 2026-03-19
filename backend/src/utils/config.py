@@ -18,12 +18,7 @@ class Settings(BaseSettings):
     # Server settings
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    ALLOWED_ORIGINS: List[str] = [
-        "http://localhost:3000", 
-        "http://localhost:3001", 
-        "http://localhost:3010", 
-        "https://scout.buildomain.com",
-        "https://n8n.giniloh.com"
+    ALLOWED_ORIGINS: List[str] = [ "http://localhost:3000", "http://localhost:3001", "http://localhost:3010", "https://scout.buildomain.com", "https://n8n.giniloh.com"
     ]
     ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1", "*.ngrok-free.dev", "*.ngrok.io", "*.ngrok.app"]
     
@@ -122,10 +117,7 @@ def reset_settings():
 def validate_required_settings():
     """Validate that all required settings are present"""
     settings = get_settings()
-    required_vars = [
-        "SUPABASE_URL",
-        "SUPABASE_KEY", 
-        "SECRET_KEY"
+    required_vars = [ "SUPABASE_URL", "SUPABASE_KEY", "SECRET_KEY"
     ]
     
     missing_vars = []

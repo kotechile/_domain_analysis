@@ -24,11 +24,7 @@ class AuctionScoringService:
         self.db_service = DatabaseService()
         self.domain_scoring_service = DomainScoringService()
     
-    async def get_unprocessed_batch(
-        self, 
-        batch_size: int = 10000,
-        config_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    async def get_unprocessed_batch( self, batch_size: int = 10000, config_id: Optional[str] = None ) -> List[Dict[str, Any]]:
         """
         Get a batch of unprocessed auctions with pre-scoring from Supabase
         
@@ -44,13 +40,7 @@ class AuctionScoringService:
                 raise Exception("Supabase client not available")
             
             # Call the optimized PostgreSQL function
-            result = await (await self.db_service._get_client()).rpc(
-                'filter_and_pre_score_auctions',
-                {
-                    'p_batch_limit': batch_size,
-                    'p_config_id': config_id
-                }
-            ).execute()
+            result = (await self.await db_service._get_client()).rpc( 'filter_and_pre_score_auctions', { 'p_batch_limit': batch_size, 'p_config_id': config_id } ).execute()
             
             if result.data:
                 logger.info("Fetched unprocessed batch", count=len(result.data), batch_size=batch_size)
@@ -87,25 +77,10 @@ class AuctionScoringService:
             else:
                 registered_date = None
         
-        return NamecheapDomain(
-            name=auction_data['domain'],
-            registered_date=registered_date,
-            expiration_date=auction_data.get('expiration_date'),
-            # Other fields can be None for scoring purposes
-            current_price=None,
-            buy_now_price=None,
-            bid_count=None,
-            watcher_count=None,
-            is_premium=None,
-            is_partner_sale=None,
-            semrush_a_score=None,
-            ahrefs_backlinks=None
-        )
+        return NamecheapDomain( name=auction_data['domain'], registered_date=registered_date, expiration_date=auction_data.get('expiration_date'), # Other fields can be None for scoring purposes
+            current_price=None, buy_now_price=None, bid_count=None, watcher_count=None, is_premium=None, is_partner_sale=None, semrush_a_score=None, ahrefs_backlinks=None )
     
-    def calculate_complex_scores(
-        self, 
-        auction_records: List[Dict[str, Any]]
-    ) -> Dict[str, Dict[str, Any]]:
+    def calculate_complex_scores( self, auction_records: List[Dict[str, Any]] ) -> Dict[str, Dict[str, Any]]:
         """
         Calculate LFS and semantic scores for a batch of auctions
         
@@ -131,13 +106,7 @@ class AuctionScoringService:
                 
                 # If filter failed, mark as processed with NULL score
                 if not passed_filter:
-                    scores[domain_id] = {
-                        'score': None,
-                        'lfs_score': None,
-                        'sv_score': None,
-                        'age_score': age_score,
-                        'filter_reason': filter_reason
-                    }
+                    scores[domain_id] = { 'score': None, 'lfs_score': None, 'sv_score': None, 'age_score': age_score, 'filter_reason': filter_reason }
                     failed_count += 1
                     continue
                 
@@ -145,18 +114,9 @@ class AuctionScoringService:
                 try:
                     namecheap_domain = self._convert_to_namecheap_domain(auction)
                 except Exception as e:
-                    logger.warning("Failed to convert auction to NamecheapDomain", 
-                                 domain=domain_name, 
-                                 domain_id=domain_id,
-                                 error=str(e))
+                    logger.warning("Failed to convert auction to NamecheapDomain", domain=domain_name, domain_id=domain_id, error=str(e))
                     # Mark as processed with NULL score on conversion error
-                    scores[domain_id] = {
-                        'score': None,
-                        'lfs_score': None,
-                        'sv_score': None,
-                        'age_score': age_score,
-                        'error': f"Conversion error: {str(e)}"
-                    }
+                    scores[domain_id] = { 'score': None, 'lfs_score': None, 'sv_score': None, 'age_score': age_score, 'error': f"Conversion error: {str(e)}" }
                     failed_count += 1
                     continue
                 
@@ -164,18 +124,9 @@ class AuctionScoringService:
                 try:
                     scored = self.domain_scoring_service.score_domain(namecheap_domain)
                 except Exception as e:
-                    logger.warning("Failed to score domain", 
-                                 domain=domain_name, 
-                                 domain_id=domain_id,
-                                 error=str(e))
+                    logger.warning("Failed to score domain", domain=domain_name, domain_id=domain_id, error=str(e))
                     # Mark as processed with NULL score on scoring error
-                    scores[domain_id] = {
-                        'score': None,
-                        'lfs_score': None,
-                        'sv_score': None,
-                        'age_score': age_score,
-                        'error': f"Scoring error: {str(e)}"
-                    }
+                    scores[domain_id] = { 'score': None, 'lfs_score': None, 'sv_score': None, 'age_score': age_score, 'error': f"Scoring error: {str(e)}" }
                     failed_count += 1
                     continue
                 
@@ -189,18 +140,11 @@ class AuctionScoringService:
                 lfs_score = scored.lexical_frequency_score or 0.0
                 sv_score = scored.semantic_value_score or 0.0
                 
-                total_score = (
-                    (age_score * age_weight) + 
+                total_score = ( (age_score * age_weight) + 
                     (lfs_score * lfs_weight) + 
-                    (sv_score * sv_weight)
-                )
+                    (sv_score * sv_weight) )
                 
-                scores[domain_id] = {
-                    'score': round(total_score, 2),
-                    'lfs_score': round(lfs_score, 2),
-                    'sv_score': round(sv_score, 2),
-                    'age_score': age_score
-                }
+                scores[domain_id] = { 'score': round(total_score, 2), 'lfs_score': round(lfs_score, 2), 'sv_score': round(sv_score, 2), 'age_score': age_score }
                 passed_count += 1
                 
                 # Log progress every 1000 records
@@ -208,31 +152,16 @@ class AuctionScoringService:
                     logger.info("Scoring progress", processed=i + 1, total=len(auction_records))
                     
             except Exception as e:
-                logger.error("Failed to score auction", 
-                           domain_id=auction.get('id'), 
-                           domain=auction.get('domain'),
-                           error=str(e))
+                logger.error("Failed to score auction", domain_id=auction.get('id'), domain=auction.get('domain'), error=str(e))
                 # Mark as processed with NULL score on error
-                scores[auction.get('id')] = {
-                    'score': None,
-                    'lfs_score': None,
-                    'sv_score': None,
-                    'age_score': auction.get('age_score', 0.0),
-                    'error': str(e)
-                }
+                scores[auction.get('id')] = { 'score': None, 'lfs_score': None, 'sv_score': None, 'age_score': auction.get('age_score', 0.0), 'error': str(e) }
                 failed_count += 1
         
-        logger.info("Complex scoring complete", 
-                   total=len(auction_records),
-                   passed=passed_count,
-                   failed=failed_count)
+        logger.info("Complex scoring complete", total=len(auction_records), passed=passed_count, failed=failed_count)
         
         return scores
     
-    async def update_scores_in_database(
-        self, 
-        scores: Dict[str, Dict[str, Any]]
-    ) -> int:
+    async def update_scores_in_database( self, scores: Dict[str, Dict[str, Any]] ) -> int:
         """
         Bulk update scores in database using PostgreSQL function
         
@@ -250,17 +179,10 @@ class AuctionScoringService:
             # Convert UUID keys to strings and prepare JSONB structure
             scores_jsonb = {}
             for domain_id, score_data in scores.items():
-                scores_jsonb[domain_id] = {
-                    'score': score_data.get('score'),
-                    'lfs_score': score_data.get('lfs_score'),
-                    'sv_score': score_data.get('sv_score')
-                }
+                scores_jsonb[domain_id] = { 'score': score_data.get('score'), 'lfs_score': score_data.get('lfs_score'), 'sv_score': score_data.get('sv_score') }
             
             # Call bulk update function
-            result = (await self.db_service._get_client()).rpc(
-                'bulk_update_auction_scores',
-                {'p_scores': scores_jsonb}
-            ).execute()
+            result = (await self.await db_service._get_client()).rpc( 'bulk_update_auction_scores', {'p_scores': scores_jsonb} ).execute()
             
             if result.data and 'updated_count' in result.data:
                 updated_count = result.data['updated_count']
@@ -292,10 +214,7 @@ class AuctionScoringService:
             if use_chunked:
                 try:
                     logger.info("Attempting chunked ranking recalculation")
-                    result = (await self.db_service._get_client()).rpc(
-                        'recalculate_auction_rankings_chunked',
-                        {'p_batch_size': 50000}
-                    ).execute()
+                    result = (await self.await db_service._get_client()).rpc( 'recalculate_auction_rankings_chunked', {'p_batch_size': 50000} ).execute()
                     
                     if result.data and result.data.get('success'):
                         logger.info("Chunked ranking recalculation successful", result=result.data)
@@ -311,7 +230,7 @@ class AuctionScoringService:
             
             # Fallback to standard approach
             logger.info("Using standard ranking recalculation")
-            result = await (await self.db_service._get_client()).rpc('recalculate_auction_rankings').execute()
+            result = (await self.await db_service._get_client()).rpc('recalculate_auction_rankings').execute()
             
             if result.data:
                 logger.info("Recalculated rankings", result=result.data)
@@ -324,12 +243,7 @@ class AuctionScoringService:
             logger.error("Failed to recalculate rankings", error=str(e))
             raise
     
-    async def process_batch(
-        self,
-        batch_size: int = 10000,
-        config_id: Optional[str] = None,
-        recalculate_rankings_after: bool = False  # Changed default to False to avoid timeouts
-    ) -> Dict[str, Any]:
+    async def process_batch( self, batch_size: int = 10000, config_id: Optional[str] = None, recalculate_rankings_after: bool = False  # Changed default to False to avoid timeouts ) -> Dict[str, Any]:
         """
         Process a single batch of unprocessed auctions
         
@@ -352,71 +266,47 @@ class AuctionScoringService:
         
         try:
             # Step 1: Fetch unprocessed batch with pre-scoring
-            auction_records = await self.get_unprocessed_batch(batch_size, config_id)
+            auction_records = self.get_unprocessed_batch(batch_size, config_id)
             
             if not auction_records:
-                return {
-                    'success': True,
-                    'processed_count': 0,
-                    'message': 'No unprocessed records found'
-                }
+                return { 'success': True, 'processed_count': 0, 'message': 'No unprocessed records found' }
             
             # Step 2: Calculate complex scores in Python
             scores = self.calculate_complex_scores(auction_records)
             
             # Step 3: Update scores in database
-            updated_count = await self.update_scores_in_database(scores)
+            updated_count = self.update_scores_in_database(scores)
             
             # Step 4: Recalculate rankings if requested (but skip if large dataset to avoid timeout)
             ranking_stats = {}
             if recalculate_rankings_after:
                 try:
                     # Check current scored count to estimate if it might timeout
-                    stats = await self.get_processing_stats()
+                    stats = self.get_processing_stats()
                     scored_count = stats.get('scored_count', 0)
                     
                     if scored_count > 100000:
-                        logger.warning("Very large dataset detected, skipping ranking recalculation to avoid timeout", 
-                                     scored_count=scored_count)
-                        ranking_stats = {
-                            'success': False, 
-                            'skipped': True,
-                            'reason': 'Dataset too large, will recalculate after all processing complete',
-                            'scored_count': scored_count
-                        }
+                        logger.warning("Very large dataset detected, skipping ranking recalculation to avoid timeout", scored_count=scored_count)
+                        ranking_stats = { 'success': False, 'skipped': True, 'reason': 'Dataset too large, will recalculate after all processing complete', 'scored_count': scored_count }
                     else:
-                        ranking_stats = await self.recalculate_rankings()
+                        ranking_stats = self.recalculate_rankings()
                 except Exception as e:
                     # Log but don't fail the batch if ranking recalculation times out
                     error_msg = str(e)
                     if 'timeout' in error_msg.lower() or '57014' in error_msg:
-                        logger.warning("Ranking recalculation timed out (non-critical). Will recalculate after processing completes.", 
-                                     error=error_msg)
+                        logger.warning("Ranking recalculation timed out (non-critical). Will recalculate after processing completes.", error=error_msg)
                     else:
                         logger.warning("Ranking recalculation failed (non-critical)", error=error_msg)
-                    ranking_stats = {
-                        'success': False, 
-                        'error': error_msg, 
-                        'note': 'Rankings can be recalculated later using: POST /api/auctions/recalculate-rankings'
-                    }
+                    ranking_stats = { 'success': False, 'error': error_msg, 'note': 'Rankings can be recalculated later using: POST /api/auctions/recalculate-rankings' }
             
-            result = {
-                'success': True,
-                'processed_count': updated_count,
-                'total_fetched': len(auction_records),
-                'ranking_stats': ranking_stats
-            }
+            result = { 'success': True, 'processed_count': updated_count, 'total_fetched': len(auction_records), 'ranking_stats': ranking_stats }
             
             logger.info("Batch processing complete", **result)
             return result
             
         except Exception as e:
             logger.error("Batch processing failed", error=str(e))
-            return {
-                'success': False,
-                'error': str(e),
-                'processed_count': 0
-            }
+            return { 'success': False, 'error': str(e), 'processed_count': 0 }
     
     async def get_processing_stats(self) -> Dict[str, Any]:
         """
@@ -430,32 +320,21 @@ class AuctionScoringService:
                 raise Exception("Supabase client not available")
             
             # Query unprocessed count
-            unprocessed_result = (
-                (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', False).execute()
-            )
+            unprocessed_result = ( (await self.await db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', False).execute() )
             
             unprocessed_count = unprocessed_result.count if hasattr(unprocessed_result, 'count') else 0
             
             # Query processed count
-            processed_result = await (
-                (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).execute()
-            )
+            processed_result = ( (await self.await db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).execute() )
             
             processed_count = processed_result.count if hasattr(processed_result, 'count') else 0
             
             # Query scored count (processed with non-null score)
-            scored_result = await (
-                (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).not_.is_('score', 'null').execute()
-            )
+            scored_result = ( (await self.await db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).not_.is_('score', 'null').execute() )
             
             scored_count = scored_result.count if hasattr(scored_result, 'count') else 0
             
-            return {
-                'unprocessed_count': unprocessed_count,
-                'processed_count': processed_count,
-                'scored_count': scored_count,
-                'total_count': unprocessed_count + processed_count
-            }
+            return { 'unprocessed_count': unprocessed_count, 'processed_count': processed_count, 'scored_count': scored_count, 'total_count': unprocessed_count + processed_count }
             
         except Exception as e:
             logger.error("Failed to get processing stats", error=str(e))

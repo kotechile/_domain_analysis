@@ -16,12 +16,7 @@ class ProgressTracker:
     """Track progress of long-running background tasks"""
 
     @staticmethod
-    async def create_job(
-        user_id: str,
-        job_type: str,
-        total_items: int,
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> str:
+    async def create_job( user_id: str, job_type: str, total_items: int, metadata: Optional[Dict[str, Any]] = None ) -> str:
         """
         Create a new progress tracking job
 
@@ -37,53 +32,24 @@ class ProgressTracker:
         job_id = str(uuid.uuid4())
         cache = get_cache()
 
-        job_data = {
-            "job_id": job_id,
-            "user_id": user_id,
-            "job_type": job_type,
-            "status": "running",
-            "total_items": total_items,
-            "processed_items": 0,
-            "failed_items": 0,
-            "current_batch": 0,
-            "total_batches": 0,
-            "started_at": datetime.utcnow().isoformat(),
-            "completed_at": None,
-            "message": "Starting...",
-            "metadata": metadata or {}
-        }
+        job_data = { "job_id": job_id, "user_id": user_id, "job_type": job_type, "status": "running", "total_items": total_items, "processed_items": 0, "failed_items": 0, "current_batch": 0, "total_batches": 0, "started_at": datetime.utcnow().isoformat(), "completed_at": None, "message": "Starting...", "metadata": metadata or {} }
 
         # Store in Redis with 1 hour TTL
         if cache:
-            await cache.set(
-                f"job:{job_id}",
-                job_data,
-                ttl=3600  # 1 hour
-            )
+            await cache.set( f"job:{job_id}", job_data, ttl=3600  # 1 hour )
 
-        logger.info(f"Created progress job",
-                   job_id=job_id,
-                   job_type=job_type,
-                   user_id=user_id,
-                   total_items=total_items)
+        logger.info(f"Created progress job", job_id=job_id, job_type=job_type, user_id=user_id, total_items=total_items)
 
         return job_id
 
     @staticmethod
-    async def update_progress(
-        job_id: str,
-        processed_items: int,
-        failed_items: int = 0,
-        current_batch: int = 0,
-        total_batches: int = 0,
-        message: str = ""
-    ):
+    async def update_progress( job_id: str, processed_items: int, failed_items: int = 0, current_batch: int = 0, total_batches: int = 0, message: str = "" ):
         """Update job progress"""
         cache = get_cache()
         if not cache:
             return
 
-        job_data = await cache.get(f"job:{job_id}")
+        job_data = cache.get(f"job:{job_id}")
         if not job_data:
             return
 
@@ -97,17 +63,13 @@ class ProgressTracker:
         await cache.set(f"job:{job_id}", job_data, ttl=3600)
 
     @staticmethod
-    async def complete_job(
-        job_id: str,
-        success: bool = True,
-        message: str = ""
-    ):
+    async def complete_job( job_id: str, success: bool = True, message: str = "" ):
         """Mark job as completed"""
         cache = get_cache()
         if not cache:
             return
 
-        job_data = await cache.get(f"job:{job_id}")
+        job_data = cache.get(f"job:{job_id}")
         if not job_data:
             return
 
@@ -118,10 +80,7 @@ class ProgressTracker:
 
         await cache.set(f"job:{job_id}", job_data, ttl=3600)
 
-        logger.info(f"Completed progress job",
-                   job_id=job_id,
-                   success=success,
-                   message=message)
+        logger.info(f"Completed progress job", job_id=job_id, success=success, message=message)
 
     @staticmethod
     async def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
@@ -130,18 +89,10 @@ class ProgressTracker:
         if not cache:
             # Return a default running status if cache is unavailable
             # This prevents frontend errors when Redis is down
-            return {
-                "job_id": job_id,
-                "status": "running",
-                "total_items": 1000,
-                "processed_items": 0,
-                "failed_items": 0,
-                "progress_percent": 0,
-                "message": "Processing... (cache unavailable)"
-            }
+            return { "job_id": job_id, "status": "running", "total_items": 1000, "processed_items": 0, "failed_items": 0, "progress_percent": 0, "message": "Processing... (cache unavailable)" }
 
         try:
-            job_data = await cache.get(f"job:{job_id}")
+            job_data = cache.get(f"job:{job_id}")
             if not job_data:
                 return None
 

@@ -13,14 +13,7 @@ from services.namecheap_service import NamecheapService
 from services.domain_scoring_service import DomainScoringService
 from services.auto_trigger_service import AutoTriggerService
 from services.database import get_database
-from models.domain_analysis import (
-    BulkDomainAnalysis, 
-    NamecheapDomain,
-    NamecheapDomainListResponse,
-    NamecheapDomainSelection,
-    NamecheapAnalysisResponse,
-    ScoredDomain
-)
+from models.domain_analysis import ( BulkDomainAnalysis, NamecheapDomain, NamecheapDomainListResponse, NamecheapDomainSelection, NamecheapAnalysisResponse, ScoredDomain )
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -34,10 +27,7 @@ _csv_scored_cache: Dict[str, Dict[str, Any]] = {}
 
 
 @router.get("/domains")
-async def get_bulk_domains(
-    sort_by: str = Query("created_at", description="Field to sort by (created_at, domain_name, updated_at)"),
-    order: str = Query("desc", description="Sort order (asc, desc)")
-):
+async def get_bulk_domains( sort_by: str = Query("created_at", description="Field to sort by (created_at, domain_name, updated_at)"), order: str = Query("desc", description="Sort order (asc, desc)") ):
     """
     Get all bulk domain analysis records with optional sorting
     """
@@ -48,21 +38,10 @@ async def get_bulk_domains(
         # Convert to dict format for JSON response
         result = []
         for record in records:
-            record_dict = {
-                "id": record.id,
-                "domain_name": record.domain_name,
-                "provider": record.provider,
-                "backlinks_bulk_page_summary": record.backlinks_bulk_page_summary.dict() if record.backlinks_bulk_page_summary else None,
-                "created_at": record.created_at.isoformat() if record.created_at else None,
-                "updated_at": record.updated_at.isoformat() if record.updated_at else None
-            }
+            record_dict = { "id": record.id, "domain_name": record.domain_name, "provider": record.provider, "backlinks_bulk_page_summary": record.backlinks_bulk_page_summary.dict() if record.backlinks_bulk_page_summary else None, "created_at": record.created_at.isoformat() if record.created_at else None, "updated_at": record.updated_at.isoformat() if record.updated_at else None }
             result.append(record_dict)
         
-        return {
-            "success": True,
-            "count": len(result),
-            "domains": result
-        }
+        return { "success": True, "count": len(result), "domains": result }
         
     except Exception as e:
         logger.error("Failed to get bulk domains", error=str(e))
@@ -72,20 +51,14 @@ async def get_bulk_domains(
 # Namecheap-specific routes
 
 @router.post("/namecheap/upload-csv")
-async def upload_namecheap_csv(
-    file: UploadFile = File(...),
-    load_to_db: bool = Query(False, description="Whether to load data into database (default: False, just parse and cache)")
-):
+async def upload_namecheap_csv( file: UploadFile = File(...), load_to_db: bool = Query(False, description="Whether to load data into database (default: False, just parse and cache)") ):
     """
     Upload Namecheap CSV file and optionally load into namecheap_domains table
     
-    If load_to_db=False (default), the file is parsed and cached in memory for viewing.
-    If load_to_db=True, the table will be truncated before loading new data.
-    Expected CSV format with header row containing all Namecheap fields.
-    """
+    If load_to_db=False (default), the file is parsed and cached in memory for viewing. If load_to_db=True, the table will be truncated before loading new data. Expected CSV format with header row containing all Namecheap fields. """
     try:
         # Read file content
-        content = await file.read()
+        content = file.read()
         file_content = content.decode('utf-8')
         
         logger.info("Received Namecheap CSV upload", filename=file.filename, size=len(file_content), load_to_db=load_to_db)
@@ -99,28 +72,16 @@ async def upload_namecheap_csv(
         
         if load_to_db:
             # Load into database
-            result = await namecheap_service.load_namecheap_csv(file_content)
+            result = namecheap_service.load_namecheap_csv(file_content)
             
             if not result.get("success"):
                 raise HTTPException(status_code=400, detail=result.get("message", "Failed to process CSV"))
             
-            return {
-                "success": True,
-                "message": result.get("message"),
-                "loaded_count": result.get("loaded_count", 0),
-                "skipped_count": result.get("skipped_count", 0),
-                "total_count": result.get("total_count", 0),
-                "file_id": None  # Not needed for DB load
-            }
+            return { "success": True, "message": result.get("message"), "loaded_count": result.get("loaded_count", 0), "skipped_count": result.get("skipped_count", 0), "total_count": result.get("total_count", 0), "file_id": None  # Not needed for DB load }
         else:
             # Store in memory cache for viewing
             file_id = str(uuid.uuid4())
-            _csv_cache[file_id] = {
-                "domains": domains,
-                "filename": file.filename,
-                "uploaded_at": datetime.now(),
-                "total_count": len(domains)
-            }
+            _csv_cache[file_id] = { "domains": domains, "filename": file.filename, "uploaded_at": datetime.now(), "total_count": len(domains) }
             
             # Score domains automatically (with error handling)
             logger.info("Starting domain scoring", file_id=file_id, domain_count=len(domains))
@@ -137,9 +98,7 @@ async def upload_namecheap_csv(
                     raise ValueError("Scoring service returned empty results")
                 
                 if len(scored_domains) != len(domains):
-                    logger.warning("Scoring returned different count than input", 
-                                 input_count=len(domains), 
-                                 scored_count=len(scored_domains))
+                    logger.warning("Scoring returned different count than input", input_count=len(domains), scored_count=len(scored_domains))
                 
                 # Separate passed and failed
                 passed_domains = [s for s in scored_domains if s.filter_status == 'PASS']
@@ -149,38 +108,20 @@ async def upload_namecheap_csv(
                 top_3000_domains = [s.domain.name for s in scored_domains[:3000]]
                 
                 # Store scored domains in cache
-                _csv_scored_cache[file_id] = {
-                    "scored_domains": scored_domains,
-                    "ranked_domains": passed_domains,  # Only PASS domains, sorted by score DESC
-                    "top_3000_domains": top_3000_domains,
-                    "scored_at": datetime.now(),
-                    "passed_count": len(passed_domains),
-                    "failed_count": len(failed_domains)
-                }
+                _csv_scored_cache[file_id] = { "scored_domains": scored_domains, "ranked_domains": passed_domains,  # Only PASS domains, sorted by score DESC
+                    "top_3000_domains": top_3000_domains, "scored_at": datetime.now(), "passed_count": len(passed_domains), "failed_count": len(failed_domains) }
                 
-                logger.info("Domain scoring completed successfully", 
-                           total=len(scored_domains),
-                           passed=len(passed_domains),
-                           failed=len(failed_domains))
+                logger.info("Domain scoring completed successfully", total=len(scored_domains), passed=len(passed_domains), failed=len(failed_domains))
             except Exception as e:
                 scoring_error = str(e)
                 logger.error("Failed to score domains", error=scoring_error, exc_info=True)
                 # Continue without scoring - domains will still be available for viewing
                 # Store empty scoring cache to indicate scoring failed
-                _csv_scored_cache[file_id] = {
-                    "scored_domains": [],
-                    "ranked_domains": [],
-                    "top_3000_domains": [],
-                    "scored_at": datetime.now(),
-                    "passed_count": 0,
-                    "failed_count": 0,
-                    "scoring_error": scoring_error
-                }
+                _csv_scored_cache[file_id] = { "scored_domains": [], "ranked_domains": [], "top_3000_domains": [], "scored_at": datetime.now(), "passed_count": 0, "failed_count": 0, "scoring_error": scoring_error }
             
             # Clean up old cache entries (older than 1 hour)
             cutoff_time = datetime.now() - timedelta(hours=1)
-            keys_to_remove = [
-                k for k, v in _csv_cache.items() 
+            keys_to_remove = [ k for k, v in _csv_cache.items() 
                 if v.get("uploaded_at", datetime.min) < cutoff_time
             ]
             for k in keys_to_remove:
@@ -188,11 +129,7 @@ async def upload_namecheap_csv(
                 if k in _csv_scored_cache:
                     del _csv_scored_cache[k]
             
-            logger.info("CSV cached and scored", 
-                       file_id=file_id, 
-                       domain_count=len(domains),
-                       passed=len(passed_domains),
-                       failed=len(failed_domains))
+            logger.info("CSV cached and scored", file_id=file_id, domain_count=len(domains), passed=len(passed_domains), failed=len(failed_domains))
             
             # Build response message
             if scoring_error:
@@ -200,22 +137,11 @@ async def upload_namecheap_csv(
             else:
                 message = f"Parsed {len(domains)} domains. {len(passed_domains)} passed filtering, {len(failed_domains)} failed."
             
-            response_data = {
-                "success": True,
-                "message": message,
-                "loaded_count": len(domains),
-                "skipped_count": 0,
-                "total_count": len(domains),
-                "file_id": file_id,
-            }
+            response_data = { "success": True, "message": message, "loaded_count": len(domains), "skipped_count": 0, "total_count": len(domains), "file_id": file_id, }
             
             # Only include scoring stats if scoring succeeded
             if not scoring_error and (len(passed_domains) > 0 or len(failed_domains) > 0):
-                response_data["scoring_stats"] = {
-                    "passed": len(passed_domains),
-                    "failed": len(failed_domains),
-                    "top_score": passed_domains[0].total_meaning_score if passed_domains else None
-                }
+                response_data["scoring_stats"] = { "passed": len(passed_domains), "failed": len(failed_domains), "top_score": passed_domains[0].total_meaning_score if passed_domains else None }
             elif scoring_error:
                 response_data["scoring_error"] = scoring_error
             
@@ -229,18 +155,7 @@ async def upload_namecheap_csv(
 
 
 @router.get("/namecheap/csv-domains")
-async def get_csv_domains(
-    file_id: str = Query(..., description="File ID returned from upload"),
-    sort_by: str = Query("name", description="Field to sort by"),
-    order: str = Query("asc", description="Sort order (asc, desc)"),
-    search: Optional[str] = Query(None, description="Search filter for domain name"),
-    extensions: Optional[str] = Query(None, description="Comma-separated list of extensions to filter"),
-    no_special_chars: Optional[bool] = Query(None, description="Filter domains with no special characters"),
-    no_numbers: Optional[bool] = Query(None, description="Filter domains with no numbers"),
-    filter_status: Optional[str] = Query(None, description="Filter by status: PASS, FAIL, or ALL"),
-    limit: int = Query(100, description="Maximum number of records to return", ge=1, le=1000),
-    offset: int = Query(0, description="Number of records to skip", ge=0)
-):
+async def get_csv_domains( file_id: str = Query(..., description="File ID returned from upload"), sort_by: str = Query("name", description="Field to sort by"), order: str = Query("asc", description="Sort order (asc, desc)"), search: Optional[str] = Query(None, description="Search filter for domain name"), extensions: Optional[str] = Query(None, description="Comma-separated list of extensions to filter"), no_special_chars: Optional[bool] = Query(None, description="Filter domains with no special characters"), no_numbers: Optional[bool] = Query(None, description="Filter domains with no numbers"), filter_status: Optional[str] = Query(None, description="Filter by status: PASS, FAIL, or ALL"), limit: int = Query(100, description="Maximum number of records to return", ge=1, le=1000), offset: int = Query(0, description="Number of records to skip", ge=0) ):
     """
     Get paginated domains from cached CSV file (without database storage)
     """
@@ -253,13 +168,7 @@ async def get_csv_domains(
         
         if not all_domains:
             logger.warning("No domains found in cache", file_id=file_id)
-            return NamecheapDomainListResponse(
-                success=True,
-                count=0,
-                domains=[],
-                total_count=0,
-                has_more=False
-            )
+            return NamecheapDomainListResponse( success=True, count=0, domains=[], total_count=0, has_more=False )
         
         # Helper function to normalize domain names for consistent matching
         def normalize_domain_name(name: str) -> str:
@@ -334,10 +243,7 @@ async def get_csv_domains(
                 # Get ranked domains if sorting by score or filtering by PASS (keep as ScoredDomain objects for score attachment)
                 if use_ranked_domains:
                     ranked_scored_domains = scored_cache.get("ranked_domains", [])
-                    logger.info("Processing ranked domains", 
-                               count=len(ranked_scored_domains),
-                               filter_status=filter_status,
-                               sort_by=sort_by)
+                    logger.info("Processing ranked domains", count=len(ranked_scored_domains), filter_status=filter_status, sort_by=sort_by)
                     
                     # Build map from ranked domains for score attachment
                     for scored in ranked_scored_domains:
@@ -403,10 +309,7 @@ async def get_csv_domains(
                                     logger.warning("Failed to extract domain from scored", error=str(e))
                                     continue
                             
-                            logger.info("Built ranked domains list and map", 
-                                       extracted_count=len(ranked_domains_list),
-                                       map_size=len(ranked_scored_map),
-                                       sample_names=[d.name if hasattr(d, 'name') else d.get('name') if isinstance(d, dict) else 'unknown' for d in ranked_domains_list[:3]])
+                            logger.info("Built ranked domains list and map", extracted_count=len(ranked_domains_list), map_size=len(ranked_scored_map), sample_names=[d.name if hasattr(d, 'name') else d.get('name') if isinstance(d, dict) else 'unknown' for d in ranked_domains_list[:3]])
                         except Exception as e:
                             logger.warning("Failed to extract ranked domains", error=str(e), exc_info=True)
                             ranked_domains_list = []
@@ -451,15 +354,7 @@ async def get_csv_domains(
         else:
             domains_to_filter = all_domains
         
-        logger.info("Domain filtering", 
-                   use_ranked=use_ranked_domains,
-                   ranked_count=len(ranked_domains_list),
-                   all_count=len(all_domains),
-                   to_filter_count=len(domains_to_filter),
-                   scored_map_size=len(scored_domains_map),
-                   ranked_map_size=len(ranked_scored_map),
-                   sort_by=sort_by,
-                   filter_status=filter_status)
+        logger.info("Domain filtering", use_ranked=use_ranked_domains, ranked_count=len(ranked_domains_list), all_count=len(all_domains), to_filter_count=len(domains_to_filter), scored_map_size=len(scored_domains_map), ranked_map_size=len(ranked_scored_map), sort_by=sort_by, filter_status=filter_status)
         
         # Apply filters
         filtered_domains = []
@@ -588,34 +483,7 @@ async def get_csv_domains(
                     except Exception:
                         return None
                 
-                domain_dict = {
-                    "id": domain_id,
-                    "url": domain.url,
-                    "name": domain.name,
-                    "start_date": format_date(domain.start_date),
-                    "end_date": format_date(domain.end_date),
-                    "price": domain.price,
-                    "start_price": domain.start_price,
-                    "renew_price": domain.renew_price,
-                    "bid_count": domain.bid_count,
-                    "ahrefs_domain_rating": domain.ahrefs_domain_rating,
-                    "umbrella_ranking": domain.umbrella_ranking,
-                    "cloudflare_ranking": domain.cloudflare_ranking,
-                    "estibot_value": domain.estibot_value,
-                    "extensions_taken": domain.extensions_taken,
-                    "keyword_search_count": domain.keyword_search_count,
-                    "registered_date": format_date(domain.registered_date),
-                    "last_sold_price": domain.last_sold_price,
-                    "last_sold_year": domain.last_sold_year,
-                    "is_partner_sale": domain.is_partner_sale,
-                    "semrush_a_score": domain.semrush_a_score,
-                    "majestic_citation": domain.majestic_citation,
-                    "ahrefs_backlinks": domain.ahrefs_backlinks,
-                    "semrush_backlinks": domain.semrush_backlinks,
-                    "majestic_backlinks": domain.majestic_backlinks,
-                    "majestic_trust_flow": domain.majestic_trust_flow,
-                    "go_value": domain.go_value,
-                }
+                domain_dict = { "id": domain_id, "url": domain.url, "name": domain.name, "start_date": format_date(domain.start_date), "end_date": format_date(domain.end_date), "price": domain.price, "start_price": domain.start_price, "renew_price": domain.renew_price, "bid_count": domain.bid_count, "ahrefs_domain_rating": domain.ahrefs_domain_rating, "umbrella_ranking": domain.umbrella_ranking, "cloudflare_ranking": domain.cloudflare_ranking, "estibot_value": domain.estibot_value, "extensions_taken": domain.extensions_taken, "keyword_search_count": domain.keyword_search_count, "registered_date": format_date(domain.registered_date), "last_sold_price": domain.last_sold_price, "last_sold_year": domain.last_sold_year, "is_partner_sale": domain.is_partner_sale, "semrush_a_score": domain.semrush_a_score, "majestic_citation": domain.majestic_citation, "ahrefs_backlinks": domain.ahrefs_backlinks, "semrush_backlinks": domain.semrush_backlinks, "majestic_backlinks": domain.majestic_backlinks, "majestic_trust_flow": domain.majestic_trust_flow, "go_value": domain.go_value, }
                 
                 # Add scoring data if available
                 try:
@@ -634,19 +502,8 @@ async def get_csv_domains(
                     
                     # Debug: log first few domains to see if matching works
                     if idx < 10:
-                        logger.info("Domain scoring lookup", 
-                                   domain=domain_name,
-                                   normalized=normalized_domain_name,
-                                   found=scored is not None,
-                                   use_ranked=use_ranked_domains,
-                                   ranked_map_size=len(ranked_scored_map),
-                                   main_map_size=len(scored_domains_map),
-                                   ranked_map_keys_sample=list(ranked_scored_map.keys())[:5] if ranked_scored_map else [],
-                                   main_map_keys_sample=list(scored_domains_map.keys())[:5] if scored_domains_map else [],
-                                   has_score=scored is not None and (
-                                       (isinstance(scored, dict) and scored.get('total_meaning_score') is not None) or
-                                       (hasattr(scored, 'total_meaning_score') and scored.total_meaning_score is not None)
-                                   ))
+                        logger.info("Domain scoring lookup", domain=domain_name, normalized=normalized_domain_name, found=scored is not None, use_ranked=use_ranked_domains, ranked_map_size=len(ranked_scored_map), main_map_size=len(scored_domains_map), ranked_map_keys_sample=list(ranked_scored_map.keys())[:5] if ranked_scored_map else [], main_map_keys_sample=list(scored_domains_map.keys())[:5] if scored_domains_map else [], has_score=scored is not None and ( (isinstance(scored, dict) and scored.get('total_meaning_score') is not None) or
+                                       (hasattr(scored, 'total_meaning_score') and scored.total_meaning_score is not None) ))
                     
                     if scored:
                         # Handle both ScoredDomain objects and dicts
@@ -690,18 +547,9 @@ async def get_csv_domains(
         # Get scoring stats for response
         scoring_stats = None
         if scored_cache:
-            scoring_stats = {
-                "passed": scored_cache.get("passed_count", 0),
-                "failed": scored_cache.get("failed_count", 0)
-            }
+            scoring_stats = { "passed": scored_cache.get("passed_count", 0), "failed": scored_cache.get("failed_count", 0) }
         
-        response = NamecheapDomainListResponse(
-            success=True,
-            count=len(domains_objects),
-            domains=domains_objects,
-            total_count=total_count,
-            has_more=(offset + limit < total_count)
-        )
+        response = NamecheapDomainListResponse( success=True, count=len(domains_objects), domains=domains_objects, total_count=total_count, has_more=(offset + limit < total_count) )
         
         # Add scoring stats to response (convert to dict to include extra fields)
         response_dict = response.dict()
@@ -718,16 +566,7 @@ async def get_csv_domains(
 
 
 @router.get("/namecheap/domains")
-async def get_namecheap_domains(
-    sort_by: str = Query("name", description="Field to sort by"),
-    order: str = Query("asc", description="Sort order (asc, desc)"),
-    search: Optional[str] = Query(None, description="Search filter for domain name"),
-    extensions: Optional[str] = Query(None, description="Comma-separated list of extensions to filter (e.g., '.com,.net')"),
-    no_special_chars: Optional[bool] = Query(None, description="Filter domains with no special characters"),
-    no_numbers: Optional[bool] = Query(None, description="Filter domains with no numbers"),
-    limit: int = Query(1000, description="Maximum number of records to return", ge=1, le=10000),
-    offset: int = Query(0, description="Number of records to skip", ge=0)
-):
+async def get_namecheap_domains( sort_by: str = Query("name", description="Field to sort by"), order: str = Query("asc", description="Sort order (asc, desc)"), search: Optional[str] = Query(None, description="Search filter for domain name"), extensions: Optional[str] = Query(None, description="Comma-separated list of extensions to filter (e.g., '.com,.net')"), no_special_chars: Optional[bool] = Query(None, description="Filter domains with no special characters"), no_numbers: Optional[bool] = Query(None, description="Filter domains with no numbers"), limit: int = Query(1000, description="Maximum number of records to return", ge=1, le=10000), offset: int = Query(0, description="Number of records to skip", ge=0) ):
     """
     Get all Namecheap domains with optional search, sorting, and filtering
     """
@@ -738,50 +577,12 @@ async def get_namecheap_domains(
         if extensions:
             extension_list = [ext.strip() for ext in extensions.split(',') if ext.strip()]
         
-        records = await db.get_all_namecheap_domains(
-            sort_by=sort_by, 
-            order=order, 
-            search=search,
-            extensions=extension_list,
-            no_special_chars=no_special_chars,
-            no_numbers=no_numbers,
-            limit=limit,
-            offset=offset
-        )
+        records = await db.get_all_namecheap_domains( sort_by=sort_by, order=order, search=search, extensions=extension_list, no_special_chars=no_special_chars, no_numbers=no_numbers, limit=limit, offset=offset )
         
         # Convert to dict format for JSON response
         result = []
         for record in records:
-            record_dict = {
-                "id": record.id,
-                "url": record.url,
-                "name": record.name,
-                "start_date": record.start_date.isoformat() if record.start_date else None,
-                "end_date": record.end_date.isoformat() if record.end_date else None,
-                "price": record.price,
-                "start_price": record.start_price,
-                "renew_price": record.renew_price,
-                "bid_count": record.bid_count,
-                "ahrefs_domain_rating": record.ahrefs_domain_rating,
-                "umbrella_ranking": record.umbrella_ranking,
-                "cloudflare_ranking": record.cloudflare_ranking,
-                "estibot_value": record.estibot_value,
-                "extensions_taken": record.extensions_taken,
-                "keyword_search_count": record.keyword_search_count,
-                "registered_date": record.registered_date.isoformat() if record.registered_date else None,
-                "last_sold_price": record.last_sold_price,
-                "last_sold_year": record.last_sold_year,
-                "is_partner_sale": record.is_partner_sale,
-                "semrush_a_score": record.semrush_a_score,
-                "majestic_citation": record.majestic_citation,
-                "ahrefs_backlinks": record.ahrefs_backlinks,
-                "semrush_backlinks": record.semrush_backlinks,
-                "majestic_backlinks": record.majestic_backlinks,
-                "majestic_trust_flow": record.majestic_trust_flow,
-                "go_value": record.go_value,
-                "created_at": record.created_at.isoformat() if record.created_at else None,
-                "updated_at": record.updated_at.isoformat() if record.updated_at else None
-            }
+            record_dict = { "id": record.id, "url": record.url, "name": record.name, "start_date": record.start_date.isoformat() if record.start_date else None, "end_date": record.end_date.isoformat() if record.end_date else None, "price": record.price, "start_price": record.start_price, "renew_price": record.renew_price, "bid_count": record.bid_count, "ahrefs_domain_rating": record.ahrefs_domain_rating, "umbrella_ranking": record.umbrella_ranking, "cloudflare_ranking": record.cloudflare_ranking, "estibot_value": record.estibot_value, "extensions_taken": record.extensions_taken, "keyword_search_count": record.keyword_search_count, "registered_date": record.registered_date.isoformat() if record.registered_date else None, "last_sold_price": record.last_sold_price, "last_sold_year": record.last_sold_year, "is_partner_sale": record.is_partner_sale, "semrush_a_score": record.semrush_a_score, "majestic_citation": record.majestic_citation, "ahrefs_backlinks": record.ahrefs_backlinks, "semrush_backlinks": record.semrush_backlinks, "majestic_backlinks": record.majestic_backlinks, "majestic_trust_flow": record.majestic_trust_flow, "go_value": record.go_value, "created_at": record.created_at.isoformat() if record.created_at else None, "updated_at": record.updated_at.isoformat() if record.updated_at else None }
             result.append(record_dict)
         
         # Convert dicts to NamecheapDomain objects
@@ -794,13 +595,7 @@ async def get_namecheap_domains(
                 logger.warning("Failed to create NamecheapDomain object", data=r, error=str(e))
                 continue
         
-        return NamecheapDomainListResponse(
-            success=True,
-            count=len(domains_list),
-            domains=domains_list,
-            total_count=len(records) if not (extensions or no_special_chars or no_numbers) else None,
-            has_more=None
-        )
+        return NamecheapDomainListResponse( success=True, count=len(domains_list), domains=domains_list, total_count=len(records) if not (extensions or no_special_chars or no_numbers) else None, has_more=None )
         
     except Exception as e:
         logger.error("Failed to get Namecheap domains", error=str(e))
@@ -817,33 +612,18 @@ async def analyze_selected_namecheap_domains(selection: NamecheapDomainSelection
     - If exists: return it
     - If not: create record and trigger n8n webhook
     
-    Returns combined Namecheap and DataForSeo data for each domain.
-    """
+    Returns combined Namecheap and DataForSeo data for each domain. """
     try:
         bulk_service = BulkAnalysisService()
-        result = await bulk_service.analyze_selected_domains(selection.domain_names)
+        result = bulk_service.analyze_selected_domains(selection.domain_names)
         
         # Convert Pydantic models to dict for JSON response
         results_dict = []
         for r in result.results:
-            result_dict = {
-                "domain": r.domain,
-                "namecheap_data": r.namecheap_data.dict() if r.namecheap_data else None,
-                "dataforseo_data": r.dataforseo_data.dict() if r.dataforseo_data else None,
-                "has_data": r.has_data,
-                "status": r.status,
-                "error": r.error
-            }
+            result_dict = { "domain": r.domain, "namecheap_data": r.namecheap_data.dict() if r.namecheap_data else None, "dataforseo_data": r.dataforseo_data.dict() if r.dataforseo_data else None, "has_data": r.has_data, "status": r.status, "error": r.error }
             results_dict.append(result_dict)
         
-        return {
-            "success": result.success,
-            "results": results_dict,
-            "total_selected": result.total_selected,
-            "has_data_count": result.has_data_count,
-            "triggered_count": result.triggered_count,
-            "error_count": result.error_count
-        }
+        return { "success": result.success, "results": results_dict, "total_selected": result.total_selected, "has_data_count": result.has_data_count, "triggered_count": result.triggered_count, "error_count": result.error_count }
         
     except Exception as e:
         logger.error("Failed to analyze selected domains", error=str(e))
@@ -857,14 +637,9 @@ async def trigger_missing_summaries():
     """
     try:
         bulk_service = BulkAnalysisService()
-        result = await bulk_service.trigger_bulk_data_collection()
+        result = bulk_service.trigger_bulk_data_collection()
         
-        return {
-            "success": result.get("success", False),
-            "triggered_count": result.get("triggered_count", 0),
-            "domains": result.get("domains", []),
-            "message": result.get("message", "Trigger completed")
-        }
+        return { "success": result.get("success", False), "triggered_count": result.get("triggered_count", 0), "domains": result.get("domains", []), "message": result.get("message", "Trigger completed") }
         
     except Exception as e:
         logger.error("Failed to trigger missing summaries", error=str(e))
@@ -872,11 +647,7 @@ async def trigger_missing_summaries():
 
 
 @router.get("/namecheap/scored-domains")
-async def get_scored_domains(
-    file_id: str = Query(..., description="File ID returned from upload"),
-    limit: int = Query(1500, description="Maximum number of records to return", ge=1, le=5000),
-    offset: int = Query(0, description="Number of records to skip", ge=0)
-):
+async def get_scored_domains( file_id: str = Query(..., description="File ID returned from upload"), limit: int = Query(1500, description="Maximum number of records to return", ge=1, le=5000), offset: int = Query(0, description="Number of records to skip", ge=0) ):
     """
     Get ranked domains with scores from cached CSV file
     """
@@ -897,41 +668,7 @@ async def get_scored_domains(
             domain = scored.domain
             # Generate stable ID based on domain name and rank for CSV mode
             domain_id = domain.id or f"csv_{file_id}_{scored.rank or 0}"
-            domain_dict = {
-                "id": domain_id,
-                "url": domain.url,
-                "name": domain.name,
-                "start_date": domain.start_date.isoformat() if domain.start_date else None,
-                "end_date": domain.end_date.isoformat() if domain.end_date else None,
-                "price": domain.price,
-                "start_price": domain.start_price,
-                "renew_price": domain.renew_price,
-                "bid_count": domain.bid_count,
-                "ahrefs_domain_rating": domain.ahrefs_domain_rating,
-                "umbrella_ranking": domain.umbrella_ranking,
-                "cloudflare_ranking": domain.cloudflare_ranking,
-                "estibot_value": domain.estibot_value,
-                "extensions_taken": domain.extensions_taken,
-                "keyword_search_count": domain.keyword_search_count,
-                "registered_date": domain.registered_date.isoformat() if domain.registered_date else None,
-                "last_sold_price": domain.last_sold_price,
-                "last_sold_year": domain.last_sold_year,
-                "is_partner_sale": domain.is_partner_sale,
-                "semrush_a_score": domain.semrush_a_score,
-                "majestic_citation": domain.majestic_citation,
-                "ahrefs_backlinks": domain.ahrefs_backlinks,
-                "semrush_backlinks": domain.semrush_backlinks,
-                "majestic_backlinks": domain.majestic_backlinks,
-                "majestic_trust_flow": domain.majestic_trust_flow,
-                "go_value": domain.go_value,
-                "filter_status": scored.filter_status,
-                "filter_reason": scored.filter_reason,
-                "total_meaning_score": scored.total_meaning_score,
-                "age_score": scored.age_score,
-                "lexical_frequency_score": scored.lexical_frequency_score,
-                "semantic_value_score": scored.semantic_value_score,
-                "rank": scored.rank
-            }
+            domain_dict = { "id": domain_id, "url": domain.url, "name": domain.name, "start_date": domain.start_date.isoformat() if domain.start_date else None, "end_date": domain.end_date.isoformat() if domain.end_date else None, "price": domain.price, "start_price": domain.start_price, "renew_price": domain.renew_price, "bid_count": domain.bid_count, "ahrefs_domain_rating": domain.ahrefs_domain_rating, "umbrella_ranking": domain.umbrella_ranking, "cloudflare_ranking": domain.cloudflare_ranking, "estibot_value": domain.estibot_value, "extensions_taken": domain.extensions_taken, "keyword_search_count": domain.keyword_search_count, "registered_date": domain.registered_date.isoformat() if domain.registered_date else None, "last_sold_price": domain.last_sold_price, "last_sold_year": domain.last_sold_year, "is_partner_sale": domain.is_partner_sale, "semrush_a_score": domain.semrush_a_score, "majestic_citation": domain.majestic_citation, "ahrefs_backlinks": domain.ahrefs_backlinks, "semrush_backlinks": domain.semrush_backlinks, "majestic_backlinks": domain.majestic_backlinks, "majestic_trust_flow": domain.majestic_trust_flow, "go_value": domain.go_value, "filter_status": scored.filter_status, "filter_reason": scored.filter_reason, "total_meaning_score": scored.total_meaning_score, "age_score": scored.age_score, "lexical_frequency_score": scored.lexical_frequency_score, "semantic_value_score": scored.semantic_value_score, "rank": scored.rank }
             domains_list.append(domain_dict)
         
         # Convert to NamecheapDomain objects for response
@@ -944,13 +681,7 @@ async def get_scored_domains(
                 logger.warning("Failed to create NamecheapDomain object", data=d, error=str(e))
                 continue
         
-        return NamecheapDomainListResponse(
-            success=True,
-            count=len(domains_objects),
-            domains=domains_objects,
-            total_count=total_count,
-            has_more=(offset + limit < total_count)
-        )
+        return NamecheapDomainListResponse( success=True, count=len(domains_objects), domains=domains_objects, total_count=total_count, has_more=(offset + limit < total_count) )
         
     except HTTPException:
         raise
@@ -960,11 +691,7 @@ async def get_scored_domains(
 
 
 @router.post("/namecheap/auto-trigger-analysis")
-async def auto_trigger_analysis(
-    file_id: str = Body(..., description="File ID returned from upload"),
-    top_n: int = Body(1000, description="Number of top domains to consider"),
-    top_rank_threshold: int = Body(3000, description="Rank threshold for top domains")
-):
+async def auto_trigger_analysis( file_id: str = Body(..., description="File ID returned from upload"), top_n: int = Body(1000, description="Number of top domains to consider"), top_rank_threshold: int = Body(3000, description="Rank threshold for top domains") ):
     """
     Auto-trigger DataForSEO analysis for top domains that meet criteria:
     1. Top N domains from ranked list
@@ -987,12 +714,7 @@ async def auto_trigger_analysis(
         
         # Trigger auto-analysis
         auto_trigger_service = AutoTriggerService()
-        result = await auto_trigger_service.auto_trigger_analysis(
-            ranked_domains=scored_objects,
-            top_3000_domains=top_3000_domains,
-            top_n=top_n,
-            top_rank_threshold=top_rank_threshold
-        )
+        result = auto_trigger_service.auto_trigger_analysis( ranked_domains=scored_objects, top_3000_domains=top_3000_domains, top_n=top_n, top_rank_threshold=top_rank_threshold )
         
         return result
         

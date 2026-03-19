@@ -31,7 +31,7 @@ class DataForSEOService:
     async def _get_credentials(self) -> Optional[Dict[str, str]]:
         """Get DataForSEO credentials from secrets service"""
         if self._credentials is None:
-            self._credentials = await self.secrets_service.get_dataforseo_credentials()
+            self._credentials = self.secrets_service.get_dataforseo_credentials()
             
             # Fix API URL if it points to marketing site instead of API
             if self._credentials and 'api_url' in self._credentials:
@@ -45,7 +45,7 @@ class DataForSEOService:
     async def health_check(self) -> bool:
         """Check if DataForSEO API is accessible"""
         try:
-            credentials = await self._get_credentials()
+            credentials = self._get_credentials()
             if not credentials:
                 logger.warning("DataForSEO credentials not available")
                 return False
@@ -53,10 +53,7 @@ class DataForSEOService:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # Use a simple endpoint that should return a valid response
                 # DataForSEO doesn't have a /ping endpoint, so we'll test with a basic call
-                response = await client.get(
-                    f"{credentials['api_url']}/ping",
-                    auth=(credentials['login'], credentials['password'])
-                )
+                response = client.get( f"{credentials['api_url']}/ping", auth=(credentials['login'], credentials['password']) )
                 # DataForSEO returns 404 for /ping but with proper API response structure
                 # This indicates the API is accessible and credentials are valid
                 if response.status_code == 404 and 'version' in response.text:
@@ -65,8 +62,7 @@ class DataForSEOService:
                 elif response.status_code == 200:
                     return True
                 else:
-                    logger.warning("DataForSEO API returned unexpected response", 
-                                 status_code=response.status_code, response=response.text[:200])
+                    logger.warning("DataForSEO API returned unexpected response", status_code=response.status_code, response=response.text[:200])
                     return False
         except Exception as e:
             logger.warning("DataForSEO health check failed", error=str(e))
@@ -76,7 +72,7 @@ class DataForSEOService:
         """Get domain analytics data from DataForSEO"""
         try:
             # Get credentials
-            credentials = await self._get_credentials()
+            credentials = self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -99,21 +95,11 @@ class DataForSEOService:
                     # Get backlinks summary data using v3 API (as per documentation)
                     # Only if N8N is not enabled for summary
                     post_data = {}
-                    post_data[len(post_data)] = {
-                        "target": domain,
-                        "internal_list_limit": 10,
-                        "include_subdomains": True,
-                        "backlinks_filters": ["dofollow", "=", True],
-                        "backlinks_status_type": "all"
-                    }
+                    post_data[len(post_data)] = { "target": domain, "internal_list_limit": 10, "include_subdomains": True, "backlinks_filters": ["dofollow", "=", True], "backlinks_status_type": "all" }
                     
                     url = f"{credentials['api_url']}/backlinks/summary/live"
                     logger.info("Making DataForSEO backlinks summary request", url=url, domain=domain)
-                    backlinks_summary_response = await client.post(
-                        url,
-                        auth=(credentials['login'], credentials['password']),
-                        json=post_data
-                    )
+                    backlinks_summary_response = client.post( url, auth=(credentials['login'], credentials['password']), json=post_data )
                     
                     # Handle backlinks summary response
                     if backlinks_summary_response.status_code == 200:
@@ -123,8 +109,7 @@ class DataForSEOService:
                             if backlinks_summary_data:
                                 backlinks_summary_data = backlinks_summary_data[0]
                     else:
-                        logger.warning("DataForSEO backlinks summary request failed", 
-                                     domain=domain, status=backlinks_summary_response.status_code)
+                        logger.warning("DataForSEO backlinks summary request failed", domain=domain, status=backlinks_summary_response.status_code)
                 else:
                     logger.info("Skipping direct backlinks summary call - using N8N instead", domain=domain)
                     # Try to get summary from cache (it should be there if N8N already called back)
@@ -134,19 +119,11 @@ class DataForSEOService:
                 
                 # Get domain rank overview using v3 API (as per documentation)
                 domain_rank_post_data = {}
-                domain_rank_post_data[len(domain_rank_post_data)] = {
-                    "target": domain,
-                    "language_name": "English",
-                    "location_code": 2840
-                }
+                domain_rank_post_data[len(domain_rank_post_data)] = { "target": domain, "language_name": "English", "location_code": 2840 }
                 
                 domain_rank_url = f"{credentials['api_url']}/dataforseo_labs/google/domain_rank_overview/live"
                 logger.info("Making DataForSEO domain rank overview request", url=domain_rank_url, domain=domain)
-                domain_rank_response = await client.post(
-                    domain_rank_url,
-                    auth=(credentials['login'], credentials['password']),
-                    json=domain_rank_post_data
-                )
+                domain_rank_response = client.post( domain_rank_url, auth=(credentials['login'], credentials['password']), json=domain_rank_post_data )
                 
                 # Handle domain rank response
                 domain_rank_data = None
@@ -157,8 +134,7 @@ class DataForSEOService:
                         if result and result[0].get("items"):
                             domain_rank_data = result[0]["items"][0].get("metrics", {})
                 else:
-                    logger.warning("DataForSEO domain rank overview request failed", 
-                                 domain=domain, status=domain_rank_response.status_code)
+                    logger.warning("DataForSEO domain rank overview request failed", domain=domain, status=domain_rank_response.status_code)
                 
                 # Skip detailed backlinks and keywords collection to save costs
                 # These will be loaded on-demand when users request them via the frontend
@@ -168,27 +144,14 @@ class DataForSEOService:
                 logger.info("Skipping detailed backlinks and keywords collection to save costs", domain=domain)
                 
                 # Combine all data
-                combined_data = {
-                    "domain_rank": domain_rank_data or {},
-                    "backlinks_summary": backlinks_summary_data or {},
-                    "backlinks": backlinks_data or {},
-                    "keywords": keywords_data or {},
-                    "timestamp": datetime.utcnow().isoformat()
-                }
+                combined_data = { "domain_rank": domain_rank_data or {}, "backlinks_summary": backlinks_summary_data or {}, "backlinks": backlinks_data or {}, "keywords": keywords_data or {}, "timestamp": datetime.utcnow().isoformat() }
                 
                 # Cache the data
                 await db.save_raw_data(domain, DataSource.DATAFORSEO, combined_data)
                 
                 # Track usage
-                await self.usage_tracking.track_usage(
-                    user_id=user_id,
-                    resource_type='dataforseo',
-                    operation='domain_analytics',
-                    provider='dataforseo',
-                    model='v3',
-                    cost_estimated=0.0, # Add cost logic later if needed
-                    details={'domain': domain}
-                )
+                await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='domain_analytics', provider='dataforseo', model='v3', cost_estimated=0.0, # Add cost logic later if needed
+                    details={'domain': domain} )
 
                 logger.info("DataForSEO data retrieved successfully", domain=domain)
                 return combined_data
@@ -200,7 +163,7 @@ class DataForSEOService:
     async def get_historical_rank_overview(self, domain: str) -> Optional[Dict[str, Any]]:
         """Get historical rank overview from DataForSEO"""
         try:
-            credentials = await self._get_credentials()
+            credentials = self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -213,21 +176,10 @@ class DataForSEOService:
                 end_date = datetime.utcnow() - timedelta(days=1)
                 start_date = datetime(2020, 10, 1)  # October 1, 2020
 
-                post_data = [{
-                    "target": domain,
-                    "language_name": "English",
-                    "location_code": 2840,
-                    "date_from": start_date.strftime("%Y-%m-%d"),
-                    "date_to": end_date.strftime("%Y-%m-%d"),
-                    "include_clickstream_data": True
-                }]
+                post_data = [{ "target": domain, "language_name": "English", "location_code": 2840, "date_from": start_date.strftime("%Y-%m-%d"), "date_to": end_date.strftime("%Y-%m-%d"), "include_clickstream_data": True }]
 
                 logger.info("Making DataForSEO historical rank overview request", url=url, domain=domain, date_from=start_date.strftime("%Y-%m-%d"), date_to=end_date.strftime("%Y-%m-%d"))
-                response = await client.post(
-                    url,
-                    auth=(credentials['login'], credentials['password']),
-                    json=post_data
-                )
+                response = client.post( url, auth=(credentials['login'], credentials['password']), json=post_data )
 
                 if response.status_code == 200:
                     data = response.json()
@@ -238,8 +190,7 @@ class DataForSEOService:
                             logger.info("DataForSEO historical rank overview retrieved successfully", domain=domain, items_count=items_count)
                             return result[0]
 
-                logger.warning("DataForSEO historical rank overview request failed",
-                             domain=domain, status=response.status_code)
+                logger.warning("DataForSEO historical rank overview request failed", domain=domain, status=response.status_code)
                 return None
 
         except Exception as e:
@@ -249,7 +200,7 @@ class DataForSEOService:
     async def get_traffic_analytics_history(self, domain: str) -> Optional[Dict[str, Any]]:
         """Get traffic analytics history from DataForSEO"""
         try:
-            credentials = await self._get_credentials()
+            credentials = self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -261,20 +212,10 @@ class DataForSEOService:
                 end_date = datetime.utcnow()
                 start_date = datetime(2020, 10, 1)  # October 1, 2020
 
-                post_data = [{
-                    "target": domain,
-                    "language_name": "English",
-                    "location_code": 2840,
-                    "date_from": start_date.strftime("%Y-%m-%d"),
-                    "date_to": end_date.strftime("%Y-%m-%d")
-                }]
+                post_data = [{ "target": domain, "language_name": "English", "location_code": 2840, "date_from": start_date.strftime("%Y-%m-%d"), "date_to": end_date.strftime("%Y-%m-%d") }]
 
                 logger.info("Making DataForSEO traffic analytics history request", url=url, domain=domain, date_from=start_date.strftime("%Y-%m-%d"), date_to=end_date.strftime("%Y-%m-%d"))
-                response = await client.post(
-                    url,
-                    auth=(credentials['login'], credentials['password']),
-                    json=post_data
-                )
+                response = client.post( url, auth=(credentials['login'], credentials['password']), json=post_data )
 
                 if response.status_code == 200:
                     data = response.json()
@@ -285,8 +226,7 @@ class DataForSEOService:
                             logger.info("DataForSEO traffic analytics history retrieved successfully", domain=domain, items_count=items_count)
                             return result[0]
 
-                logger.warning("DataForSEO traffic analytics history request failed",
-                             domain=domain, status=response.status_code)
+                logger.warning("DataForSEO traffic analytics history request failed", domain=domain, status=response.status_code)
                 return None
 
         except Exception as e:
@@ -295,11 +235,9 @@ class DataForSEOService:
 
     async def fetch_bulk_traffic_estimation_live(self, domains: List[str]) -> Optional[List[Dict[str, Any]]]:
         """
-        Fetch bulk traffic estimation using the Live endpoint (DataForSEO Labs).
-        Blocks until results are returned (usually < 1s).
-        """
+        Fetch bulk traffic estimation using the Live endpoint (DataForSEO Labs). Blocks until results are returned (usually < 1s). """
         try:
-            credentials = await self._get_credentials()
+            credentials = self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -308,19 +246,11 @@ class DataForSEOService:
                 url = f"{credentials['api_url']}/dataforseo_labs/google/bulk_traffic_estimation/live"
                 
                 # Prepare single task with list of targets
-                payload = [{
-                    "targets": domains,
-                    "location_code": 2840,
-                    "language_name": "English"
-                }]
+                payload = [{ "targets": domains, "location_code": 2840, "language_name": "English" }]
                     
                 logger.info("Fetching DataForSEO bulk traffic estimation (Live)", url=url, domain_count=len(domains))
                 
-                response = await client.post(
-                    url,
-                    auth=(credentials['login'], credentials['password']),
-                    json=payload
-                )
+                response = client.post( url, auth=(credentials['login'], credentials['password']), json=payload )
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -336,18 +266,14 @@ class DataForSEOService:
                                 logger.info("DataForSEO bulk traffic retrieved successfully", count=len(items))
                                 return items
                             else:
-                                logger.warning("DataForSEO task finished but no items found", 
-                                             status_msg=task_data.get("status_message"))
+                                logger.warning("DataForSEO task finished but no items found", status_msg=task_data.get("status_message"))
                                 return None
                         else:
                              # Check for specific error in task
-                             logger.warning("DataForSEO task returned no result", 
-                                          status_msg=task_data.get("status_message"))
+                             logger.warning("DataForSEO task returned no result", status_msg=task_data.get("status_message"))
                              return None
                              
-                logger.error("DataForSEO bulk traffic request failed", 
-                             status=response.status_code, 
-                             response=response.text[:200])
+                logger.error("DataForSEO bulk traffic request failed", status=response.status_code, response=response.text[:200])
                 return None
                 
         except Exception as e:
@@ -357,7 +283,7 @@ class DataForSEOService:
     async def get_historical_bulk_traffic_estimation(self, domain: str) -> Optional[Dict[str, Any]]:
         """Get historical bulk traffic estimation from DataForSEO Labs"""
         try:
-            credentials = await self._get_credentials()
+            credentials = self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -369,21 +295,10 @@ class DataForSEOService:
                 end_date = datetime.utcnow()
                 start_date = end_date - timedelta(days=365*2)
                 
-                payload = [{
-                    "targets": [domain],
-                    "location_code": 2840,
-                    "language_code": "en",
-                    "date_from": start_date.strftime("%Y-%m-%d"),
-                    "date_to": end_date.strftime("%Y-%m-%d"),
-                    "item_types": ["organic", "paid"]
-                }]
+                payload = [{ "targets": [domain], "location_code": 2840, "language_code": "en", "date_from": start_date.strftime("%Y-%m-%d"), "date_to": end_date.strftime("%Y-%m-%d"), "item_types": ["organic", "paid"] }]
                 
                 logger.info("Making DataForSEO historical bulk traffic estimation request", url=url, domain=domain)
-                response = await client.post(
-                    url,
-                    auth=(credentials['login'], credentials['password']),
-                    json=payload
-                )
+                response = client.post( url, auth=(credentials['login'], credentials['password']), json=payload )
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -397,8 +312,7 @@ class DataForSEOService:
                                     logger.info("DataForSEO historical bulk traffic retrieved successfully", domain=domain)
                                     return item
                 
-                logger.warning("DataForSEO historical bulk traffic request failed", 
-                             domain=domain, status=response.status_code)
+                logger.warning("DataForSEO historical bulk traffic request failed", domain=domain, status=response.status_code)
                 return None
                 
         except Exception as e:
@@ -415,11 +329,7 @@ class DataForSEOService:
             keywords = data.get("keywords", {})
             
             # Debug logging
-            logger.info("Parsing DataForSEO metrics", 
-                       domain_rank_keys=list(domain_rank.keys()),
-                       backlinks_summary_keys=list(backlinks_summary.keys()),
-                       backlinks_keys=list(backlinks.keys()),
-                       keywords_keys=list(keywords.keys()))
+            logger.info("Parsing DataForSEO metrics", domain_rank_keys=list(domain_rank.keys()), backlinks_summary_keys=list(backlinks_summary.keys()), backlinks_keys=list(backlinks.keys()), keywords_keys=list(keywords.keys()))
             
             # Debug the actual values we're trying to extract
             total_backlinks = backlinks_summary.get("backlinks", 0)
@@ -428,24 +338,13 @@ class DataForSEOService:
             organic_traffic_est = organic_metrics.get("etv", 0)
             total_keywords = organic_metrics.get("count", 0)
             
-            logger.info("Extracted values", 
-                       total_backlinks=total_backlinks,
-                       total_referring_domains=total_referring_domains,
-                       organic_traffic_est=organic_traffic_est,
-                       total_keywords=total_keywords)
+            logger.info("Extracted values", total_backlinks=total_backlinks, total_referring_domains=total_referring_domains, organic_traffic_est=organic_traffic_est, total_keywords=total_keywords)
             
             # Extract referring domains info from detailed backlinks
             referring_domains_info = []
             if backlinks.get("items"):
                 for item in backlinks["items"][:100]:  # Top 100
-                    referring_domains_info.append({
-                        "domain": item.get("domain", ""),
-                        "domain_rank": item.get("domain_rank", 0),
-                        "anchor_text": item.get("anchor", ""),
-                        "backlinks_count": item.get("backlinks_count", 0),
-                        "first_seen": item.get("first_seen", ""),
-                        "last_seen": item.get("last_seen", "")
-                    })
+                    referring_domains_info.append({ "domain": item.get("domain", ""), "domain_rank": item.get("domain_rank", 0), "anchor_text": item.get("anchor", ""), "backlinks_count": item.get("backlinks_count", 0), "first_seen": item.get("first_seen", ""), "last_seen": item.get("last_seen", "") })
             
             # Extract keywords info from new structure
             organic_keywords = []
@@ -456,18 +355,7 @@ class DataForSEOService:
                     ranked_element = item.get("ranked_serp_element", {})
                     serp_item = ranked_element.get("serp_item", {})
                     
-                    organic_keywords.append({
-                        "keyword": keyword_data.get("keyword", ""),
-                        "rank": serp_item.get("rank_absolute", 0),
-                        "search_volume": keyword_info.get("search_volume", 0),
-                        "cpc": keyword_info.get("cpc", 0.0),
-                        "competition": keyword_info.get("competition_level", ""),
-                        "etv": serp_item.get("etv", 0.0),
-                        "url": serp_item.get("url", ""),
-                        "title": serp_item.get("title", ""),
-                        "description": serp_item.get("description", ""),
-                        "keyword_difficulty": keyword_data.get("keyword_properties", {}).get("keyword_difficulty", 0)
-                    })
+                    organic_keywords.append({ "keyword": keyword_data.get("keyword", ""), "rank": serp_item.get("rank_absolute", 0), "search_volume": keyword_info.get("search_volume", 0), "cpc": keyword_info.get("cpc", 0.0), "competition": keyword_info.get("competition_level", ""), "etv": serp_item.get("etv", 0.0), "url": serp_item.get("url", ""), "title": serp_item.get("title", ""), "description": serp_item.get("description", ""), "keyword_difficulty": keyword_data.get("keyword_properties", {}).get("keyword_difficulty", 0) })
             
             # Use backlinks summary data for main metrics if available
             total_backlinks = backlinks_summary.get("backlinks", 0)
@@ -484,13 +372,7 @@ class DataForSEOService:
             # Fallback to calculated DR if DataForSEO rank is not available
             if dataforseo_rank == 0:
                 logger.warning("DataForSEO rank not available, falling back to calculated DR")
-                calculated_dr = self._calculate_domain_rating(
-                    total_backlinks=total_backlinks,
-                    total_referring_domains=total_referring_domains,
-                    organic_traffic_est=organic_traffic_est,
-                    total_keywords=total_keywords,
-                    referring_domains_info=referring_domains_info
-                )
+                calculated_dr = self._calculate_domain_rating( total_backlinks=total_backlinks, total_referring_domains=total_referring_domains, organic_traffic_est=organic_traffic_est, total_keywords=total_keywords, referring_domains_info=referring_domains_info )
             else:
                 # Convert DataForSEO rank (0-1000 scale) to 0-100 scale to match DR
                 calculated_dr = dataforseo_rank / 10.0
@@ -514,47 +396,23 @@ class DataForSEOService:
                 except Exception as e:
                     logger.warning("Failed to create PaidMetrics", error=str(e), paid_metrics=domain_rank.get("paid"))
             
-            logger.info("Successfully parsed DataForSEO metrics", 
-                       total_backlinks=total_backlinks,
-                       total_referring_domains=total_referring_domains,
-                       organic_traffic_est=organic_traffic_est,
-                       total_keywords=total_keywords,
-                       calculated_dr=calculated_dr)
+            logger.info("Successfully parsed DataForSEO metrics", total_backlinks=total_backlinks, total_referring_domains=total_referring_domains, organic_traffic_est=organic_traffic_est, total_keywords=total_keywords, calculated_dr=calculated_dr)
             
-            return DataForSEOMetrics(
-                domain_rating_dr=calculated_dr,
-                organic_traffic_est=organic_traffic_est,
-                total_referring_domains=total_referring_domains,
-                total_backlinks=total_backlinks,
-                referring_domains_info=referring_domains_info,
-                organic_keywords=organic_keywords,
-                total_keywords=total_keywords,
-                backlinks_spam_score=backlinks_spam_score,
-                organic_metrics=organic_metrics_obj,
-                paid_metrics=paid_metrics_obj
-            )
+            return DataForSEOMetrics( domain_rating_dr=calculated_dr, organic_traffic_est=organic_traffic_est, total_referring_domains=total_referring_domains, total_backlinks=total_backlinks, referring_domains_info=referring_domains_info, organic_keywords=organic_keywords, total_keywords=total_keywords, backlinks_spam_score=backlinks_spam_score, organic_metrics=organic_metrics_obj, paid_metrics=paid_metrics_obj )
             
         except Exception as e:
-            logger.error("Failed to parse DataForSEO metrics", error=str(e), 
-                        data_keys=list(data.keys()) if data else "No data")
+            logger.error("Failed to parse DataForSEO metrics", error=str(e), data_keys=list(data.keys()) if data else "No data")
             return DataForSEOMetrics()
     
-    def _calculate_domain_rating(self, total_backlinks: int, total_referring_domains: int, 
-                                organic_traffic_est: float, total_keywords: int, 
-                                referring_domains_info: List[Dict[str, Any]]) -> float:
+    def _calculate_domain_rating(self, total_backlinks: int, total_referring_domains: int, organic_traffic_est: float, total_keywords: int, referring_domains_info: List[Dict[str, Any]]) -> float:
         """
-        Calculate Domain Rating (DR) based on available metrics.
-        Uses a logarithmic scale similar to Ahrefs DR (0-100).
-        Detects sandbox environment and adjusts calculation accordingly.
-        """
+        Calculate Domain Rating (DR) based on available metrics. Uses a logarithmic scale similar to Ahrefs DR (0-100). Detects sandbox environment and adjusts calculation accordingly. """
         try:
             # Detect if we're in a sandbox environment
             # Sandbox typically has very high numbers that don't make sense for real domains
-            is_sandbox = (
-                total_backlinks > 1000000 or  # Over 1M backlinks is unrealistic for most domains
+            is_sandbox = ( total_backlinks > 1000000 or  # Over 1M backlinks is unrealistic for most domains
                 total_referring_domains > 10000 or  # Over 10K referring domains is very high
-                organic_traffic_est > 50000  # Over $50K ETV is very high
-            )
+                organic_traffic_est > 50000  # Over $50K ETV is very high )
             
             if is_sandbox:
                 logger.warning("Sandbox environment detected - using simplified DR calculation")
@@ -586,13 +444,7 @@ class DataForSEOService:
             if total_backlinks > 0 and calculated_dr < 1:
                 calculated_dr = 1
             
-            logger.info("Calculated Domain Rating", 
-                       dr=calculated_dr,
-                       is_sandbox=is_sandbox,
-                       backlinks=total_backlinks,
-                       referring_domains=total_referring_domains,
-                       traffic_est=organic_traffic_est,
-                       keywords=total_keywords)
+            logger.info("Calculated Domain Rating", dr=calculated_dr, is_sandbox=is_sandbox, backlinks=total_backlinks, referring_domains=total_referring_domains, traffic_est=organic_traffic_est, keywords=total_keywords)
             
             return round(calculated_dr, 1)
             
@@ -604,7 +456,7 @@ class DataForSEOService:
         """Get backlinks summary data from DataForSEO v3 API"""
         try:
             # Get credentials
-            credentials = await self._get_credentials()
+            credentials = self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -619,23 +471,12 @@ class DataForSEOService:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # Get backlinks summary data using proper format
                 post_data = {}
-                post_data[len(post_data)] = {
-                    "target": domain,
-                    "internal_list_limit": 10,
-                    "include_subdomains": True,
-                    "backlinks_filters": ["dofollow", "=", True],
-                    "backlinks_status_type": "all"
-                }
+                post_data[len(post_data)] = { "target": domain, "internal_list_limit": 10, "include_subdomains": True, "backlinks_filters": ["dofollow", "=", True], "backlinks_status_type": "all" }
                 
-                response = await client.post(
-                    f"{credentials['api_url']}/backlinks/summary/live",
-                    auth=(credentials['login'], credentials['password']),
-                    json=post_data
-                )
+                response = client.post( f"{credentials['api_url']}/backlinks/summary/live", auth=(credentials['login'], credentials['password']), json=post_data )
                 
                 if response.status_code != 200:
-                    logger.error("DataForSEO backlinks summary request failed", 
-                               domain=domain, status=response.status_code)
+                    logger.error("DataForSEO backlinks summary request failed", domain=domain, status=response.status_code)
                     return None
                 
                 data = response.json()
@@ -658,7 +499,7 @@ class DataForSEOService:
     async def get_detailed_backlinks(self, domain: str, limit: int = 100, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get detailed backlinks data from DataForSEO v3 API (on-demand)"""
         try:
-            credentials = await self._get_credentials()
+            credentials = self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -666,22 +507,12 @@ class DataForSEOService:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # Get detailed backlinks data
                 post_data = {}
-                post_data[len(post_data)] = {
-                    "target": domain,
-                    "limit": limit,
-                    "mode": "as_is",
-                    "filters": ["dofollow", "=", True]
-                }
+                post_data[len(post_data)] = { "target": domain, "limit": limit, "mode": "as_is", "filters": ["dofollow", "=", True] }
                 
-                response = await client.post(
-                    f"{credentials['api_url']}/backlinks/backlinks/live",
-                    auth=(credentials['login'], credentials['password']),
-                    json=post_data
-                )
+                response = client.post( f"{credentials['api_url']}/backlinks/backlinks/live", auth=(credentials['login'], credentials['password']), json=post_data )
                 
                 if response.status_code != 200:
-                    logger.error("DataForSEO detailed backlinks request failed", 
-                               domain=domain, status=response.status_code)
+                    logger.error("DataForSEO detailed backlinks request failed", domain=domain, status=response.status_code)
                     return None
                 
                 data = response.json()
@@ -691,17 +522,9 @@ class DataForSEOService:
                     result = data["tasks"][0].get("result", [])
                     if result:
                         backlinks_data = result[0]
-                        logger.info("DataForSEO detailed backlinks retrieved successfully", 
-                                  domain=domain, count=backlinks_data.get("total_count", 0))
+                        logger.info("DataForSEO detailed backlinks retrieved successfully", domain=domain, count=backlinks_data.get("total_count", 0))
                         
-                        await self.usage_tracking.track_usage(
-                            user_id=user_id,
-                            resource_type='dataforseo',
-                            operation='detailed_backlinks',
-                            provider='dataforseo',
-                            model='v3',
-                            details={'domain': domain, 'limit': limit}
-                        )
+                        await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='detailed_backlinks', provider='dataforseo', model='v3', details={'domain': domain, 'limit': limit} )
                         return backlinks_data
                 
                 logger.warning("No detailed backlinks data found", domain=domain)
@@ -714,7 +537,7 @@ class DataForSEOService:
     async def get_detailed_keywords(self, domain: str, limit: int = 1000, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get detailed keywords data from DataForSEO v3 API (on-demand)"""
         try:
-            credentials = await self._get_credentials()
+            credentials = self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -722,23 +545,12 @@ class DataForSEOService:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # Get detailed keywords data
                 post_data = {}
-                post_data[len(post_data)] = {
-                    "target": domain,
-                    "language_name": "English",
-                    "location_name": "United States",
-                    "load_rank_absolute": True,
-                    "limit": limit
-                }
+                post_data[len(post_data)] = { "target": domain, "language_name": "English", "location_name": "United States", "load_rank_absolute": True, "limit": limit }
                 
-                response = await client.post(
-                    f"{credentials['api_url']}/dataforseo_labs/google/ranked_keywords/live",
-                    auth=(credentials['login'], credentials['password']),
-                    json=post_data
-                )
+                response = client.post( f"{credentials['api_url']}/dataforseo_labs/google/ranked_keywords/live", auth=(credentials['login'], credentials['password']), json=post_data )
                 
                 if response.status_code != 200:
-                    logger.error("DataForSEO detailed keywords request failed", 
-                               domain=domain, status=response.status_code)
+                    logger.error("DataForSEO detailed keywords request failed", domain=domain, status=response.status_code)
                     return None
                 
                 data = response.json()
@@ -748,17 +560,9 @@ class DataForSEOService:
                     result = data["tasks"][0].get("result", [])
                     if result:
                         keywords_data = result[0]
-                        logger.info("DataForSEO detailed keywords retrieved successfully", 
-                                  domain=domain, count=len(keywords_data.get("items", [])))
+                        logger.info("DataForSEO detailed keywords retrieved successfully", domain=domain, count=len(keywords_data.get("items", [])))
                                   
-                        await self.usage_tracking.track_usage(
-                            user_id=user_id,
-                            resource_type='dataforseo',
-                            operation='detailed_keywords',
-                            provider='dataforseo',
-                            model='v3',
-                            details={'domain': domain, 'limit': limit}
-                        )
+                        await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='detailed_keywords', provider='dataforseo', model='v3', details={'domain': domain, 'limit': limit} )
                         return keywords_data
                 
                 logger.warning("No detailed keywords data found", domain=domain)
@@ -771,7 +575,7 @@ class DataForSEOService:
     async def get_referring_domains(self, domain: str, limit: int = 800, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get referring domains data from DataForSEO v3 API (on-demand)"""
         try:
-            credentials = await self._get_credentials()
+            credentials = self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -779,23 +583,12 @@ class DataForSEOService:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # Get referring domains data using the backlinks endpoint with aggregation
                 post_data = {}
-                post_data[len(post_data)] = {
-                    "target": domain,
-                    "limit": limit,
-                    "mode": "as_is",
-                    "filters": ["dofollow", "=", True],
-                    "order_by": ["domain_from_rank,desc"]
-                }
+                post_data[len(post_data)] = { "target": domain, "limit": limit, "mode": "as_is", "filters": ["dofollow", "=", True], "order_by": ["domain_from_rank,desc"] }
                 
-                response = await client.post(
-                    f"{credentials['api_url']}/backlinks/backlinks/live",
-                    auth=(credentials['login'], credentials['password']),
-                    json=post_data
-                )
+                response = client.post( f"{credentials['api_url']}/backlinks/backlinks/live", auth=(credentials['login'], credentials['password']), json=post_data )
                 
                 if response.status_code != 200:
-                    logger.error("DataForSEO referring domains request failed", 
-                               domain=domain, status=response.status_code)
+                    logger.error("DataForSEO referring domains request failed", domain=domain, status=response.status_code)
                     return None
                 
                 data = response.json()
@@ -811,35 +604,18 @@ class DataForSEOService:
                         for item in backlinks_data.get("items", []):
                             domain_from = item.get("domain_from", "")
                             if domain_from not in referring_domains:
-                                referring_domains[domain_from] = {
-                                    "domain": domain_from,
-                                    "domain_rank": item.get("domain_from_rank", 0),
-                                    "backlinks_count": 0,
-                                    "first_seen": item.get("first_seen", ""),
-                                    "last_seen": item.get("last_seen", "")
-                                }
+                                referring_domains[domain_from] = { "domain": domain_from, "domain_rank": item.get("domain_from_rank", 0), "backlinks_count": 0, "first_seen": item.get("first_seen", ""), "last_seen": item.get("last_seen", "") }
                             referring_domains[domain_from]["backlinks_count"] += 1
                         
                         # Convert to list and sort by domain rank
                         referring_domains_list = list(referring_domains.values())
                         referring_domains_list.sort(key=lambda x: x.get("domain_rank", 0), reverse=True)
                         
-                        referring_domains_data = {
-                            "total_count": len(referring_domains_list),
-                            "items": referring_domains_list[:limit]
-                        }
+                        referring_domains_data = { "total_count": len(referring_domains_list), "items": referring_domains_list[:limit] }
                         
-                        logger.info("DataForSEO referring domains retrieved successfully", 
-                                  domain=domain, count=len(referring_domains_data.get("items", [])))
+                        logger.info("DataForSEO referring domains retrieved successfully", domain=domain, count=len(referring_domains_data.get("items", [])))
                                   
-                        await self.usage_tracking.track_usage(
-                            user_id=user_id,
-                            resource_type='dataforseo',
-                            operation='referring_domains',
-                            provider='dataforseo',
-                            model='v3',
-                            details={'domain': domain, 'limit': limit}
-                        )
+                        await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='referring_domains', provider='dataforseo', model='v3', details={'domain': domain, 'limit': limit} )
                         return referring_domains_data
                 
                 logger.warning("No referring domains data found", domain=domain)
@@ -861,10 +637,7 @@ class WaybackMachineService:
         """Check if Wayback Machine API is accessible"""
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    self.base_url,
-                    params={"url": "example.com", "limit": 1}
-                )
+                response = client.get( self.base_url, params={"url": "example.com", "limit": 1} )
                 return response.status_code == 200
         except Exception as e:
             logger.warning("Wayback Machine health check failed", error=str(e))
@@ -884,56 +657,28 @@ class WaybackMachineService:
             wayback_url = domain.replace("https://", "").replace("http://", "").replace("www.", "")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(
-                    self.base_url,
-                    params={
-                        "url": wayback_url,
-                        "output": "json",
-                        "limit": 1000,
-                        "collapse": "timestamp:8",  # Group by day
-                        "matchType": "domain"
-                    }
-                )
+                response = client.get( self.base_url, params={ "url": wayback_url, "output": "json", "limit": 1000, "collapse": "timestamp:8",  # Group by day
+                        "matchType": "domain" } )
                 
                 if response.status_code != 200:
-                    logger.error("Wayback Machine request failed", 
-                               domain=domain, 
-                               wayback_url=wayback_url,
-                               status=response.status_code,
-                               response_text=response.text[:200] if response.text else None)
+                    logger.error("Wayback Machine request failed", domain=domain, wayback_url=wayback_url, status=response.status_code, response_text=response.text[:200] if response.text else None)
                     return None
                 
                 try:
                     data = response.json()
                 except Exception as json_error:
-                    logger.error("Failed to parse Wayback Machine JSON response", 
-                               domain=domain,
-                               response_text=response.text[:500] if response.text else None,
-                               error=str(json_error))
+                    logger.error("Failed to parse Wayback Machine JSON response", domain=domain, response_text=response.text[:500] if response.text else None, error=str(json_error))
                     return None
                 
                 if not data or len(data) < 2:  # Header + data
-                    logger.warning("No Wayback Machine data found", 
-                                 domain=domain,
-                                 response_length=len(data) if data else 0,
-                                 response_preview=str(data)[:200] if data else None)
-                    return {
-                        "total_captures": 0,
-                        "first_capture_year": None,
-                        "last_capture_date": None,
-                        "captures": [],
-                        "timestamp": datetime.utcnow().isoformat()
-                    }
+                    logger.warning("No Wayback Machine data found", domain=domain, response_length=len(data) if data else 0, response_preview=str(data)[:200] if data else None)
+                    return { "total_captures": 0, "first_capture_year": None, "last_capture_date": None, "captures": [], "timestamp": datetime.utcnow().isoformat() }
                 
                 # Parse data (skip header row)
                 captures = []
                 for row in data[1:]:
                     if len(row) >= 3:
-                        captures.append({
-                            "timestamp": row[1],
-                            "url": row[2],
-                            "status": row[3] if len(row) > 3 else "200"
-                        })
+                        captures.append({ "timestamp": row[1], "url": row[2], "status": row[3] if len(row) > 3 else "200" })
                 
                 # Calculate summary statistics
                 total_captures = len(captures)
@@ -945,23 +690,15 @@ class WaybackMachineService:
                     last_capture = max(captures, key=lambda x: x["timestamp"])
                     
                     first_capture_year = int(first_capture["timestamp"][:4])
-                    last_capture_date = datetime.strptime(
-                        last_capture["timestamp"], "%Y%m%d%H%M%S"
-                    ).isoformat()
+                    last_capture_date = datetime.strptime( last_capture["timestamp"], "%Y%m%d%H%M%S" ).isoformat()
                 
-                result = {
-                    "total_captures": total_captures,
-                    "first_capture_year": first_capture_year,
-                    "last_capture_date": last_capture_date,
-                    "captures": captures[:100],  # Limit to first 100 for storage
-                    "timestamp": datetime.utcnow().isoformat()
-                }
+                result = { "total_captures": total_captures, "first_capture_year": first_capture_year, "last_capture_date": last_capture_date, "captures": captures[:100],  # Limit to first 100 for storage
+                    "timestamp": datetime.utcnow().isoformat() }
                 
                 # Cache the data
                 await db.save_raw_data(domain, DataSource.WAYBACK_MACHINE, result)
                 
-                logger.info("Wayback Machine data retrieved successfully", 
-                          domain=domain, captures=total_captures)
+                logger.info("Wayback Machine data retrieved successfully", domain=domain, captures=total_captures)
                 return result
                 
         except httpx.TimeoutException:
@@ -971,11 +708,7 @@ class WaybackMachineService:
             logger.error("Wayback Machine request error", domain=domain, error=str(e), error_type=type(e).__name__)
             return None
         except Exception as e:
-            logger.error("Failed to get Wayback Machine data", 
-                        domain=domain, 
-                        error=str(e), 
-                        error_type=type(e).__name__,
-                        exc_info=True)
+            logger.error("Failed to get Wayback Machine data", domain=domain, error=str(e), error_type=type(e).__name__, exc_info=True)
             return None
 
 
@@ -994,7 +727,7 @@ class LLMService:
     
     async def _get_provider_and_key(self) -> tuple[Optional[str], Optional[str], Optional[str]]:
         """Get available LLM provider, API key, and model name"""
-        config = await self.secrets_service.get_active_llm_config()
+        config = self.secrets_service.get_active_llm_config()
         
         if config:
             raw_provider = config.get('provider', '').lower()
@@ -1016,14 +749,14 @@ class LLMService:
         # Fallback to legacy behavior if DB config returns nothing (unlikely with new setup but safe)
         if self._provider is None:
             # Try Gemini first
-            gemini_key = await self.secrets_service.get_gemini_credentials()
+            gemini_key = self.secrets_service.get_gemini_credentials()
             if gemini_key:
                 self._provider = "gemini"
                 self._gemini_key = gemini_key
                 return self._provider, self._gemini_key, "gemini-2.0-flash-exp"
             
             # Try OpenAI as fallback
-            openai_key = await self.secrets_service.get_openai_credentials()
+            openai_key = self.secrets_service.get_openai_credentials()
             if openai_key:
                 self._provider = "openai"
                 self._openai_key = openai_key
@@ -1040,7 +773,7 @@ class LLMService:
     async def health_check(self) -> bool:
         """Check if LLM service is accessible"""
         try:
-            provider, api_key, _ = await self._get_provider_and_key()
+            provider, api_key, _ = self._get_provider_and_key()
             return provider is not None and api_key is not None
         except Exception as e:
             logger.warning("LLM service health check failed", error=str(e))
@@ -1049,7 +782,7 @@ class LLMService:
     async def generate_analysis(self, domain: str, data: Dict[str, Any], user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Generate domain analysis using LLM"""
         try:
-            provider, api_key, model_name = await self._get_provider_and_key()
+            provider, api_key, model_name = self._get_provider_and_key()
             if not provider or not api_key:
                 logger.error("No LLM provider credentials available")
                 return None
@@ -1058,22 +791,15 @@ class LLMService:
             prompt = self._build_analysis_prompt(domain, data)
             
             if provider == "gemini":
-                result = await self._generate_with_gemini(prompt, domain, model_name)
+                result = self._generate_with_gemini(prompt, domain, model_name)
             elif provider == "openai":
-                result = await self._generate_with_openai(prompt, domain, api_key, model_name)
+                result = self._generate_with_openai(prompt, domain, api_key, model_name)
             else:
                 logger.error(f"Unknown LLM provider: {provider}")
                 return None
                 
             if result:
-                 await self.usage_tracking.track_usage(
-                    user_id=user_id,
-                    resource_type='llm',
-                    operation='generate_analysis',
-                    provider=provider,
-                    model=model_name,
-                    details={'domain': domain}
-                )
+                 await self.usage_tracking.track_usage( user_id=user_id, resource_type='llm', operation='generate_analysis', provider=provider, model=model_name, details={'domain': domain} )
             
             return result
             
@@ -1084,7 +810,7 @@ class LLMService:
     async def generate_enhanced_analysis(self, domain: str, data: Dict[str, Any], user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Generate enhanced domain analysis with backlink quality assessment"""
         logger.info("=== ENHANCED ANALYSIS CALLED ===", domain=domain)
-        provider, api_key, model_name = await self._get_provider_and_key()
+        provider, api_key, model_name = self._get_provider_and_key()
         if not provider or not api_key:
             logger.error("No LLM provider credentials available")
             raise ValueError("No LLM provider credentials available. Please configure LLM credentials in Supabase.")
@@ -1094,9 +820,9 @@ class LLMService:
         logger.info("Enhanced prompt generated", domain=domain, prompt_length=len(prompt), prompt_preview=prompt[:500])
         
         if provider == "gemini":
-            result = await self._generate_with_gemini(prompt, domain, model_name)
+            result = self._generate_with_gemini(prompt, domain, model_name)
         elif provider == "openai":
-            result = await self._generate_with_openai(prompt, domain, api_key, model_name)
+            result = self._generate_with_openai(prompt, domain, api_key, model_name)
         else:
             logger.error(f"Unknown LLM provider: {provider}")
             raise ValueError(f"Unknown LLM provider: {provider}")
@@ -1104,14 +830,7 @@ class LLMService:
         if not result:
             raise ValueError("LLM service returned no data")
             
-        await self.usage_tracking.track_usage(
-            user_id=user_id,
-            resource_type='llm',
-            operation='generate_enhanced_analysis',
-            provider=provider,
-            model=model_name,
-            details={'domain': domain}
-        )
+        await self.usage_tracking.track_usage( user_id=user_id, resource_type='llm', operation='generate_enhanced_analysis', provider=provider, model=model_name, details={'domain': domain} )
         
         return result
     
@@ -1125,10 +844,7 @@ class LLMService:
         genai.configure(api_key=self._gemini_key)
         model = genai.GenerativeModel(model_name)
         
-        response = await asyncio.to_thread(
-            model.generate_content,
-            prompt
-        )
+        response = asyncio.to_thread( model.generate_content, prompt )
         
         analysis_text = response.text
         return self._parse_llm_response(analysis_text, domain)
@@ -1142,15 +858,8 @@ class LLMService:
         
         client = openai.AsyncOpenAI(api_key=api_key)
         
-        response = await client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": "You are an SEO expert analyzing domain data for domain buyers. You must respond with valid JSON matching the exact structure specified in the prompt."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.7
-        )
+        response = client.chat.completions.create( model=model_name, messages=[ {"role": "system", "content": "You are an SEO expert analyzing domain data for domain buyers. You must respond with valid JSON matching the exact structure specified in the prompt."}, {"role": "user", "content": prompt}
+            ], response_format={"type": "json_object"}, temperature=0.7 )
         
         analysis_text = response.choices[0].message.content
         return self._parse_llm_response(analysis_text, domain)
@@ -1197,17 +906,13 @@ class LLMService:
         wayback = data.get("wayback", {})
         
         prompt = f"""
-        Analyze the following domain data for {domain} and provide a comprehensive SEO analysis report.
-        
-        Domain Analytics:
+        Analyze the following domain data for {domain} and provide a comprehensive SEO analysis report. Domain Analytics:
         - Domain Authority (DataForSEO): {analytics.get('domain_rank', 'N/A')}
         - Organic Traffic: {analytics.get('organic_traffic', 'N/A')}
         - Total Referring Domains: {referring_domains.get('total_count', len(referring_domains.get('items', [])))}
         - Total Backlinks: {backlinks.get('backlinks_count', 'N/A')}
         
-        IMPORTANT: If the domain has a significant number of backlinks (e.g., millions), this is a MAJOR SEO strength that should be highlighted prominently in the analysis. High backlink counts indicate strong domain authority and link equity.
-        
-        Top Keywords (showing first 10):
+        IMPORTANT: If the domain has a significant number of backlinks (e.g., millions), this is a MAJOR SEO strength that should be highlighted prominently in the analysis. High backlink counts indicate strong domain authority and link equity. Top Keywords (showing first 10):
         {self._format_keywords(keywords.get('items', [])[:10])}
         
         Top Referring Domains (showing first 10):
@@ -1229,23 +934,11 @@ class LLMService:
         - Last Capture: {wayback.get('last_capture_date', 'N/A')}
         
         Please provide a JSON response with the following structure:
-        {{
-            "good_highlights": [
-                "List 5 strongest SEO assets and positive indicators"
-            ],
-            "bad_highlights": [
-                "List 5 biggest SEO liabilities and concerns"
-            ],
-            "suggested_niches": [
-                "List 3-5 content niches/topics that could be built on this domain"
-            ],
-            "advantages_disadvantages_table": [
-                {{"type": "advantage", "description": "Description", "metric": "Supporting metric"}},
-                {{"type": "disadvantage", "description": "Description", "metric": "Supporting metric"}}
-            ],
-            "summary": "Overall assessment of the domain's potential",
-            "confidence_score": 0.85
-        }}
+        {{ "good_highlights": [ "List 5 strongest SEO assets and positive indicators"
+            ], "bad_highlights": [ "List 5 biggest SEO liabilities and concerns"
+            ], "suggested_niches": [ "List 3-5 content niches/topics that could be built on this domain"
+            ], "advantages_disadvantages_table": [ {{"type": "advantage", "description": "Description", "metric": "Supporting metric"}}, {{"type": "disadvantage", "description": "Description", "metric": "Supporting metric"}}
+            ], "summary": "Overall assessment of the domain's potential", "confidence_score": 0.85 }}
         """
         
         return prompt
@@ -1262,11 +955,7 @@ class LLMService:
         referring_domains_data = detailed_data.get("referring_domains", {})
         
         prompt = f"""
-        You are an expert domain analyst. Analyze the following domain data for {domain} and provide a comprehensive SEO analysis specifically tailored for DOMAIN BUYERS looking to purchase expired or auctioned domains.
-        
-        You must respond with ONLY a valid JSON object. No text before or after the JSON.
-        
-        ESSENTIAL METRICS:
+        You are an expert domain analyst. Analyze the following domain data for {domain} and provide a comprehensive SEO analysis specifically tailored for DOMAIN BUYERS looking to purchase expired or auctioned domains. You must respond with ONLY a valid JSON object. No text before or after the JSON. ESSENTIAL METRICS:
         - Domain Authority (DataForSEO): {essential_metrics.get('domain_rating', 'N/A')}
         - Organic Traffic: {essential_metrics.get('organic_traffic', 'N/A')}
         - Total Keywords: {essential_metrics.get('total_keywords', 'N/A')}
@@ -1339,38 +1028,10 @@ class LLMService:
         - Provide confidence in analysis based on complete data availability
         
         Return your analysis as a JSON object with this structure:
-        {{
-            "buy_recommendation": {{
-                "recommendation": "BUY or NO-BUY or CAUTION",
-                "confidence": 0.85,
-                "reasoning": "Detailed reasoning for the recommendation",
-                "risk_level": "low/medium/high",
-                "potential_value": "low/medium/high"
-            }},
-            "valuable_assets": [
-                "List specific valuable SEO assets with examples"
-            ],
-            "major_concerns": [
-                "List specific concerns with examples"
-            ],
-            "content_strategy": {{
-                "primary_niche": "Main content niche",
-                "secondary_niches": ["Secondary niche 1", "Secondary niche 2"],
-                "first_articles": ["Article topic 1", "Article topic 2"],
-                "target_keywords": ["Keyword 1", "Keyword 2"]
-            }},
-            "action_plan": {{
-                "immediate_actions": ["Immediate action 1", "Immediate action 2"],
-                "first_month": ["First month action 1", "First month action 2"],
-                "long_term_strategy": ["Long term strategy 1", "Long term strategy 2"]
-            }},
-            "pros_and_cons": [
-                {{"type": "pro", "description": "Specific advantage", "impact": "high/medium/low", "example": "Specific example"}},
-                {{"type": "con", "description": "Specific disadvantage", "impact": "high/medium/low", "example": "Specific example"}}
-            ],
-            "summary": "Comprehensive summary with specific reasoning",
-            "confidence_score": 0.85
-        }}
+        {{ "buy_recommendation": {{ "recommendation": "BUY or NO-BUY or CAUTION", "confidence": 0.85, "reasoning": "Detailed reasoning for the recommendation", "risk_level": "low/medium/high", "potential_value": "low/medium/high" }}, "valuable_assets": [ "List specific valuable SEO assets with examples"
+            ], "major_concerns": [ "List specific concerns with examples"
+            ], "content_strategy": {{ "primary_niche": "Main content niche", "secondary_niches": ["Secondary niche 1", "Secondary niche 2"], "first_articles": ["Article topic 1", "Article topic 2"], "target_keywords": ["Keyword 1", "Keyword 2"] }}, "action_plan": {{ "immediate_actions": ["Immediate action 1", "Immediate action 2"], "first_month": ["First month action 1", "First month action 2"], "long_term_strategy": ["Long term strategy 1", "Long term strategy 2"] }}, "pros_and_cons": [ {{"type": "pro", "description": "Specific advantage", "impact": "high/medium/low", "example": "Specific example"}}, {{"type": "con", "description": "Specific disadvantage", "impact": "high/medium/low", "example": "Specific example"}}
+            ], "summary": "Comprehensive summary with specific reasoning", "confidence_score": 0.85 }}
         """
         
         return prompt
@@ -1441,15 +1102,7 @@ class LLMService:
         try:
             items = backlinks_data.get("items", [])
             if not items:
-                return {
-                    "overall_quality_score": 0.0,
-                    "high_dr_percentage": 0.0,
-                    "link_diversity_score": 0.0,
-                    "relevance_score": 0.0,
-                    "velocity_score": 0.0,
-                    "geographic_diversity": 0.0,
-                    "anchor_text_diversity": 0.0
-                }
+                return { "overall_quality_score": 0.0, "high_dr_percentage": 0.0, "link_diversity_score": 0.0, "relevance_score": 0.0, "velocity_score": 0.0, "geographic_diversity": 0.0, "anchor_text_diversity": 0.0 }
             
             # Calculate high DR percentage (DR 70+)
             high_dr_count = sum(1 for bl in items if bl.get('domain_from_rank', 0) >= 70)
@@ -1482,40 +1135,18 @@ class LLMService:
             geographic_diversity = 7.0  # Placeholder - would need actual country data
             
             # Overall quality score (weighted average)
-            overall_quality_score = (
-                (high_dr_percentage / 10) * 0.25 +
+            overall_quality_score = ( (high_dr_percentage / 10) * 0.25 +
                 (link_diversity_score / 10) * 0.20 +
                 (relevance_score / 10) * 0.20 +
                 (anchor_text_diversity / 10) * 0.15 +
                 (velocity_score / 10) * 0.10 +
-                (geographic_diversity / 10) * 0.10
-            ) * 10
+                (geographic_diversity / 10) * 0.10 ) * 10
             
-            return {
-                "overall_quality_score": round(overall_quality_score, 1),
-                "high_dr_percentage": round(high_dr_percentage, 1),
-                "link_diversity_score": round(link_diversity_score, 1),
-                "relevance_score": round(relevance_score, 1),
-                "velocity_score": round(velocity_score, 1),
-                "geographic_diversity": round(geographic_diversity, 1),
-                "anchor_text_diversity": round(anchor_text_diversity, 1),
-                "total_backlinks": len(items),
-                "unique_domains": unique_domains,
-                "unique_anchors": unique_anchors,
-                "avg_dr_score": round(avg_dr, 1)
-            }
+            return { "overall_quality_score": round(overall_quality_score, 1), "high_dr_percentage": round(high_dr_percentage, 1), "link_diversity_score": round(link_diversity_score, 1), "relevance_score": round(relevance_score, 1), "velocity_score": round(velocity_score, 1), "geographic_diversity": round(geographic_diversity, 1), "anchor_text_diversity": round(anchor_text_diversity, 1), "total_backlinks": len(items), "unique_domains": unique_domains, "unique_anchors": unique_anchors, "avg_dr_score": round(avg_dr, 1) }
             
         except Exception as e:
             logger.error("Failed to calculate backlink quality score", error=str(e))
-            return {
-                "overall_quality_score": 0.0,
-                "high_dr_percentage": 0.0,
-                "link_diversity_score": 0.0,
-                "relevance_score": 0.0,
-                "velocity_score": 0.0,
-                "geographic_diversity": 0.0,
-                "anchor_text_diversity": 0.0
-            }
+            return { "overall_quality_score": 0.0, "high_dr_percentage": 0.0, "link_diversity_score": 0.0, "relevance_score": 0.0, "velocity_score": 0.0, "geographic_diversity": 0.0, "anchor_text_diversity": 0.0 }
     
     def calculate_comprehensive_metrics(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """Calculate comprehensive analysis metrics"""
@@ -1550,44 +1181,18 @@ class LLMService:
             organic_traffic = essential_metrics.get('organic_traffic', 0)
             
             # Calculate overall health score
-            health_score = (
-                (domain_rank / 100) * 0.30 +
+            health_score = ( (domain_rank / 100) * 0.30 +
                 (backlink_quality['overall_quality_score'] / 10) * 0.25 +
                 (min(10.0, total_keywords / 100) / 10) * 0.20 +
                 (min(10.0, total_referring_domains / 50) / 10) * 0.15 +
-                (min(10.0, organic_traffic / 10000) / 10) * 0.10
-            ) * 10
+                (min(10.0, organic_traffic / 10000) / 10) * 0.10 ) * 10
             
-            return {
-                "overall_health_score": round(health_score, 1),
-                "backlink_quality": backlink_quality,
-                "keyword_metrics": {
-                    "total_keywords": total_keywords,
-                    "avg_position_top_10": round(avg_position, 1),
-                    "total_search_volume": total_search_volume,
-                    "keyword_diversity": len(set(kw.get('keyword', '') for kw in keyword_items))
-                },
-                "referring_domains_metrics": {
-                    "total_referring_domains": total_referring_domains,
-                    "avg_dr_score": round(avg_dr_referring, 1),
-                    "high_dr_domains": sum(1 for rd in referring_domains_items if rd.get('domain_from_rank', 0) >= 70)
-                },
-                "domain_metrics": {
-                    "domain_rating": domain_rank,  # This is actually domain_rank now
-                    "organic_traffic": organic_traffic,
-                    "traffic_quality_score": min(10.0, organic_traffic / 1000)
-                }
-            }
+            return { "overall_health_score": round(health_score, 1), "backlink_quality": backlink_quality, "keyword_metrics": { "total_keywords": total_keywords, "avg_position_top_10": round(avg_position, 1), "total_search_volume": total_search_volume, "keyword_diversity": len(set(kw.get('keyword', '') for kw in keyword_items)) }, "referring_domains_metrics": { "total_referring_domains": total_referring_domains, "avg_dr_score": round(avg_dr_referring, 1), "high_dr_domains": sum(1 for rd in referring_domains_items if rd.get('domain_from_rank', 0) >= 70) }, "domain_metrics": { "domain_rating": domain_rank,  # This is actually domain_rank now
+                    "organic_traffic": organic_traffic, "traffic_quality_score": min(10.0, organic_traffic / 1000) } }
             
         except Exception as e:
             logger.error("Failed to calculate comprehensive metrics", error=str(e))
-            return {
-                "overall_health_score": 0.0,
-                "backlink_quality": {},
-                "keyword_metrics": {},
-                "referring_domains_metrics": {},
-                "domain_metrics": {}
-            }
+            return { "overall_health_score": 0.0, "backlink_quality": {}, "keyword_metrics": {}, "referring_domains_metrics": {}, "domain_metrics": {} }
     
     def _format_keywords(self, keywords: List[Dict[str, Any]]) -> str:
         """Format keywords data for the prompt"""
@@ -1624,19 +1229,12 @@ class LLMService:
     
     def _parse_text_response(self, text: str) -> Dict[str, Any]:
         """Parse text response into structured data"""
-        return {
-            "good_highlights": ["Analysis generated from text response"],
-            "bad_highlights": ["Analysis generated from text response"],
-            "suggested_niches": ["Analysis generated from text response"],
-            "advantages_disadvantages_table": [],
-            "summary": text,
-            "confidence_score": 0.5
-        }
+        return { "good_highlights": ["Analysis generated from text response"], "bad_highlights": ["Analysis generated from text response"], "suggested_niches": ["Analysis generated from text response"], "advantages_disadvantages_table": [], "summary": text, "confidence_score": 0.5 }
     
     async def generate_development_plan(self, report) -> Dict[str, Any]:
         """Generate a development plan based on domain analysis data"""
         try:
-            provider, api_key, model_name = await self._get_provider_and_key()
+            provider, api_key, model_name = self._get_provider_and_key()
             if not provider or not api_key:
                 logger.error("No LLM provider credentials available")
                 return self._get_default_development_plan()
@@ -1666,14 +1264,11 @@ class LLMService:
             db = DatabaseService()
             
             # Get actual keyword and backlink data (await the async calls)
-            keywords_data = asyncio.run(db.get_detailed_data(domain, 'keywords')) or {'items': []}
-            backlinks_data = asyncio.run(db.get_detailed_data(domain, 'backlinks')) or {'items': []}
-            referring_domains_data = asyncio.run(db.get_detailed_data(domain, 'referring_domains')) or {'items': []}
+            keywords_data = asyncio.run(await db.get_detailed_data(domain, 'keywords')) or {'items': []}
+            backlinks_data = asyncio.run(await db.get_detailed_data(domain, 'backlinks')) or {'items': []}
+            referring_domains_data = asyncio.run(await db.get_detailed_data(domain, 'referring_domains')) or {'items': []}
             
-            logger.info(f"Retrieved data for development plan", 
-                       keywords_count=len(keywords_data.get('items', [])),
-                       backlinks_count=len(backlinks_data.get('items', [])),
-                       referring_domains_count=len(referring_domains_data.get('items', [])))
+            logger.info(f"Retrieved data for development plan", keywords_count=len(keywords_data.get('items', [])), backlinks_count=len(backlinks_data.get('items', [])), referring_domains_count=len(referring_domains_data.get('items', [])))
         except Exception as e:
             logger.error("Failed to get detailed data for development plan", error=str(e))
             # Fallback to empty data
@@ -1695,9 +1290,7 @@ class LLMService:
         partnership_opportunities = self._identify_partnership_opportunities(backlinks_data.get('items', []))
         
         prompt = f"""
-You are an expert SEO strategist and domain development consultant. Based on the comprehensive analysis data for {domain}, create a detailed development plan to increase organic traffic and improve domain authority.
-
-DOMAIN ANALYSIS SUMMARY:
+You are an expert SEO strategist and domain development consultant. Based on the comprehensive analysis data for {domain}, create a detailed development plan to increase organic traffic and improve domain authority. DOMAIN ANALYSIS SUMMARY:
 - Domain Rating (DR): {dr or 'N/A'}
 - Organic Traffic Estimate: {traffic or 'N/A'}
 - Total Backlinks: {backlinks or 'N/A'}
@@ -1797,39 +1390,12 @@ EXAMPLES OF SPECIFIC INSIGHTS TO PROVIDE:
 BE SPECIFIC ABOUT WHAT THE BUYER CAN DO IMMEDIATELY!
 
 RESPONSE FORMAT: Return a JSON object with the following structure:
-{{
-  "title": "Domain Development Plan for {domain}",
-  "description": "Comprehensive strategy to increase organic traffic and domain authority",
-  "strategies": [
-    {{
-      "id": "strategy_1",
-      "title": "Strategy Title",
-      "description": "Detailed description of the strategy",
-      "priority": "high|medium|low",
-      "estimated_effort": "low|medium|high",
-      "expected_impact": "low|medium|high",
-      "timeline": "2-4 weeks",
-      "steps": ["Step 1", "Step 2", "Step 3"],
-      "keywords": ["keyword1", "keyword2"],
-      "expected_traffic_increase": "20-30% increase in 3 months"
-    }}
-  ],
-  "timeline": [
-    {{
-      "phase": "Phase 1: Foundation",
-      "duration": "4-6 weeks",
-      "focus": "Content optimization and technical improvements"
-    }}
-  ],
-  "success_metrics": [
-    "Organic traffic increase by X%",
-    "Domain Rating improvement",
-    "Keyword ranking improvements"
-  ]
-}}
+{{ "title": "Domain Development Plan for {domain}", "description": "Comprehensive strategy to increase organic traffic and domain authority", "strategies": [ {{ "id": "strategy_1", "title": "Strategy Title", "description": "Detailed description of the strategy", "priority": "high|medium|low", "estimated_effort": "low|medium|high", "expected_impact": "low|medium|high", "timeline": "2-4 weeks", "steps": ["Step 1", "Step 2", "Step 3"], "keywords": ["keyword1", "keyword2"], "expected_traffic_increase": "20-30% increase in 3 months" }}
+  ], "timeline": [ {{ "phase": "Phase 1: Foundation", "duration": "4-6 weeks", "focus": "Content optimization and technical improvements" }}
+  ], "success_metrics": [ "Organic traffic increase by X%", "Domain Rating improvement", "Keyword ranking improvements"
+  ] }}
 
-Focus on creating actionable, data-driven strategies that will genuinely help {domain} grow its organic traffic and authority.
-"""
+Focus on creating actionable, data-driven strategies that will genuinely help {domain} grow its organic traffic and authority. """
         return prompt
     
     def _format_keywords_for_development(self, keywords: List[Dict[str, Any]]) -> str:
@@ -2160,13 +1726,7 @@ Focus on creating actionable, data-driven strategies that will genuinely help {d
         suggestions = []
         
         # Look for tool-related patterns
-        tool_patterns = {
-            'calculator': ['calculator', 'calc', 'compute'],
-            'checker': ['checker', 'check', 'verify'],
-            'analyzer': ['analyzer', 'analysis', 'audit'],
-            'generator': ['generator', 'generate', 'create'],
-            'converter': ['converter', 'convert', 'transform']
-        }
+        tool_patterns = { 'calculator': ['calculator', 'calc', 'compute'], 'checker': ['checker', 'check', 'verify'], 'analyzer': ['analyzer', 'analysis', 'audit'], 'generator': ['generator', 'generate', 'create'], 'converter': ['converter', 'convert', 'transform'] }
         
         for pattern, words in tool_patterns.items():
             matching_keywords = [kw for kw in keywords if any(word in kw.get('keyword', '').lower() for word in words)]
@@ -2255,90 +1815,10 @@ Focus on creating actionable, data-driven strategies that will genuinely help {d
     
     def _get_default_development_plan(self) -> Dict[str, Any]:
         """Return a default development plan if LLM generation fails"""
-        return {
-            "title": "Comprehensive Domain Development Plan",
-            "description": "Data-driven strategies to increase organic traffic and improve domain authority through content optimization, technical SEO, and link building",
-            "strategies": [
-                {
-                    "id": "content_optimization",
-                    "title": "Content Optimization & Expansion Strategy",
-                    "description": "Audit and optimize existing content while creating new high-value content targeting specific keywords",
-                    "priority": "high",
-                    "estimated_effort": "medium",
-                    "expected_impact": "high",
-                    "timeline": "4-6 weeks",
-                    "steps": [
-                        "Conduct comprehensive content audit using tools like Screaming Frog",
-                        "Identify top-performing content and optimize for better rankings",
-                        "Create 10-15 new high-quality blog posts targeting long-tail keywords",
-                        "Optimize meta titles and descriptions for all pages",
-                        "Implement schema markup for better search visibility",
-                        "Create topic clusters around main keyword themes"
-                    ],
-                    "keywords": ["long-tail keywords", "LSI keywords", "semantic keywords"],
-                    "expected_traffic_increase": "25-40% increase in 3-4 months"
-                },
-                {
-                    "id": "technical_seo",
-                    "title": "Technical SEO Optimization",
-                    "description": "Improve site speed, mobile experience, and technical foundation for better search rankings",
-                    "priority": "high",
-                    "estimated_effort": "medium",
-                    "expected_impact": "high",
-                    "timeline": "2-3 weeks",
-                    "steps": [
-                        "Optimize Core Web Vitals (LCP, FID, CLS)",
-                        "Implement proper heading structure (H1, H2, H3)",
-                        "Fix any crawl errors and broken links",
-                        "Optimize images with proper alt tags and compression",
-                        "Implement XML sitemaps and robots.txt optimization",
-                        "Ensure mobile-first indexing compliance"
-                    ],
-                    "keywords": ["technical SEO", "site speed", "mobile optimization"],
-                    "expected_traffic_increase": "15-25% increase in 2-3 months"
-                },
-                {
-                    "id": "link_building",
-                    "title": "Strategic Link Building Campaign",
-                    "description": "Build high-quality backlinks through outreach, content marketing, and relationship building",
-                    "priority": "medium",
-                    "estimated_effort": "high",
-                    "expected_impact": "high",
-                    "timeline": "3-4 months",
-                    "steps": [
-                        "Identify 50+ high-authority websites in your niche",
-                        "Create linkable assets (infographics, guides, tools)",
-                        "Conduct guest posting on relevant industry blogs",
-                        "Build relationships with industry influencers",
-                        "Submit to relevant directories and resource pages",
-                        "Monitor and disavow toxic backlinks"
-                    ],
-                    "keywords": ["link building", "backlink acquisition", "domain authority"],
-                    "expected_traffic_increase": "30-50% increase in 4-6 months"
-                }
-            ],
-            "timeline": [
-                {
-                    "phase": "Phase 1: Foundation (Weeks 1-4)",
-                    "duration": "4 weeks",
-                    "focus": "Technical SEO improvements and content audit"
-                },
-                {
-                    "phase": "Phase 2: Content Creation (Weeks 5-8)",
-                    "duration": "4 weeks",
-                    "focus": "Content optimization and new content creation"
-                },
-                {
-                    "phase": "Phase 3: Link Building (Weeks 9-16)",
-                    "duration": "8 weeks",
-                    "focus": "Strategic link building and relationship building"
-                }
-            ],
-            "success_metrics": [
-                "Organic traffic increase by 40-60% within 6 months",
-                "Domain Rating improvement by 10-15 points",
-                "Average keyword ranking improvement by 5-10 positions",
-                "Core Web Vitals scores in 'Good' range",
-                "50+ new high-quality backlinks acquired"
-            ]
-        }
+        return { "title": "Comprehensive Domain Development Plan", "description": "Data-driven strategies to increase organic traffic and improve domain authority through content optimization, technical SEO, and link building", "strategies": [ { "id": "content_optimization", "title": "Content Optimization & Expansion Strategy", "description": "Audit and optimize existing content while creating new high-value content targeting specific keywords", "priority": "high", "estimated_effort": "medium", "expected_impact": "high", "timeline": "4-6 weeks", "steps": [ "Conduct comprehensive content audit using tools like Screaming Frog", "Identify top-performing content and optimize for better rankings", "Create 10-15 new high-quality blog posts targeting long-tail keywords", "Optimize meta titles and descriptions for all pages", "Implement schema markup for better search visibility", "Create topic clusters around main keyword themes"
+                    ], "keywords": ["long-tail keywords", "LSI keywords", "semantic keywords"], "expected_traffic_increase": "25-40% increase in 3-4 months" }, { "id": "technical_seo", "title": "Technical SEO Optimization", "description": "Improve site speed, mobile experience, and technical foundation for better search rankings", "priority": "high", "estimated_effort": "medium", "expected_impact": "high", "timeline": "2-3 weeks", "steps": [ "Optimize Core Web Vitals (LCP, FID, CLS)", "Implement proper heading structure (H1, H2, H3)", "Fix any crawl errors and broken links", "Optimize images with proper alt tags and compression", "Implement XML sitemaps and robots.txt optimization", "Ensure mobile-first indexing compliance"
+                    ], "keywords": ["technical SEO", "site speed", "mobile optimization"], "expected_traffic_increase": "15-25% increase in 2-3 months" }, { "id": "link_building", "title": "Strategic Link Building Campaign", "description": "Build high-quality backlinks through outreach, content marketing, and relationship building", "priority": "medium", "estimated_effort": "high", "expected_impact": "high", "timeline": "3-4 months", "steps": [ "Identify 50+ high-authority websites in your niche", "Create linkable assets (infographics, guides, tools)", "Conduct guest posting on relevant industry blogs", "Build relationships with industry influencers", "Submit to relevant directories and resource pages", "Monitor and disavow toxic backlinks"
+                    ], "keywords": ["link building", "backlink acquisition", "domain authority"], "expected_traffic_increase": "30-50% increase in 4-6 months" }
+            ], "timeline": [ { "phase": "Phase 1: Foundation (Weeks 1-4)", "duration": "4 weeks", "focus": "Technical SEO improvements and content audit" }, { "phase": "Phase 2: Content Creation (Weeks 5-8)", "duration": "4 weeks", "focus": "Content optimization and new content creation" }, { "phase": "Phase 3: Link Building (Weeks 9-16)", "duration": "8 weeks", "focus": "Strategic link building and relationship building" }
+            ], "success_metrics": [ "Organic traffic increase by 40-60% within 6 months", "Domain Rating improvement by 10-15 points", "Average keyword ranking improvement by 5-10 positions", "Core Web Vitals scores in 'Good' range", "50+ new high-quality backlinks acquired"
+            ] }

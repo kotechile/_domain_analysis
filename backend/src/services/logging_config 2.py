@@ -13,30 +13,11 @@ def configure_async_logging():
     """Configure structured logging for async operations"""
     
     # Configure structlog
-    structlog.configure(
-        processors=[
-            structlog.stdlib.filter_by_level,
-            structlog.stdlib.add_logger_name,
-            structlog.stdlib.add_log_level,
-            structlog.stdlib.PositionalArgumentsFormatter(),
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,
-            structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer()
-        ],
-        context_class=dict,
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        wrapper_class=structlog.stdlib.BoundLogger,
-        cache_logger_on_first_use=True,
-    )
+    structlog.configure( processors=[ structlog.stdlib.filter_by_level, structlog.stdlib.add_logger_name, structlog.stdlib.add_log_level, structlog.stdlib.PositionalArgumentsFormatter(), structlog.processors.TimeStamper(fmt="iso"), structlog.processors.StackInfoRenderer(), structlog.processors.format_exc_info, structlog.processors.UnicodeDecoder(), structlog.processors.JSONRenderer()
+        ], context_class=dict, logger_factory=structlog.stdlib.LoggerFactory(), wrapper_class=structlog.stdlib.BoundLogger, cache_logger_on_first_use=True, )
     
     # Configure standard logging
-    logging.basicConfig(
-        format="%(message)s",
-        stream=sys.stdout,
-        level=logging.INFO,
-    )
+    logging.basicConfig( format="%(message)s", stream=sys.stdout, level=logging.INFO, )
     
     # Set specific loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -57,98 +38,42 @@ class AsyncOperationLogger:
         self.operation_name = operation_name
         self.domain = domain
         self.start_time = datetime.utcnow()
-        self.context = {
-            "operation": operation_name,
-            "domain": domain,
-            "start_time": self.start_time.isoformat()
-        }
+        self.context = { "operation": operation_name, "domain": domain, "start_time": self.start_time.isoformat() }
     
     def log_task_start(self, task_id: str, task_type: str, **kwargs):
         """Log async task start"""
-        self.logger.info(
-            "Async task started",
-            task_id=task_id,
-            task_type=task_type,
-            **self.context,
-            **kwargs
-        )
+        self.logger.info( "Async task started", task_id=task_id, task_type=task_type, **self.context, **kwargs )
     
-    def log_task_progress(self, task_id: str, progress_percentage: int, 
-                         current_operation: str = None, **kwargs):
+    def log_task_progress(self, task_id: str, progress_percentage: int, current_operation: str = None, **kwargs):
         """Log async task progress"""
-        self.logger.info(
-            "Async task progress",
-            task_id=task_id,
-            progress_percentage=progress_percentage,
-            current_operation=current_operation,
-            **self.context,
-            **kwargs
-        )
+        self.logger.info( "Async task progress", task_id=task_id, progress_percentage=progress_percentage, current_operation=current_operation, **self.context, **kwargs )
     
     def log_task_completion(self, task_id: str, duration_seconds: float = None, **kwargs):
         """Log async task completion"""
         if duration_seconds is None:
             duration_seconds = (datetime.utcnow() - self.start_time).total_seconds()
         
-        self.logger.info(
-            "Async task completed",
-            task_id=task_id,
-            duration_seconds=duration_seconds,
-            **self.context,
-            **kwargs
-        )
+        self.logger.info( "Async task completed", task_id=task_id, duration_seconds=duration_seconds, **self.context, **kwargs )
     
     def log_task_error(self, task_id: str, error: str, retry_count: int = 0, **kwargs):
         """Log async task error"""
-        self.logger.error(
-            "Async task failed",
-            task_id=task_id,
-            error=error,
-            retry_count=retry_count,
-            **self.context,
-            **kwargs
-        )
+        self.logger.error( "Async task failed", task_id=task_id, error=error, retry_count=retry_count, **self.context, **kwargs )
     
     def log_data_collection(self, data_type: str, record_count: int = None, **kwargs):
         """Log data collection progress"""
-        self.logger.info(
-            "Data collection progress",
-            data_type=data_type,
-            record_count=record_count,
-            **self.context,
-            **kwargs
-        )
+        self.logger.info( "Data collection progress", data_type=data_type, record_count=record_count, **self.context, **kwargs )
     
     def log_cache_operation(self, operation: str, cache_key: str, hit: bool = None, **kwargs):
         """Log cache operations"""
-        self.logger.info(
-            "Cache operation",
-            operation=operation,
-            cache_key=cache_key,
-            cache_hit=hit,
-            **self.context,
-            **kwargs
-        )
+        self.logger.info( "Cache operation", operation=operation, cache_key=cache_key, cache_hit=hit, **self.context, **kwargs )
     
     def log_cost_metrics(self, api_calls: int, estimated_cost: float, **kwargs):
         """Log cost metrics for async operations"""
-        self.logger.info(
-            "Cost metrics",
-            api_calls=api_calls,
-            estimated_cost=estimated_cost,
-            **self.context,
-            **kwargs
-        )
+        self.logger.info( "Cost metrics", api_calls=api_calls, estimated_cost=estimated_cost, **self.context, **kwargs )
     
     def log_dual_mode_decision(self, chosen_mode: str, reason: str, **kwargs):
         """Log dual mode decision making"""
-        self.logger.info(
-            "Dual mode decision",
-            chosen_mode=chosen_mode,
-            reason=reason,
-            **self.context,
-            **kwargs
-        )
+        self.logger.info( "Dual mode decision", chosen_mode=chosen_mode, reason=reason, **self.context, **kwargs )
 
 
 class ProgressTracker:
@@ -166,12 +91,7 @@ class ProgressTracker:
     
     def add_operation(self, operation: str):
         """Add operation to track"""
-        self.operations.append({
-            "name": operation,
-            "status": "pending",
-            "start_time": None,
-            "end_time": None
-        })
+        self.operations.append({ "name": operation, "status": "pending", "start_time": None, "end_time": None })
     
     def start_operation(self, operation: str):
         """Mark operation as started"""
@@ -181,12 +101,7 @@ class ProgressTracker:
                 op["start_time"] = datetime.utcnow()
                 break
         
-        self.logger.info(
-            "Operation started",
-            operation=operation,
-            progress_percentage=self.get_progress_percentage(),
-            **self._get_context()
-        )
+        self.logger.info( "Operation started", operation=operation, progress_percentage=self.get_progress_percentage(), **self._get_context() )
     
     def complete_operation(self, operation: str):
         """Mark operation as completed"""
@@ -197,12 +112,7 @@ class ProgressTracker:
                 self.completed_operations += 1
                 break
         
-        self.logger.info(
-            "Operation completed",
-            operation=operation,
-            progress_percentage=self.get_progress_percentage(),
-            **self._get_context()
-        )
+        self.logger.info( "Operation completed", operation=operation, progress_percentage=self.get_progress_percentage(), **self._get_context() )
     
     def fail_operation(self, operation: str, error: str):
         """Mark operation as failed"""
@@ -213,24 +123,13 @@ class ProgressTracker:
                 op["error"] = error
                 break
         
-        self.logger.error(
-            "Operation failed",
-            operation=operation,
-            error=error,
-            progress_percentage=self.get_progress_percentage(),
-            **self._get_context()
-        )
+        self.logger.error( "Operation failed", operation=operation, error=error, progress_percentage=self.get_progress_percentage(), **self._get_context() )
     
     def add_sub_operation(self, main_operation: str, sub_operation: str):
         """Add a sub-operation to track within a main operation"""
         if main_operation not in self.sub_operations:
             self.sub_operations[main_operation] = []
-        self.sub_operations[main_operation].append({
-            "name": sub_operation,
-            "status": "pending",
-            "start_time": None,
-            "end_time": None
-        })
+        self.sub_operations[main_operation].append({ "name": sub_operation, "status": "pending", "start_time": None, "end_time": None })
     
     def start_sub_operation(self, main_operation: str, sub_operation: str):
         """Mark sub-operation as started"""
@@ -241,13 +140,7 @@ class ProgressTracker:
                     sub_op["start_time"] = datetime.utcnow()
                     break
         
-        self.logger.info(
-            "Sub-operation started",
-            operation=main_operation,
-            sub_operation=sub_operation,
-            progress_percentage=self.get_progress_percentage(),
-            **self._get_context()
-        )
+        self.logger.info( "Sub-operation started", operation=main_operation, sub_operation=sub_operation, progress_percentage=self.get_progress_percentage(), **self._get_context() )
     
     def complete_sub_operation(self, main_operation: str, sub_operation: str):
         """Mark sub-operation as completed"""
@@ -258,13 +151,7 @@ class ProgressTracker:
                     sub_op["end_time"] = datetime.utcnow()
                     break
         
-        self.logger.info(
-            "Sub-operation completed",
-            operation=main_operation,
-            sub_operation=sub_operation,
-            progress_percentage=self.get_progress_percentage(),
-            **self._get_context()
-        )
+        self.logger.info( "Sub-operation completed", operation=main_operation, sub_operation=sub_operation, progress_percentage=self.get_progress_percentage(), **self._get_context() )
     
     def get_progress_percentage(self) -> int:
         """Get current progress percentage including sub-operations with weighted phases"""
@@ -272,12 +159,10 @@ class ProgressTracker:
             return 100
         
         # Define weighted progress for each main operation
-        operation_weights = {
-            "essential_data": 25,      # 0% -> 25%
+        operation_weights = { "essential_data": 25,      # 0% -> 25%
             "detailed_data": 45,       # 25% -> 70% (45% of total)
             "ai_analysis": 20,         # 70% -> 90% (20% of total)
-            "finalization": 10         # 90% -> 100% (10% of total)
-        }
+            "finalization": 10         # 90% -> 100% (10% of total) }
         
         # Calculate base progress from completed main operations
         base_progress = 0
@@ -335,13 +220,7 @@ class ProgressTracker:
     
     def _get_context(self) -> Dict[str, Any]:
         """Get logging context"""
-        return {
-            "operation_name": self.operation_name,
-            "domain": self.domain,
-            "total_operations": self.total_operations,
-            "completed_operations": self.completed_operations,
-            "estimated_time_remaining": self.get_estimated_time_remaining()
-        }
+        return { "operation_name": self.operation_name, "domain": self.domain, "total_operations": self.total_operations, "completed_operations": self.completed_operations, "estimated_time_remaining": self.get_estimated_time_remaining() }
 
 
 # Initialize logging on module import
