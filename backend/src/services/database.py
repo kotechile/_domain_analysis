@@ -1422,7 +1422,7 @@ class DatabaseService:
                       AND backlinks IS NOT NULL
                       AND backlinks_spam_score IS NOT NULL
                       AND (updated_at IS NULL OR updated_at < '{cutoff_7d}') ) )
-                ORDER BY expiration_date ASC NULLS LAST
+                ORDER BY updated_at ASC NULLS FIRST
                 LIMIT {limit}
                 """
 

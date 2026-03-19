@@ -462,18 +462,26 @@ class N8NService:
                 logger.error("N8N bulk traffic webhook URL not configured")
                 return None
             
-            logger.info("Triggering N8N workflow for bulk traffic batch", domain_count=len(normalized_domains), original_count=len(domains), request_id=request_id, webhook_url=webhook_url)
+            # Preparation
+            logger.info("Triggering N8N workflow for bulk traffic batch (fire-and-forget)", domain_count=len(normalized_domains), original_count=len(domains), request_id=request_id, webhook_url=webhook_url)
             
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post( webhook_url, json=payload )
-                
-                if response.status_code in [200, 201, 202]:
-                    logger.info("N8N bulk traffic workflow triggered successfully", domain_count=len(normalized_domains), request_id=request_id, status_code=response.status_code)
-                    return { "request_id": request_id, "domains": normalized_domains, "domain_count": len(normalized_domains), "status": "triggered" }
-                else:
-                    error_text = response.text[:500] if response.text else "No response body"
-                    logger.error("N8N bulk traffic workflow trigger failed", domain_count=len(domains), status_code=response.status_code, response=error_text, webhook_url=webhook_url)
-                    return None
+            async def _fire_traffic():
+                try:
+                    # Short timeout: 10s just to get the connection accepted.
+                    async with httpx.AsyncClient( timeout=httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=5.0) ) as client:
+                        resp = await client.post(webhook_url, json=payload)
+                        if resp.status_code in [200, 201, 202]:
+                            logger.info( "N8N bulk traffic webhook accepted", request_id=request_id, status=resp.status_code )
+                        else:
+                            logger.error( "N8N bulk traffic webhook rejected", request_id=request_id, status=resp.status_code, body=resp.text[:300] )
+                except httpx.TimeoutException:
+                    logger.error("N8N bulk traffic webhook timed out (fire-and-forget)", request_id=request_id)
+                except Exception as ex:
+                    logger.error("N8N bulk traffic webhook fire-and-forget failed", request_id=request_id, error=str(ex))
+
+            asyncio.create_task(_fire_traffic())
+
+            return { "request_id": request_id, "domains": normalized_domains, "domain_count": len(normalized_domains), "status": "queued" }
                     
         except httpx.TimeoutException:
             logger.error("N8N bulk traffic workflow trigger timed out", domain_count=len(domains), timeout=self.timeout)

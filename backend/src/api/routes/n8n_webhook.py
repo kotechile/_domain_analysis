@@ -549,60 +549,45 @@ async def receive_bulk_backlinks_webhook(request: N8NBulkRankWebhookRequest):
         failed_count = 0
         failed_domains = []
         
-        for result_item in result_data:
+        # Process each item in parallel
+        async def process_item(result_item):
+            nonlocal processed_count, failed_count
             try:
                 if not isinstance(result_item, dict):
                     logger.warning("Invalid result item format", item_type=type(result_item).__name__)
                     failed_count += 1
-                    continue
+                    return
                 
                 # DataForSEO returns "target" or "url" field
                 target = result_item.get("target") or result_item.get("url")
                 if not target:
                     logger.warning("Result item missing target/url field", item=result_item)
                     failed_count += 1
-                    continue
+                    return
                 
                 # ) Normalize domain (remove protocol if present, extract domain from URL
                 if isinstance(target, str):
-                    # Remove http:// or https:// if present
-                    target = target.replace("http://", "").replace("https://", "")
-                    # ) Remove path if present (e.g., "example.com/path" -> "example.com"
-                    target = target.split("/")[0]
+                    target = target.replace("http://", "").replace("https://", "").split("/")[0]
                 
-                # Update page_statistics in auctions table with backlinks data
-                # The update_auction_page_statistics method will merge with existing data
-                success = False
-                try:
-                    success = await db.update_auction_page_statistics(domain=target, page_statistics=result_item)
-                    if success:
-                        logger.debug("Updated page_statistics with backlinks data in auctions table", domain=target)
-                        
-                        # Mark queue item as completed if it exists in queue
-                        try:
-                            await db.mark_queue_items_completed([target])
-                        except Exception as queue_error:
-                            # Not critical if queue item doesn't exist
-                            logger.debug("Failed to mark queue item as completed (may not be in queue)", domain=target, error=str(queue_error))
-                    else:
-                        logger.debug("Domain not found in auctions table", domain=target)
-                except Exception as e:
-                    # Not critical if domain doesn't exist in auctions table
-                    logger.debug("Failed to update page_statistics in auctions table", domain=target, error=str(e))
+                # Update page_statistics in auctions table
+                success = await db.update_auction_page_statistics(domain=target, page_statistics=result_item)
                 
                 if success:
                     processed_count += 1
                     logger.info("Updated page_statistics with backlinks data in auctions table", domain=target, backlinks=result_item.get("backlinks"), referring_domains=result_item.get("referring_domains"))
+                    try:
+                        await db.mark_queue_items_completed([target])
+                    except: pass
                 else:
                     failed_count += 1
                     failed_domains.append(target)
                     logger.warning("Failed to update page_statistics - domain not found in auctions table", domain=target)
-                
             except Exception as e:
-                logger.error("Failed to process result item", target=result_item.get("target") if isinstance(result_item, dict) else None, error=str(e))
+                logger.error("Failed to process summary result item", error=str(e))
                 failed_count += 1
-                if isinstance(result_item, dict) and result_item.get("target"):
-                    failed_domains.append(result_item.get("target"))
+
+        # Run all processing tasks in parallel
+        await asyncio.gather(*[process_item(item) for item in result_data])
         
         logger.info("Bulk backlinks webhook processed", request_id=request.request_id, processed=processed_count, failed=failed_count, total=len(result_data), failed_domains=failed_domains[:10] if failed_domains else [])  # Log first 10 failed domains
         
@@ -799,59 +784,41 @@ async def receive_bulk_traffic_batch_webhook(request: N8NBulkRankWebhookRequest)
         failed_count = 0
         failed_domains = []
         
-        # Process each item
-        for result_item in items:
+        # Process each item in parallel
+        async def process_item(result_item):
+            nonlocal processed_count, failed_count
             try:
                 # Extract target domain
                 target = None
                 if isinstance(result_item, dict):
                     target = result_item.get('target') or result_item.get('domain') or result_item.get('url')
-                    # ) Normalize domain (remove protocol, www, paths
                     if target:
-                        target = target.replace("http://", "").replace("https://", "")
-                        target = target.split("/")[0]
+                        target = target.replace("http://", "").replace("https://", "").split("/")[0]
                 
                 if not target:
                     logger.warning("No target domain found in result item", item_keys=list(result_item.keys()) if isinstance(result_item, dict) else "not a dict")
                     failed_count += 1
-                    continue
-                
-                # Extract traffic data - store the entire result_item as traffic_data
-                # This preserves all fields from DataForSEO Labs API
-                traffic_data = result_item.copy() if isinstance(result_item, dict) else {"data": result_item}
+                    return
                 
                 # Update traffic_data in auctions table
-                success = False
-                try:
-                    success = await db.update_auction_traffic_data(domain=target, traffic_data=traffic_data)
-                    if success:
-                        logger.debug("Updated traffic_data in auctions table", domain=target)
-                        
-                        # Mark queue item as completed if it exists in queue
-                        try:
-                            await db.mark_queue_items_completed([target])
-                        except Exception as queue_error:
-                            # Not critical if queue item doesn't exist
-                            logger.debug("Failed to mark queue item as completed (may not be in queue)", domain=target, error=str(queue_error))
-                    else:
-                        logger.debug("Domain not found in auctions table", domain=target)
-                except Exception as e:
-                    # Not critical if domain doesn't exist in auctions table
-                    logger.debug("Failed to update traffic_data in auctions table", domain=target, error=str(e))
+                success = await db.update_auction_traffic_data(domain=target, traffic_data=result_item)
                 
                 if success:
                     processed_count += 1
                     logger.info("Updated traffic_data in auctions table", domain=target)
+                    try:
+                        await db.mark_queue_items_completed([target])
+                    except: pass
                 else:
                     failed_count += 1
                     failed_domains.append(target)
                     logger.warning("Failed to update traffic_data - domain not found in auctions table", domain=target)
-                
             except Exception as e:
-                logger.error("Failed to process result item", target=result_item.get("target") if isinstance(result_item, dict) else None, error=str(e))
+                logger.error("Failed to process traffic result item", error=str(e))
                 failed_count += 1
-                if isinstance(result_item, dict) and result_item.get("target"):
-                    failed_domains.append(result_item.get("target"))
+
+        # Run all processing tasks in parallel
+        await asyncio.gather(*[process_item(item) for item in items])
         
         logger.info("Bulk traffic batch webhook processed", request_id=request.request_id, processed=processed_count, failed=failed_count, total=len(items), failed_domains=failed_domains[:10] if failed_domains else [])  # Log first 10 failed domains
         
