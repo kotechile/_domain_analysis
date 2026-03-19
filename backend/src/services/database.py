@@ -1287,7 +1287,7 @@ class DatabaseService:
             # Return auctions directly
             report_items = []
             for auction in auctions:
-                report_item = { **auction, 'statistics': auction.get('page_statistics')  # Get statistics from auctions table if available }
+                report_item = { **auction, 'statistics': auction.get('page_statistics') } # Get statistics from auctions table if available
                 report_items.append(report_item)
             
             # For better accuracy, check if there are more records
@@ -1662,7 +1662,7 @@ class DatabaseService:
             # Fetch domains and extract TLDs
             # Note: With 1.6M+ rows, fetching all domains is a performance disaster (OOM risk)
             # We'll limit to a large enough sample of recent auctions to get the current TLDs
-            result = await (client.table('auctions').select('domain').limit(10000)  # Moderate sample for performance.execute() )
+            result = await (client.table('auctions').select('domain').limit(10000) ) # Moderate sample for performance.execute(
             
             tlds = set()
             for auction in result.data if result.data else []:

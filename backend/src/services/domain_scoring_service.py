@@ -268,7 +268,7 @@ class DomainScoringService:
         # Total Meaning Score
         total_score = (age_score * 0.40) + (lfs_score * 0.30) + (sv_score * 0.30)
         
-        return ScoredDomain( domain=domain, filter_status='PASS', filter_reason=None, total_meaning_score=round(total_score, 2), age_score=round(age_score, 2), lexical_frequency_score=round(lfs_score, 2), semantic_value_score=round(sv_score, 2), rank=None  # Will be set after sorting )
+        return ScoredDomain( domain=domain, filter_status='PASS', filter_reason=None, total_meaning_score=round(total_score, 2), age_score=round(age_score, 2), lexical_frequency_score=round(lfs_score, 2), semantic_value_score=round(sv_score, 2), rank=None ) # Will be set after sorting
     
     def score_domains(self, domains: List[NamecheapDomain]) -> List[ScoredDomain]:
         """

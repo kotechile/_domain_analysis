@@ -142,7 +142,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
             if not link and isinstance(source_data, dict):
                 link = source_data.get('link')
 
-            clean_r = { 'domain': r.get('domain'), 'start_date': r.get('start_date'), 'expiration_date': r.get('expiration_date'), 'auction_site': r.get('auction_site'), 'current_bid': r.get('current_bid'), 'source_data': r.get('source_data'), 'link': link, 'offer_type': r.get('offer_type'), 'score': r.get('score'), 'first_seen': r.get('first_seen'), 'to_delete': False  # Unflag - this record is still present }
+            clean_r = { 'domain': r.get('domain'), 'start_date': r.get('start_date'), 'expiration_date': r.get('expiration_date'), 'auction_site': r.get('auction_site'), 'current_bid': r.get('current_bid'), 'source_data': r.get('source_data'), 'link': link, 'offer_type': r.get('offer_type'), 'score': r.get('score'), 'first_seen': r.get('first_seen'), 'to_delete': False } # Unflag - this record is still present
             # Remove keys with None values to let Supabase/Postgres handle defaults/preservation
             clean_r = {k: v for k, v in clean_r.items() if v is not None}
 
@@ -319,7 +319,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                 await asyncio.sleep(0.01)
                 
                 try:
-                    await db.update_csv_upload_progress( job_id=job_id, status='processing', processed_records=processed_count, current_stage='processing_batch', total_records=total_records if total_records > 0 else processed_count # Update total if we go over )
+                    await db.update_csv_upload_progress( job_id=job_id, status='processing', processed_records=processed_count, current_stage='processing_batch', total_records=total_records if total_records > 0 else processed_count ) # Update total if we go over
                 except Exception:
                     pass # Ignore progress update errors
 
@@ -1466,7 +1466,7 @@ async def process_traffic_metrics_background_task(domains: list[str]):
             success_count = 0
             for item in items:
                 # "item" structure based on verification:
-                # { "se_type": "google", "target": "google.com", "metrics": { "organic": { "etv": ..., "count": ... } } }
+ } # { "se_type": "google", "target": "google.com", "metrics": { "organic": { "etv": ..., "count": ...
                 target = item.get('target')
                 metrics = item.get('metrics', {})
                 
@@ -1792,7 +1792,7 @@ async def fetch_wayback_first_seen(domain: str):
         
         # Fetch Wayback Machine data with timeout handling
         try:
-            wayback_data = asyncio.wait_for( wayback_service.get_domain_history(domain), timeout=30.0  # 30 second timeout )
+            wayback_data = asyncio.wait_for( wayback_service.get_domain_history(domain), timeout=30.0 ) # 30 second timeout
         except asyncio.TimeoutError:
             logger.warning("Wayback Machine request timed out", domain=domain)
             return { "success": False, "message": "Request timed out. Wayback Machine may be slow or unavailable.", "first_seen": None }
@@ -2144,7 +2144,7 @@ async def trigger_bulk_refresh( payload: Dict[str, Any] = Body(...), background_
         from services.progress_tracker import ProgressTracker
         service = MarketplaceBatchService()
 
-        # The Angular client wraps filters in { filters: {...}, force: bool }
+ } # The Angular client wraps filters in { filters: {..., force: bool
         filters = payload.get("filters", payload)  # Fallback: treat whole body as filters
         force = payload.get("force", False)
 

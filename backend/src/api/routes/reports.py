@@ -35,8 +35,8 @@ async def get_report(domain: str):
         if report.status != "completed":
             # Include error message if report failed
             if report.status == "failed" and report.error_message:
-                return ReportResponse( success=False, message=f"Analysis failed: {report.error_message}", report=report  # Include report so frontend can access error_message )
-            return ReportResponse( success=False, message=f"Report not ready. Status: {report.status}", report=report  # Include report even if not completed so frontend can check status )
+                return ReportResponse( success=False, message=f"Analysis failed: {report.error_message}", report=report ) # Include report so frontend can access error_message
+            return ReportResponse( success=False, message=f"Report not ready. Status: {report.status}", report=report ) # Include report even if not completed so frontend can check status
         
         logger.info("Report retrieved successfully", domain=domain)
         
@@ -432,7 +432,7 @@ async def reanalyze_domain_ai( domain: str, request: dict ):
         # Set a timeout for LLM service
         import asyncio
         try:
-            llm_data = asyncio.wait_for( llm_service.generate_enhanced_analysis(domain, combined_data), timeout=120.0  # 2 minute timeout for enhanced analysis )
+            llm_data = asyncio.wait_for( llm_service.generate_enhanced_analysis(domain, combined_data), timeout=120.0 ) # 2 minute timeout for enhanced analysis
         except asyncio.TimeoutError:
             logger.error("LLM service timed out during enhanced analysis", domain=domain)
             raise HTTPException(status_code=500, detail="LLM service timed out. Enhanced analysis requires more time.")

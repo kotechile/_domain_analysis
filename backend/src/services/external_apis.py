@@ -412,7 +412,7 @@ class DataForSEOService:
             # Sandbox typically has very high numbers that don't make sense for real domains
             is_sandbox = ( total_backlinks > 1000000 or  # Over 1M backlinks is unrealistic for most domains
                 total_referring_domains > 10000 or  # Over 10K referring domains is very high
-                organic_traffic_est > 50000  # Over $50K ETV is very high )
+                organic_traffic_est > 50000 ) # Over $50K ETV is very high
             
             if is_sandbox:
                 logger.warning("Sandbox environment detected - using simplified DR calculation")

@@ -26,7 +26,7 @@ class DataForSEOAsyncService:
         self.poll_interval = 2  # seconds
         self.max_poll_attempts = 30  # 1 minute max
         self._credentials = None
-        self.cost_tracker = { "api_calls": 0, "estimated_cost": 0.0, "cost_per_call": 0.01  # Estimated cost per API call }
+        self.cost_tracker = { "api_calls": 0, "estimated_cost": 0.0, "cost_per_call": 0.01 } # Estimated cost per API call
     
     async def _get_credentials(self) -> Optional[Dict[str, str]]:
         """Get DataForSEO credentials"""
@@ -307,7 +307,7 @@ class DataForSEOAsyncService:
     
     def get_cost_metrics(self) -> Dict[str, Any]:
         """Get current cost metrics"""
-        return { "total_api_calls": self.cost_tracker["api_calls"], "estimated_total_cost": round(self.cost_tracker["estimated_cost"], 4), "average_cost_per_call": round( self.cost_tracker["estimated_cost"] / max(1, self.cost_tracker["api_calls"]), 4 ), "cost_savings_vs_live": round( self.cost_tracker["estimated_cost"] * 0.7, 4  # 70% savings with async ) }
+        return { "total_api_calls": self.cost_tracker["api_calls"], "estimated_total_cost": round(self.cost_tracker["estimated_cost"], 4), "average_cost_per_call": round( self.cost_tracker["estimated_cost"] / max(1, self.cost_tracker["api_calls"]), 4 ), "cost_savings_vs_live": round( self.cost_tracker["estimated_cost"] * 0.7, 4 } # 70% savings with async )
     
     def reset_cost_tracker(self):
         """Reset cost tracking metrics"""

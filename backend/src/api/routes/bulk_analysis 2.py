@@ -77,7 +77,7 @@ async def upload_namecheap_csv( file: UploadFile = File(...), load_to_db: bool =
             if not result.get("success"):
                 raise HTTPException(status_code=400, detail=result.get("message", "Failed to process CSV"))
             
-            return { "success": True, "message": result.get("message"), "loaded_count": result.get("loaded_count", 0), "skipped_count": result.get("skipped_count", 0), "total_count": result.get("total_count", 0), "file_id": None  # Not needed for DB load }
+            return { "success": True, "message": result.get("message"), "loaded_count": result.get("loaded_count", 0), "skipped_count": result.get("skipped_count", 0), "total_count": result.get("total_count", 0), "file_id": None } # Not needed for DB load
         else:
             # Store in memory cache for viewing
             file_id = str(uuid.uuid4())

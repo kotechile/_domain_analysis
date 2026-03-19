@@ -47,7 +47,7 @@ class N8NService:
                 return None
             
             # Prepare webhook payload
-            payload = { "domain": domain, "limit": limit, "callback_url": callback_url, "request_id": request_id, "type": "detailed"  # Indicate this is a detailed request }
+            payload = { "domain": domain, "limit": limit, "callback_url": callback_url, "request_id": request_id, "type": "detailed" } # Indicate this is a detailed request
             
             logger.info("Triggering N8N workflow for backlinks", domain=domain, request_id=request_id, webhook_url=self.settings.N8N_WEBHOOK_URL)
             
@@ -121,7 +121,7 @@ class N8NService:
                 summary_callback_url = f"{callback_url}-summary"
             
             # Prepare webhook payload
-            payload = { "domain": domain, "callback_url": summary_callback_url, "request_id": request_id, "type": "summary"  # Indicate this is a summary request }
+            payload = { "domain": domain, "callback_url": summary_callback_url, "request_id": request_id, "type": "summary" } # Indicate this is a summary request
             
             logger.info("Triggering N8N workflow for backlinks summary", domain=domain, request_id=request_id, webhook_url=self.settings.N8N_WEBHOOK_URL_SUMMARY)
             
@@ -295,7 +295,7 @@ class N8NService:
             
             # Prepare webhook payload
             payload = { "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_rank_callback_url, "request_id": request_id, "type": "bulk_rank"  # Indicate this is a bulk rank request }
+                "callback_url": bulk_rank_callback_url, "request_id": request_id, "type": "bulk_rank" } # Indicate this is a bulk rank request
             
             # Use configured bulk rank webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_RANK
@@ -374,7 +374,7 @@ class N8NService:
             
             # Prepare webhook payload
             payload = { "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_backlinks_callback_url, "request_id": request_id, "type": "bulk_backlinks"  # Indicate this is a bulk backlinks request }
+                "callback_url": bulk_backlinks_callback_url, "request_id": request_id, "type": "bulk_backlinks" } # Indicate this is a bulk backlinks request
             
             # Use configured bulk backlinks webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_BACKLINKS
@@ -445,7 +445,7 @@ class N8NService:
             # Prepare webhook payload
             # Send domains as an array - n8n will map this to DataForSEO's "targets" field
             payload = { "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_callback_url, "request_id": request_id, "type": "bulk_traffic"  # Indicate this is a bulk traffic request }
+                "callback_url": bulk_callback_url, "request_id": request_id, "type": "bulk_traffic" } # Indicate this is a bulk traffic request
             
             # Use configured bulk traffic webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_TRAFFIC
@@ -524,7 +524,7 @@ class N8NService:
             
             # Prepare webhook payload
             payload = { "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_spam_score_callback_url, "request_id": request_id, "type": "bulk_spam_score"  # Indicate this is a bulk spam score request }
+                "callback_url": bulk_spam_score_callback_url, "request_id": request_id, "type": "bulk_spam_score" } # Indicate this is a bulk spam score request
             
             # Use configured bulk spam score webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_SPAM_SCORE

@@ -42,5 +42,5 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
         
     except Exception as e:
         logger.error("Authentication failed", error=str(e))
-        # Even on error, if we're in dev, we could fallback, but let's just do it for missing credentials. raise HTTPException( status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"}, )
+ ) # Even on error, if we're in dev, we could fallback, but let's just do it for missing credentials. raise HTTPException( status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials", headers={"WWW-Authenticate": "Bearer"},
 

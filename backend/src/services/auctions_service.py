@@ -91,7 +91,7 @@ class AuctionsService:
                 try:
                     auction = auction_input.to_auction()
                     auction_dict = { 'domain': auction.domain, 'start_date': auction.start_date.isoformat() if auction.start_date else None, 'expiration_date': auction.expiration_date.isoformat(), 'auction_site': auction.auction_site, 'current_bid': auction.current_bid, 'source_data': auction.source_data, 'link': auction.link,  # Direct link to auction listing (e.g., GoDaddy auction URL)
-                        'preferred': False, 'has_statistics': False, 'processed': False  # New records are unprocessed }
+                        'preferred': False, 'has_statistics': False, 'processed': False } # New records are unprocessed
                     auction_dicts.append(auction_dict)
                 except Exception as e:
                     logger.warning("Failed to convert auction", domain=auction_input.domain, error=str(e))

@@ -36,7 +36,7 @@ class ProgressTracker:
 
         # Store in Redis with 1 hour TTL
         if cache:
-            await cache.set( f"job:{job_id}", job_data, ttl=3600  # 1 hour )
+            await cache.set( f"job:{job_id}", job_data, ttl=3600 ) # 1 hour
 
         logger.info(f"Created progress job", job_id=job_id, job_type=job_type, user_id=user_id, total_items=total_items)
 

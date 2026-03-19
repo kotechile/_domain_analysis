@@ -117,7 +117,7 @@ async def receive_backlinks_summary_webhook(request: N8NBacklinksSummaryWebhookR
             return { "success": False, "message": "No data provided in response" }
         
         # Normalize summary data structure
-        # DataForSEO response structure: { "tasks": [{ "result": [{ ... }] }] }
+ } # DataForSEO response structure: { "tasks": [{ "result": [{ ... ] ]
         summary_data = request.data
         
         # Handle nested structures from DataForSEO response
