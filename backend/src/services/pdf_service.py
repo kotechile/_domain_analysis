@@ -30,13 +30,24 @@ class PDFService:
         self.styles.add(ParagraphStyle( name='CustomTitle', parent=self.styles['Title'], fontSize=24, textColor=darkblue, spaceAfter=30, alignment=TA_CENTER ))
         
         # Section header style
-        self.styles.add(ParagraphStyle( name='SectionHeader', parent=self.styles['Heading2'], fontSize=16, textColor=darkblue, spaceBefore=20, spaceAfter=12, borderWidth=1, borderColor=darkblue, borderPadding=8, backColor=HexColor('#f0f8ff') ))
+        self.styles.add(ParagraphStyle(
+            name='SectionHeader', parent=self.styles['Heading2'], fontSize=16, textColor=darkblue,
+            spaceBefore=20, spaceAfter=12, borderWidth=1, borderColor=darkblue, borderPadding=8,
+            backColor=HexColor('#f0f8ff')
+        ))
         
         # Subsection header style
-        self.styles.add(ParagraphStyle( name='SubsectionHeader', parent=self.styles['Heading3'], fontSize=14, textColor=darkblue, spaceBefore=15, spaceAfter=8 ))
+        self.styles.add(ParagraphStyle(
+            name='SubsectionHeader', parent=self.styles['Heading3'], fontSize=14, textColor=darkblue,
+            spaceBefore=15, spaceAfter=8
+        ))
         
         # Recommendation style
-        self.styles.add(ParagraphStyle( name='Recommendation', parent=self.styles['Normal'], fontSize=14, textColor=black, spaceBefore=10, spaceAfter=10, borderWidth=1, borderColor=black, borderPadding=10, backColor=HexColor('#f9f9f9') ))
+        self.styles.add(ParagraphStyle(
+            name='Recommendation', parent=self.styles['Normal'], fontSize=14, textColor=black,
+            spaceBefore=10, spaceAfter=10, borderWidth=1, borderColor=black, borderPadding=10,
+            backColor=HexColor('#f9f9f9')
+        ))
         
         # Pro/Con style
         self.styles.add(ParagraphStyle( name='ProItem', parent=self.styles['Normal'], fontSize=11, textColor=darkgreen, spaceBefore=5, spaceAfter=5, leftIndent=20 ))
@@ -49,7 +60,7 @@ class PDFService:
             buffer = io.BytesIO()
             doc = SimpleDocTemplate( buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72 )
             
-            # Build the story (content)
+            # ) Build the story (content
             story = []
             
             # Title page

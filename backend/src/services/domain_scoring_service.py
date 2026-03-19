@@ -39,7 +39,7 @@ class DomainScoringService:
         # Load industry keywords
         self.industry_keywords = self._load_industry_keywords()
         
-        # Initialize spaCy model (lazy loading)
+        # ) Initialize spaCy model (lazy loading
         self.nlp = None
         self._init_spacy()
     
@@ -124,7 +124,7 @@ class DomainScoringService:
         if number_count > self.max_numbers:
             return False, f"Contains more than {self.max_numbers} numbers"
         
-        # Filter 3.5: Pronunciation (tokenization)
+        # ) Filter 3.5: Pronunciation (tokenization
         tokens = self._tokenize_domain(name_part)
         if not tokens:
             return False, "Could not tokenize domain"
@@ -150,7 +150,7 @@ class DomainScoringService:
             except Exception as e:
                 logger.warning("spaCy tokenization failed", domain=domain_name, error=str(e))
         
-        # Fallback: heuristic splitting (camelCase, etc.)
+        # ) Fallback: heuristic splitting (camelCase, etc.
         # Split on capital letters
         tokens = re.findall(r'[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)', domain_name)
         if tokens:
@@ -203,7 +203,7 @@ class DomainScoringService:
             elif rank >= 10000:
                 score = 1.0
             else:
-                # Linear interpolation: score = 100 - (rank-1) * (99/9999)
+                # ) Linear interpolation: score = 100 - (rank-1) * (99/9999
                 score = 100.0 - (rank - 1) * (99.0 / 9999.0)
             
             scores.append(score)
@@ -297,8 +297,10 @@ class DomainScoringService:
                 scored_domains.append(ScoredDomain( domain=domain, filter_status='FAIL', filter_reason=f"Scoring error: {str(e)}", total_meaning_score=None, age_score=None, lexical_frequency_score=None, semantic_value_score=None, rank=None ))
         
         # Sort by score (PASS domains first, then by score DESC)
-        scored_domains.sort(key=lambda x: ( x.filter_status != 'PASS',  # PASS first
-            -(x.total_meaning_score or 0)  # Higher score first ))
+        scored_domains.sort(key=lambda x: (
+            x.filter_status != 'PASS',  # PASS first
+            -(x.total_meaning_score or 0)
+        ))
         
         # Assign ranks
         rank = 1

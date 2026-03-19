@@ -6,7 +6,8 @@ from services.database import DatabaseService
 
 async def check_constraints():
     db = DatabaseService()
-    # Note: exec_sql failed earlier, maybe it wasn't created. # I'll try to find it via direct query if I can, but Supabase client is limited. # I'll just check what happens if I try to upsert a dummy GoDaddy record. try:
+    # I'll just check what happens if I try to upsert a dummy GoDaddy record. 
+    try:
         dummy = { 'domain': 'dummy-godaddy-upsert.com', 'auction_site': 'godaddy', 'expiration_date': '2025-12-31T23:59:59+00:00', 'processed': True, 'offer_type': 'auction' }
         res = (await db._get_client()).table('auctions').upsert(dummy, on_conflict='domain,auction_site,expiration_date').execute()
         print("✅ Successfully upserted dummy GoDaddy record.")

@@ -56,7 +56,9 @@ class MarketplaceBatchService:
 
             # 1. Find the domains BEFORE deducting credits
             logger.info(f"[Background] Finding domains with filters", filters=filters)
-            domains_data = self.auctions_await service.get_auctions_missing_any_metric_with_filters( filters=filters, limit=1000, force_refresh=force )
+            domains_data = await self.auctions_service.get_auctions_missing_any_metric_with_filters(
+                filters=filters, limit=1000, force_refresh=force
+            )
             domain_names = [d['domain'] for d in domains_data]
 
             logger.info(f"[Background] Found {len(domain_names)} domains for refresh", user_id=str(user_id), domain_count=len(domain_names), filters=filters)
@@ -83,7 +85,7 @@ class MarketplaceBatchService:
 
             logger.info(f"[Background] Credits deducted successfully", user_id=str(user_id), cost=cost)
 
-            # 3. Trigger DataForSEO via N8N (in smaller batches to avoid overwhelming N8N)
+            # ) 3. Trigger DataForSEO via N8N (in smaller batches to avoid overwhelming N8N
             import asyncio
             batch_size = 20  # Reduced from 25 to prevent overwhelming N8N
             total_batches = (len(domain_names) + batch_size - 1) // batch_size
@@ -119,7 +121,7 @@ class MarketplaceBatchService:
 
             # 4. Record in refresh_history
             try:
-                (await self.await db._get_client()).table('refresh_history').insert({ 'user_id': str(user_id), 'batch_size': len(domain_names), 'credits_spent': cost, 'filters_used': filters }).execute()
+                (await self.db._get_client()).table('refresh_history').insert({ 'user_id': str(user_id), 'batch_size': len(domain_names), 'credits_spent': cost, 'filters_used': filters }).execute()
                 logger.info(f"[Background] Refresh history recorded", user_id=str(user_id))
             except Exception as hist_err:
                 logger.warning("[Background] Failed to write refresh history", error=str(hist_err))
@@ -140,7 +142,7 @@ class MarketplaceBatchService:
 
     async def get_refresh_history(self, user_id: UUID, limit: int = 50) -> List[Dict[str, Any]]:
         """Get the refresh history for a user"""
-        response = (await self.await db._get_client()).table('refresh_history')\.select('*')\.eq('user_id', str(user_id))\.order('refreshed_at', desc=True)\.limit(limit)\.execute()
+        response = (await self.db._get_client()).table('refresh_history').select('*').eq('user_id', str(user_id)).order('refreshed_at', desc=True).limit(limit).execute()
         return response.data
 
     async def refresh_single_domain(self, user_id: UUID, domain: str) -> Dict:
@@ -155,7 +157,7 @@ class MarketplaceBatchService:
         
         # 2. Deduct credits
         description = f"Force Refresh: {domain}"
-        # Estimate dollar amount (simple ratio)
+        # ) Estimate dollar amount (simple ratio
         dollar_amount = float(cost) * 0.001
         
         success = self.credits_service.deduct_credits( user_id=user_id, amount=float(cost), description=description, dollar_amount=dollar_amount )
@@ -168,7 +170,7 @@ class MarketplaceBatchService:
         
         # 4. Record History
         try:
-            (await self.await db._get_client()).table('refresh_history').insert({ 'user_id': str(user_id), 'batch_size': 1, 'credits_spent': int(cost), 'filters_used': {'domain': domain, 'type': 'single_refresh'} }).execute()
+            (await self.db._get_client()).table('refresh_history').insert({ 'user_id': str(user_id), 'batch_size': 1, 'credits_spent': int(cost), 'filters_used': {'domain': domain, 'type': 'single_refresh'} }).execute()
         except Exception as e:
             logger.error("Failed to record single refresh history", error=str(e))
             

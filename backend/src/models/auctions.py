@@ -24,7 +24,7 @@ class Auction(BaseModel):
     domain_rating: Optional[float] = None
     processed: bool = False  # Track if record has been scored
     source_data: Optional[Dict[str, Any]] = None
-    link: Optional[str] = None  # Direct link to auction listing (e.g., GoDaddy auction URL)
+    link: Optional[str] = None   # ) Direct link to auction listing (e.g., GoDaddy auction URL
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
@@ -57,7 +57,7 @@ class AuctionInput(BaseModel):
     current_bid: Optional[float] = None
     auction_site: str
     source_data: Optional[Dict[str, Any]] = None
-    link: Optional[str] = None  # Direct link to auction listing (e.g., GoDaddy auction URL)
+    link: Optional[str] = None   # ) Direct link to auction listing (e.g., GoDaddy auction URL
     
     @validator('domain')
     def validate_domain(cls, v):
@@ -99,7 +99,7 @@ class AuctionReportItem(BaseModel):
     first_seen: Optional[datetime] = None
     # Keep page_statistics JSONB for full data access
     statistics: Optional[Dict[str, Any]] = None  # From auctions.page_statistics JSONB field
-    link: Optional[str] = None  # Direct link to auction listing (e.g., GoDaddy auction URL)
+    link: Optional[str] = None   # ) Direct link to auction listing (e.g., GoDaddy auction URL
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     

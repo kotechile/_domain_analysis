@@ -46,10 +46,10 @@ async def receive_backlinks_webhook(request: N8NBacklinksWebhookRequest):
             return { "success": False, "message": "No data provided in response" }
         
         # Validate and normalize data structure
-        # Handle both summary data (backlinks, referring_domains, rank) and detailed data (items array)
+        # ) Handle both summary data (backlinks, referring_domains, rank) and detailed data (items array
         if "items" not in request.data:
             logger.info("N8N data appears to be summary format, normalizing structure", request_id=request.request_id, domain=request.domain, data_keys=list(request.data.keys()) if request.data else [])
-            # Check if this is summary data (has backlinks, referring_domains, rank)
+            # ) Check if this is summary data (has backlinks, referring_domains, rank
             if isinstance(request.data, dict):
                 # Check if data is nested
                 if "result" in request.data:
@@ -117,7 +117,7 @@ async def receive_backlinks_summary_webhook(request: N8NBacklinksSummaryWebhookR
             return { "success": False, "message": "No data provided in response" }
         
         # Normalize summary data structure
- } # DataForSEO response structure: { "tasks": [{ "result": [{ ... ] ]
+ # ] }  DataForSEO response structure: { "tasks": [{ "result": [{ ... ]
         summary_data = request.data
         
         # Handle nested structures from DataForSEO response
@@ -138,17 +138,17 @@ async def receive_backlinks_summary_webhook(request: N8NBacklinksSummaryWebhookR
             elif "data" in summary_data:
                 summary_data = summary_data["data"]
             
-            # If it's still an array, take the first element (DataForSEO returns array)
+            # ) If it's still an array, take the first element (DataForSEO returns array
             if isinstance(summary_data, list) and len(summary_data) > 0:
                 summary_data = summary_data[0]
         
-        # Save to database as raw data (for caching and later use)
+        # ) Save to database as raw data (for caching and later use
         from services.database import get_database
         from models.domain_analysis import DataSource
         
         db = get_database()
         
-        # Store summary data in raw_data format (for compatibility with existing code)
+        # ) Store summary data in raw_data format (for compatibility with existing code
         raw_data = { "backlinks_summary": summary_data }
         
         await db.save_raw_data(domain_name=request.domain, api_source=DataSource.DATAFORSEO, data=raw_data)
@@ -189,15 +189,15 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
             return { "success": False, "message": "No data provided in response" }
         
         # Parse DataForSEO response structure
-        # DataForSEO returns: {tasks: [{result: [{items: [{url: str, ...}, ...]}]}]}
-        # n8n might send: {item: {items: [...]}} or {result: [{items: [...]}]} or {items: [...]}
+        # } DataForSEO returns: {tasks: [{result: [{items: [{url: str, ...}, ...]}]}]
+        # } n8n might send: {item: {items: [...]}} or {result: [{items: [...]}]} or {items: [...]
         result_data = request.data
         
         logger.info("Parsing webhook data structure", data_keys=list(result_data.keys()) if isinstance(result_data, dict) else "not a dict", data_type=type(result_data).__name__)
         
         # Handle various nested structures from n8n/DataForSEO
         if isinstance(result_data, dict):
-            # Check for n8n wrapper: {item: {items: [...]}}
+            # } Check for n8n wrapper: {item: {items: [...]}
             if "item" in result_data and isinstance(result_data["item"], dict):
                 item_obj = result_data["item"]
                 logger.info("Found 'item' wrapper", item_keys=list(item_obj.keys()) if isinstance(item_obj, dict) else "not a dict")
@@ -205,7 +205,7 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
                     result_data = item_obj["items"]
                     logger.info("Extracted items from n8n item wrapper", item_count=len(result_data))
                 elif isinstance(item_obj, dict):
-                    # If item itself contains the data structure (fallback)
+                    # ) If item itself contains the data structure (fallback
                     result_data = item_obj
                     logger.info("Using item object directly as result_data")
             # Check for DataForSEO structure: tasks[0].result[0].items
@@ -259,7 +259,7 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
         # Process each result asynchronously to avoid N8N HTTP timeouts
         # Use a semaphore to limit concurrent processing and prevent memory issues
         import asyncio
-        _webhook_semaphore = asyncio.Semaphore(3)  # Max 3 concurrent webhook processes (reduced from 5)
+        _webhook_semaphore = asyncio.Semaphore(3)   # ) Max 3 concurrent webhook processes (reduced from 5
 
         async def process_data():
             db = get_database()
@@ -281,14 +281,13 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
                         failed_count += 1
                         continue
 
-                    # Normalize domain (remove protocol if present, extract domain from URL)
+                    # ) Normalize domain (remove protocol if present, extract domain from URL
                     if isinstance(target, str):
                         # Remove http:// or https:// if present
                         target = target.replace("http://", "").replace("https://", "")
-                        # Remove path if present (e.g., "example.com/path" -> "example.com")
+                        # ) Remove path if present (e.g., "example.com/path" -> "example.com"
                         target = target.split("/")[0]
                         # Remove www.
-                        if present
                         target = target.replace("www.", "")
 
                     # Update page_statistics in auctions table
@@ -302,7 +301,7 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
                             try:
                                 await db.mark_queue_items_completed([target])
                             except Exception as queue_error:
-                                # Not critical if queue item doesn't exist (might be admin-triggered batch)
+                                # ) Not critical if queue item doesn't exist (might be admin-triggered batch
                                 logger.debug("Failed to mark queue item as completed (may not be in queue)", domain=target, error=str(queue_error))
                         else:
                             logger.debug("Domain not found in auctions table", domain=target)
@@ -368,14 +367,14 @@ async def receive_bulk_rank_webhook(request: N8NBulkRankWebhookRequest):
             return { "success": False, "message": "No data provided in response" }
         
         # Parse DataForSEO response structure
-        # DataForSEO returns: {tasks: [{result: [{items: [{target: str, rank: int, ...}, ...]}]}]}
+        # } DataForSEO returns: {tasks: [{result: [{items: [{target: str, rank: int, ...}, ...]}]}]
         result_data = request.data
         
         logger.info("Parsing bulk rank webhook data structure", data_keys=list(result_data.keys()) if isinstance(result_data, dict) else "not a dict", data_type=type(result_data).__name__)
         
-        # Handle various nested structures from n8n/DataForSEO (similar to bulk page summary)
+        # ) Handle various nested structures from n8n/DataForSEO (similar to bulk page summary
         if isinstance(result_data, dict):
-            # Check for n8n wrapper: {item: {items: [...]}}
+            # } Check for n8n wrapper: {item: {items: [...]}
             if "item" in result_data and isinstance(result_data["item"], dict):
                 item_obj = result_data["item"]
                 if "items" in item_obj and isinstance(item_obj["items"], list):
@@ -449,14 +448,13 @@ async def receive_bulk_rank_webhook(request: N8NBulkRankWebhookRequest):
                     failed_count += 1
                     continue
                 
-                # Normalize domain (remove protocol if present, extract domain from URL)
+                # ) Normalize domain (remove protocol if present, extract domain from URL
                 if isinstance(target, str):
                     # Remove http:// or https:// if present
                     target = target.replace("http://", "").replace("https://", "")
-                    # Remove path if present (e.g., "example.com/path" -> "example.com")
+                    # ) Remove path if present (e.g., "example.com/path" -> "example.com"
                     target = target.split("/")[0]
                     # Remove www.
-                    if present
                     target = target.replace("www.", "")
                 
                 # Update page_statistics in auctions table with rank data
@@ -521,24 +519,24 @@ async def receive_bulk_backlinks_webhook(request: N8NBulkRankWebhookRequest):
             return { "success": False, "message": "No data provided in response" }
         
         # Parse DataForSEO response structure
-        # DataForSEO returns: {tasks: [{result: [{items: [{target: str, backlinks: int, referring_domains: int, ...}, ...]}]}]}
+        # } DataForSEO returns: {tasks: [{result: [{items: [{target: str, backlinks: int, referring_domains: int, ...}, ...]}]}]
         result_data = request.data
         
         logger.info("Parsing bulk backlinks webhook data structure", data_keys=list(result_data.keys()) if isinstance(result_data, dict) else "not a dict", data_type=type(result_data).__name__)
         
-        # Handle various nested structures from n8n/DataForSEO (similar to bulk rank)
+        # ) Handle various nested structures from n8n/DataForSEO (similar to bulk rank
         if isinstance(result_data, dict):
-            # Check for n8n wrapper: {item: {items: [...]}}
+            # } Check for n8n wrapper: {item: {items: [...]}
             if "item" in result_data and isinstance(result_data["item"], dict):
                 item_obj = result_data["item"]
                 if "items" in item_obj and isinstance(item_obj["items"], list):
                     result_data = item_obj["items"]
                 elif isinstance(item_obj, list):
                     result_data = item_obj
-            # Check for direct items array: {items: [...]}
+            # } Check for direct items array: {items: [...]
             elif "items" in result_data and isinstance(result_data["items"], list):
                 result_data = result_data["items"]
-            # Check for tasks structure: {tasks: [{result: [{items: [...]}]}]}
+            # } Check for tasks structure: {tasks: [{result: [{items: [...]}]}]
             elif "tasks" in result_data and isinstance(result_data["tasks"], list) and len(result_data["tasks"]) > 0:
                 task = result_data["tasks"][0]
                 if "result" in task and isinstance(task["result"], list) and len(task["result"]) > 0:
@@ -572,14 +570,13 @@ async def receive_bulk_backlinks_webhook(request: N8NBulkRankWebhookRequest):
                     failed_count += 1
                     continue
                 
-                # Normalize domain (remove protocol if present, extract domain from URL)
+                # ) Normalize domain (remove protocol if present, extract domain from URL
                 if isinstance(target, str):
                     # Remove http:// or https:// if present
                     target = target.replace("http://", "").replace("https://", "")
-                    # Remove path if present (e.g., "example.com/path" -> "example.com")
+                    # ) Remove path if present (e.g., "example.com/path" -> "example.com"
                     target = target.split("/")[0]
                     # Remove www.
-                    if present
                     target = target.replace("www.", "")
                 
                 # Update page_statistics in auctions table with backlinks data
@@ -644,24 +641,24 @@ async def receive_bulk_spam_score_webhook(request: N8NBulkRankWebhookRequest):
             return { "success": False, "message": "No data provided in response" }
         
         # Parse DataForSEO response structure
-        # DataForSEO returns: {tasks: [{result: [{items: [{target: str, backlinks_spam_score: int, ...}, ...]}]}]}
+        # } DataForSEO returns: {tasks: [{result: [{items: [{target: str, backlinks_spam_score: int, ...}, ...]}]}]
         result_data = request.data
         
         logger.info("Parsing bulk spam score webhook data structure", data_keys=list(result_data.keys()) if isinstance(result_data, dict) else "not a dict", data_type=type(result_data).__name__)
         
-        # Handle various nested structures from n8n/DataForSEO (similar to bulk rank/backlinks)
+        # ) Handle various nested structures from n8n/DataForSEO (similar to bulk rank/backlinks
         if isinstance(result_data, dict):
-            # Check for n8n wrapper: {item: {items: [...]}}
+            # } Check for n8n wrapper: {item: {items: [...]}
             if "item" in result_data and isinstance(result_data["item"], dict):
                 item_obj = result_data["item"]
                 if "items" in item_obj and isinstance(item_obj["items"], list):
                     result_data = item_obj["items"]
                 elif isinstance(item_obj, list):
                     result_data = item_obj
-            # Check for direct items array: {items: [...]}
+            # } Check for direct items array: {items: [...]
             elif "items" in result_data and isinstance(result_data["items"], list):
                 result_data = result_data["items"]
-            # Check for tasks structure: {tasks: [{result: [{items: [...]}]}]}
+            # } Check for tasks structure: {tasks: [{result: [{items: [...]}]}]
             elif "tasks" in result_data and isinstance(result_data["tasks"], list) and len(result_data["tasks"]) > 0:
                 task = result_data["tasks"][0]
                 if "result" in task and isinstance(task["result"], list) and len(task["result"]) > 0:
@@ -695,14 +692,13 @@ async def receive_bulk_spam_score_webhook(request: N8NBulkRankWebhookRequest):
                     failed_count += 1
                     continue
                 
-                # Normalize domain (remove protocol if present, extract domain from URL)
+                # ) Normalize domain (remove protocol if present, extract domain from URL
                 if isinstance(target, str):
                     # Remove http:// or https:// if present
                     target = target.replace("http://", "").replace("https://", "")
-                    # Remove path if present (e.g., "example.com/path" -> "example.com")
+                    # ) Remove path if present (e.g., "example.com/path" -> "example.com"
                     target = target.split("/")[0]
                     # Remove www.
-                    if present
                     target = target.replace("www.", "")
                 
                 # Normalize DataForSEO field names to our internal format
@@ -821,7 +817,7 @@ async def receive_bulk_traffic_batch_webhook(request: N8NBulkRankWebhookRequest)
                 target = None
                 if isinstance(result_item, dict):
                     target = result_item.get('target') or result_item.get('domain') or result_item.get('url')
-                    # Normalize domain (remove protocol, www, paths)
+                    # ) Normalize domain (remove protocol, www, paths
                     if target:
                         target = target.replace("http://", "").replace("https://", "")
                         target = target.split("/")[0]

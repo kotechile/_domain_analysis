@@ -39,7 +39,7 @@ async def health_check():
     try:
         services_status = {}
         
-        # Check database connection (critical, no timeout)
+        # ) Check database connection (critical, no timeout
         try:
             # Verify URL configuration first
             from utils.config import get_settings
@@ -49,7 +49,7 @@ async def health_check():
                 services_status['database'] = 'unhealthy'
                 logger.error("SUPABASE_URL is not set in environment variables")
             elif 'sb_domain' in supabase_url and 'sbdomain' not in supabase_url:
-                # Warn about potential URL mismatch (underscore vs no underscore)
+                # ) Warn about potential URL mismatch (underscore vs no underscore
                 logger.warning("SUPABASE_URL contains 'sb_domain' - verify this matches your actual server URL", url=supabase_url)
             
             # Try to get or initialize database
@@ -63,14 +63,14 @@ async def health_check():
                 try:
                     db = get_database()
                 except RuntimeError:
-                    # No existing instance, create a new one (client should still be initialized)
+                    # ) No existing instance, create a new one (client should still be initialized
                     db = DatabaseService()
             
             if db.client is None:
                 services_status['database'] = 'unhealthy'
                 logger.warning("Database client not initialized - check SUPABASE_URL and SUPABASE_KEY environment variables")
             else:
-                # Test with secrets table first (known to exist)
+                # ) Test with secrets table first (known to exist
                 try:
                     result = (await db._get_client()).table('secrets').select('id').limit(1).execute()
                     # Test reports table access
@@ -104,7 +104,7 @@ async def health_check():
             logger.warning("Database health check failed", error=error_msg, error_type=error_type, exc_info=True)
             services_status['database'] = 'unhealthy'
         
-        # Check external APIs with timeouts (run in parallel for speed)
+        # ) Check external APIs with timeouts (run in parallel for speed
         async def check_dataforseo():
             service = DataForSEOService()
             await service.health_check()

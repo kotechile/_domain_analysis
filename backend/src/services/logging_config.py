@@ -159,10 +159,12 @@ class ProgressTracker:
             return 100
         
         # Define weighted progress for each main operation
-        operation_weights = { "essential_data": 25,      # 0% -> 25%
-            "detailed_data": 45,       # 25% -> 70% (45% of total)
-            "ai_analysis": 20,         # 70% -> 90% (20% of total)
-            "finalization": 10 } # 90% -> 100% (10% of total)
+        operation_weights = {
+            "essential_data": 25,     # 0% -> 25%
+            "detailed_data": 45,      # 25% -> 70%
+            "ai_analysis": 20,        # 70% -> 90%
+            "finalization": 10        # 90% -> 100%
+        }
         
         # Calculate base progress from completed main operations
         base_progress = 0

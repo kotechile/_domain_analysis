@@ -26,8 +26,8 @@ class FilterSettings(BaseModel):
     max_rank: Optional[int] = None
     min_score: Optional[float] = None
     max_score: Optional[float] = None
-    expiration_from_date: Optional[str] = None  # Date string (YYYY-MM-DD)
-    expiration_to_date: Optional[str] = None  # Date string (YYYY-MM-DD)
+    expiration_from_date: Optional[str] = None   # ) Date string (YYYY-MM-DD
+    expiration_to_date: Optional[str] = None   # ) Date string (YYYY-MM-DD
     sort_by: str = 'expiration_date'
     sort_order: str = 'asc'
     page_size: int = 50
@@ -46,7 +46,7 @@ async def get_filters( user_id: Optional[str] = Query(None, description="Optiona
         if not db.client:
             raise HTTPException(status_code=503, detail="Database connection not available")
         
-        # Get default filter (user_id is NULL for global defaults)
+        # ) Get default filter (user_id is NULL for global defaults
         result = (await db._get_client()).table('filters').select('*').eq('is_default', True)
         
         if user_id:

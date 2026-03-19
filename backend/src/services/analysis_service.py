@@ -86,10 +86,10 @@ class AnalysisService:
             progress_tracker.add_sub_operation("ai_analysis", "analysis_parsing")
             
             # Get existing report or create new one
-            report = self.await db.get_report(domain)
+            report = await self.db.get_report(domain)
             if not report:
                 report = DomainAnalysisReport( domain_name=domain, analysis_timestamp=start_time, status=AnalysisStatus.IN_PROGRESS, analysis_mode=analysis_mode, analysis_phase=AnalysisPhase.ESSENTIAL )
-                await self.await db.save_report(report)
+                await self.db.save_report(report)
             
             # Phase 1: Essential Data Collection
             progress_tracker.start_operation("essential_data")
@@ -98,7 +98,7 @@ class AnalysisService:
             progress_tracker.complete_operation("essential_data")
             await self._update_progress_data(report, "Essential data collection completed", [], progress_tracker)
             
-            # Phase 2: Detailed Data Collection (Mandatory for DUAL/ASYNC, skipped for LEGACY)
+            # ) Phase 2: Detailed Data Collection (Mandatory for DUAL/ASYNC, skipped for LEGACY
             if analysis_mode != AnalysisMode.LEGACY:
                 progress_tracker.start_operation("detailed_data")
                 await self._update_progress_data(report, "Collecting detailed backlink and keyword data", [], progress_tracker)
@@ -136,7 +136,7 @@ class AnalysisService:
             await self._update_progress_data(report, "Analysis completed successfully", [], progress_tracker)
             
             # Save final report
-            await self.await db.save_report(report)
+            await self.db.save_report(report)
             
             logger.info("Domain analysis completed successfully", domain=domain, mode=analysis_mode.value, processing_time=(datetime.utcnow() - start_time).total_seconds())
             
@@ -147,11 +147,11 @@ class AnalysisService:
             logger.error("Domain analysis failed", domain=domain, error=error_msg, error_type=type(e).__name__, exc_info=True)
             # Try to get existing report if it exists
             try:
-                existing_report = self.await db.get_report(domain)
+                existing_report = await self.db.get_report(domain)
                 if existing_report:
                     existing_report.status = AnalysisStatus.FAILED
                     existing_report.error_message = error_msg
-                    await self.await db.save_report(existing_report)
+                    await self.db.save_report(existing_report)
             except Exception as save_error:
                 logger.error("Failed to save error to report", domain=domain, save_error=str(save_error))
             raise
@@ -160,9 +160,9 @@ class AnalysisService:
         """Determine the analysis mode based on configuration and request"""
         try:
             # Get domain-specific or global configuration
-            config = self.await db.get_mode_config(domain)
+            config = await self.db.get_mode_config(domain)
             if not config:
-                config = self.await db.get_mode_config()  # Global config
+                config = await self.db.get_mode_config()  # Global config
             
             if requested_mode == "legacy":
                 return AnalysisMode.LEGACY
@@ -194,7 +194,7 @@ class AnalysisService:
                 if n8n_result:
                     logger.info("N8N summary workflow triggered, waiting for callback", domain=domain, request_id=n8n_result.get("request_id"))
                     
-                    # Wait for N8N to call back (poll database for results)
+                    # ) Wait for N8N to call back (poll database for results
                     max_wait_time = 60  # 1 minute max wait for summary
                     wait_interval = 2  # Check every 2 seconds
                     waited = 0
@@ -222,7 +222,7 @@ class AnalysisService:
                     logger.warning("N8N summary workflow trigger failed, falling back to direct API", domain=domain)
                     use_n8n_summary = False
             
-            # Get domain analytics data (includes backlinks summary if not using N8N)
+            # ) Get domain analytics data (includes backlinks summary if not using N8N
             # Pass use_n8n_summary_override=use_n8n_summary to ensure it falls back if N8N failed or is disabled
             domain_rank_data = self.dataforseo_service.get_domain_analytics(domain, user_id, use_n8n_summary_override=use_n8n_summary)
             
@@ -236,11 +236,11 @@ class AnalysisService:
             # Get wayback machine data
             wayback_data = self.wayback_service.get_domain_history(domain)
             
-            # Check for existing auction data to use as fallback for metrics (e.g. traffic)
+            # ) Check for existing auction data to use as fallback for metrics (e.g. traffic
             auction_data = None
             try:
                 db = get_database()
-                # Query auctions table for this domain (case-insensitive)
+                # ) Query auctions table for this domain (case-insensitive
                 # Using ilike for case-insensitivity in domain matching
                 auction_res = (await db._get_client()).table('auctions').select('*').ilike('domain', domain).eq('to_delete', False).execute()
                 if auction_res.data:
@@ -286,7 +286,7 @@ class AnalysisService:
                 if backlinks_summary:
                     try:
                         from models.domain_analysis import BulkPageSummaryResult
-                        # Add target field if missing (required by BulkPageSummaryResult)
+                        # ) Add target field if missing (required by BulkPageSummaryResult
                         if "target" not in backlinks_summary:
                             backlinks_summary["target"] = domain
                         # Convert dict to BulkPageSummaryResult model
@@ -330,14 +330,14 @@ class AnalysisService:
                     detailed_status_messages.append("Starting backlinks analysis...")
                     await self._update_progress_data(report, "Starting backlinks analysis...", detailed_status_messages, progress_tracker)
                     
-                    # N8N is required for backlinks (no HTTP fallback allowed)
+                    # ) N8N is required for backlinks (no HTTP fallback allowed
                     use_n8n = self.n8n_service.is_enabled_for_backlinks()
                     
                     if not use_n8n:
                         logger.error("N8N is required for backlinks but is not enabled", domain=domain)
                         raise Exception("N8N is required for backlinks analysis. Please enable N8N in your configuration (N8N_ENABLED=true, N8N_USE_FOR_BACKLINKS=true).")
                     
-                    # Use N8N for backlinks (required - no HTTP fallback)
+                    # ) Use N8N for backlinks (required - no HTTP fallback
                     backlinks_data = None
                     detailed_status_messages.append("Triggering N8N workflow for backlinks...")
                     await self._update_progress_data(report, "Triggering N8N workflow for backlinks...", detailed_status_messages, progress_tracker)
@@ -348,7 +348,7 @@ class AnalysisService:
                         detailed_status_messages.append("N8N workflow triggered, waiting for results...")
                         await self._update_progress_data(report, "N8N workflow triggered, waiting for results...", detailed_status_messages, progress_tracker)
                         
-                        # Wait for N8N to call back (poll database for results)
+                        # ) Wait for N8N to call back (poll database for results
                         # Note: This is a simplified approach - in production you might want to use
                         # a more sophisticated async pattern with webhooks
                         max_wait_time = 120  # 2 minutes max wait
@@ -361,7 +361,7 @@ class AnalysisService:
                             
                             # Check if data was saved by webhook
                             from models.domain_analysis import DetailedDataType
-                            saved_data = self.await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
+                            saved_data = await self.db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
                             if saved_data:
                                 backlinks_data = saved_data.json_data
                                 logger.info("N8N backlinks data received via webhook", domain=domain, items_count=len(backlinks_data.get("items", [])))
@@ -389,12 +389,12 @@ class AnalysisService:
                         await self._update_progress_data(report, "Backlinks analysis completed", detailed_status_messages, progress_tracker)
                         progress_tracker.complete_sub_operation("detailed_data", "backlinks_analysis")
                         
-                        # Save detailed data to database (if not already saved by N8N webhook)
+                        # ) Save detailed data to database (if not already saved by N8N webhook
                         from models.domain_analysis import DetailedAnalysisData, DetailedDataType
-                        existing_data = self.await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
+                        existing_data = await self.db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
                         if not existing_data:
                             detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.BACKLINKS, json_data=backlinks_data )
-                            await self.await db.save_detailed_data(detailed_data)
+                            await self.db.save_detailed_data(detailed_data)
                     
                     # Collect detailed keywords
                     progress_tracker.start_sub_operation("detailed_data", "keywords_analysis")
@@ -416,7 +416,7 @@ class AnalysisService:
                         
                         # Save detailed data to database
                         detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.KEYWORDS, json_data=keywords_data )
-                        await self.await db.save_detailed_data(detailed_data)
+                        await self.db.save_detailed_data(detailed_data)
                         
                         # Update report metadata with real counts from detailed data
                         if report.data_for_seo_metrics:
@@ -426,7 +426,7 @@ class AnalysisService:
                                 report.data_for_seo_metrics.total_keywords = total_count
                                 logger.info("Updated total_keywords in report from detailed items", domain=domain, total=total_count)
                                 
-                            # If traffic is still 0, try to estimate from keywords ETV (Estimated Traffic Value)
+                            # ) If traffic is still 0, try to estimate from keywords ETV (Estimated Traffic Value
                             if report.data_for_seo_metrics.organic_traffic_est == 0:
                                 detailed_etv = sum(item.get('ranked_serp_element', {}).get('serp_item', {}).get('etv', 0.0) 
                                                   for item in keywords_data.get("items", []))
@@ -446,7 +446,7 @@ class AnalysisService:
                             
                         # Save detailed data to database
                         detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.KEYWORDS, json_data=keywords_data )
-                        await self.await db.save_detailed_data(detailed_data)
+                        await self.db.save_detailed_data(detailed_data)
                         
                         # Update report metrics from legacy data
                         if report.data_for_seo_metrics:
@@ -481,7 +481,7 @@ class AnalysisService:
                         
                         # Save detailed data to database
                         detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.REFERRING_DOMAINS, json_data=referring_domains_data )
-                        await self.await db.save_detailed_data(detailed_data)
+                        await self.db.save_detailed_data(detailed_data)
                     else:
                         logger.warning("Async referring domains collection returned None, falling back to legacy", domain=domain)
                         # Fall back to legacy mode for referring domains
@@ -495,7 +495,7 @@ class AnalysisService:
                             
                             # Save detailed data to database
                             detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.REFERRING_DOMAINS, json_data=referring_domains_data )
-                            await self.await db.save_detailed_data(detailed_data)
+                            await self.db.save_detailed_data(detailed_data)
                     
                 except Exception as e:
                     logger.warning("Async detailed data collection failed, falling back to legacy", domain=domain, error=str(e))
@@ -524,7 +524,7 @@ class AnalysisService:
                             waited += wait_interval
                             
                             from models.domain_analysis import DetailedDataType
-                            saved_data = self.await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
+                            saved_data = await self.db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
                             if saved_data:
                                 backlinks_data = saved_data.json_data
                                 break
@@ -549,7 +549,7 @@ class AnalysisService:
                     # Save detailed data to database
                     from models.domain_analysis import DetailedAnalysisData, DetailedDataType
                     detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.BACKLINKS, json_data=backlinks_data )
-                    await self.await db.save_detailed_data(detailed_data)
+                    await self.db.save_detailed_data(detailed_data)
                 
                 keywords_data = self.dataforseo_service.get_detailed_keywords(domain, 1000, user_id)
                 if keywords_data and keywords_data.get("items"):
@@ -557,7 +557,7 @@ class AnalysisService:
                     operation_logger.log_data_collection("keywords", record_count=len(keywords_data.get("items", [])))
                     # Save detailed data to database
                     detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.KEYWORDS, json_data=keywords_data )
-                    await self.await db.save_detailed_data(detailed_data)
+                    await self.db.save_detailed_data(detailed_data)
                 
                 referring_domains_data = self.dataforseo_service.get_referring_domains(domain, 800, user_id)
                 if referring_domains_data and referring_domains_data.get("items"):
@@ -565,7 +565,7 @@ class AnalysisService:
                     operation_logger.log_data_collection("referring_domains", record_count=len(referring_domains_data.get("items", [])))
                     # Save detailed data to database
                     detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.REFERRING_DOMAINS, json_data=referring_domains_data )
-                    await self.await db.save_detailed_data(detailed_data)
+                    await self.db.save_detailed_data(detailed_data)
             
             # Update report with detailed data availability
             progress_tracker.start_sub_operation("detailed_data", "data_saving")
@@ -573,11 +573,11 @@ class AnalysisService:
             report.analysis_phase = AnalysisPhase.AI_ANALYSIS
             
             # Save report with detailed data availability
-            await self.await db.save_report(report)
+            await self.db.save_report(report)
             progress_tracker.complete_sub_operation("detailed_data", "data_saving")
             logger.info("Detailed data collection completed and saved", domain=domain, detailed_data_available=detailed_data_available)
             
-            # Verify we have detailed data (optional for enhanced analysis)
+            # ) Verify we have detailed data (optional for enhanced analysis
             if not any(detailed_data_available.values()):
                 logger.warning("No detailed data collected - proceeding with essential metrics only", domain=domain)
                 # Don't raise exception - continue with essential metrics
@@ -600,7 +600,7 @@ class AnalysisService:
             # Get detailed data for AI analysis
             detailed_data = {}
             for data_type in [DetailedDataType.BACKLINKS, DetailedDataType.KEYWORDS, DetailedDataType.REFERRING_DOMAINS]:
-                data = self.await db.get_detailed_data(domain, data_type)
+                data = await self.db.get_detailed_data(domain, data_type)
                 if data:
                     detailed_data[data_type.value] = data.json_data
             
@@ -656,7 +656,7 @@ class AnalysisService:
                 # if the report metrics seem failed or incomplete
                 try:
                     # Use ilike for case-insensitive lookup to find the domain in the auctions table
-                    auction_res = (await self.await db._get_client()).table('auctions').select('domain', 'organic_traffic', 'keywords_count').ilike('domain', report.domain_name).eq('to_delete', False).execute()
+                    auction_res = (await self.db._get_client()).table('auctions').select('domain', 'organic_traffic', 'keywords_count').ilike('domain', report.domain_name).eq('to_delete', False).execute()
                     if auction_res.data:
                         current_auction = auction_res.data[0]
                         # We found a match, now we check if we should preserve existing metrics
@@ -685,7 +685,7 @@ class AnalysisService:
                 
                 # Use the existing database service method to update both JSONB and top-level columns
                 # This ensures the marketplace table and it's sorting reflect the latest analysis results
-                await self.await db.update_auction_page_statistics(report.domain_name, sync_data)
+                await self.db.update_auction_page_statistics(report.domain_name, sync_data)
             
         except Exception as e:
             logger.error("Analysis finalization failed", domain=report.domain_name, error=str(e))
@@ -697,14 +697,14 @@ class AnalysisService:
         """Get or fetch historical data for a domain"""
         try:
             # 1. Check if report has historical data
-            report = self.await db.get_report(domain)
+            report = await self.db.get_report(domain)
             if report and report.historical_data:
                 logger.info("Using cached historical data", domain=domain)
                 return report.historical_data
                 
             logger.info("Fetching new historical data", domain=domain)
             
-            # 2. Fetch from APIs (parallel execution)
+            # ) 2. Fetch from APIs (parallel execution
             rank_task = asyncio.create_task(self.dataforseo_service.get_historical_rank_overview(domain))
             traffic_task = asyncio.create_task(self.dataforseo_service.get_traffic_analytics_history(domain))
             bulk_traffic_task = asyncio.create_task(self.dataforseo_service.get_historical_bulk_traffic_estimation(domain))
@@ -732,7 +732,7 @@ class AnalysisService:
             # 4. Save to report
             if report and historical_data:
                 report.historical_data = historical_data
-                await self.await db.save_report(report)
+                await self.db.save_report(report)
                 logger.info("Saved historical data to report", domain=domain)
                 
             return historical_data
@@ -766,12 +766,12 @@ class AnalysisService:
                     continue
                 
                 organic_keywords_count.append(HistoricalMetricPoint( date=date_str, value=float(metrics.get("count", 0)) ))
-                organic_traffic.append(HistoricalMetricPoint( date=date_str, value=float(metrics.get("etv", 0)) # etv often proxy for traffic or traffic value, checking docs... # Wait, 'etv' is Estimated Traffic Value. 'pos_*' are counts. # DataForSEO `historical_rank_overview` gives `metrics.organic.count` (keywords count) and `etv` (traffic value cost). # Actually, usually they provide `organic.is_lost` etc. # Let's assume 'etv' is value, and we might not have direct traffic count here, but often 'etv' is used. # The user said "metrics.organic.count" (keywords) and "estimated organic/paid traffic". # Let's check traffic estimation endpoint for actual traffic volume. ))
+                organic_traffic.append(HistoricalMetricPoint( date=date_str, value=float(metrics.get("etv", 0)) )) # etv often proxy for traffic or traffic value, checking docs... # Wait, 'etv' is Estimated Traffic Value. 'pos_*' are counts. # DataForSEO `historical_rank_overview` gives `metrics.organic.count` (keywords count and `etv` (traffic value cost). # Actually, usually they provide `organic.is_lost` etc. # Let's assume 'etv' is value, and we might not have direct traffic count here, but often 'etv' is used. # The user said "metrics.organic.count" (keywords) and "estimated organic/paid traffic". # Let's check traffic estimation endpoint for actual traffic volume. )
                 # Actually, `historical_rank_overview` mainly gives keyword counts. # `etv` is usually traffic cost. # `organic_traffic` might be better from `traffic_analytics`. # Populate rank overview
             rank_overview = HistoricalRankOverview( organic_keywords_count=organic_keywords_count, # Assuming etv for now, but traffic analytics is better for traffic
                 organic_traffic_value=[HistoricalMetricPoint(date=i.date, value=i.value) for i in organic_traffic], raw_items=items )
 
-        # Handle bulk traffic data (more granular historical volume)
+        # ) Handle bulk traffic data (more granular historical volume
         if bulk_traffic_data and bulk_traffic_data.get("metrics"):
             metrics = bulk_traffic_data.get("metrics", {})
             organic_metrics = metrics.get("organic", [])
@@ -836,19 +836,19 @@ class AnalysisService:
             logger.info("Starting domain analysis", domain=domain, report_id=report_id)
             
             # Get existing report or create new one
-            report = self.await db.get_report(domain)
+            report = await self.db.get_report(domain)
             if not report:
                 # Create new report if it doesn't exist
                 report = DomainAnalysisReport( domain_name=domain, status=AnalysisStatus.IN_PROGRESS )
-                await self.await db.save_report(report)
+                await self.db.save_report(report)
             else:
                 # Update existing report status
                 report.status = AnalysisStatus.IN_PROGRESS
                 report.error_message = None
                 report.processing_time_seconds = None
-                await self.await db.save_report(report)
+                await self.db.save_report(report)
             
-            # Run essential data collection in parallel (summaries only to save costs)
+            # ) Run essential data collection in parallel (summaries only to save costs
             dataforseo_task = asyncio.create_task( self.dataforseo_service.get_domain_analytics(domain) )
             wayback_task = asyncio.create_task( self.wayback_service.get_domain_history(domain) )
             
@@ -895,7 +895,7 @@ class AnalysisService:
             report = DomainAnalysisReport( domain_name=domain, analysis_timestamp=end_time, status=AnalysisStatus.COMPLETED, data_for_seo_metrics=dataforseo_metrics, wayback_machine_summary=wayback_summary, llm_analysis=llm_analysis, raw_data_links={ "full_keywords_list_api": f"/api/v1/reports/{domain}/keywords", "full_backlinks_list_api": f"/api/v1/reports/{domain}/backlinks" }, processing_time_seconds=processing_time )
             
             # Save the completed report
-            await self.await db.save_report(report)
+            await self.db.save_report(report)
             
             logger.info("Domain analysis completed successfully", domain=domain, processing_time=processing_time)
             
@@ -908,15 +908,15 @@ class AnalysisService:
             
             error_report = DomainAnalysisReport( domain_name=domain, analysis_timestamp=end_time, status=AnalysisStatus.FAILED, processing_time_seconds=processing_time, error_message=str(e) )
             
-            await self.await db.save_report(error_report)
+            await self.db.save_report(error_report)
     
     async def _update_report_status(self, domain: str, status: AnalysisStatus) -> None:
         """Update report status in database"""
         try:
-            report = self.await db.get_report(domain)
+            report = await self.db.get_report(domain)
             if report:
                 report.status = status
-                await self.await db.save_report(report)
+                await self.db.save_report(report)
         except Exception as e:
             logger.error("Failed to update report status", domain=domain, status=status, error=str(e))
     
@@ -998,7 +998,7 @@ class AnalysisService:
             report.progress_data = ProgressInfo( status=AsyncTaskStatus.IN_PROGRESS if report.status == AnalysisStatus.IN_PROGRESS else AsyncTaskStatus.COMPLETED, phase=report.analysis_phase, progress_percentage=progress_percentage, estimated_time_remaining=estimated_time_remaining, current_operation=current_operation, completed_operations=detailed_status, error_message=None )
             
             # Save updated progress to database
-            await self.await db.save_report(report)
+            await self.db.save_report(report)
             
         except Exception as e:
             logger.error("Failed to update progress data", error=str(e))
@@ -1006,7 +1006,7 @@ class AnalysisService:
     async def get_analysis_progress(self, domain: str) -> dict:
         """Get current analysis progress"""
         try:
-            report = self.await db.get_report(domain)
+            report = await self.db.get_report(domain)
             if not report:
                 return {"status": "not_found", "progress": 0}
             

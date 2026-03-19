@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def test_namecheap_parsing():
     parser = CSVParserService()
     
-    # Test Case 1: Standard Market Sales Format (from code expectation)
+    # ) Test Case 1: Standard Market Sales Format (from code expectation
     # name, startDate, endDate, price
     content_valid = """name,startDate,endDate,price,url
     test1.com,2023-01-01,2023-12-31,10.00,http://example.com"""
@@ -26,7 +26,7 @@ def test_namecheap_parsing():
     if len(results) == 0:
         print("FAILED to parse standard headers")
         
-    # Test Case 2: Alternative Headers (Case sensitivity)
+    # ) Test Case 2: Alternative Headers (Case sensitivity
     content_caps = """Name,StartDate,EndDate,Price,Url
     test2.com,2023-01-01,2023-12-31,20.00,http://example.com"""
     
@@ -34,7 +34,7 @@ def test_namecheap_parsing():
     results = list(parser.parse_csv(content_caps, 'namecheap', 'Namecheap_Market_Sales.csv'))
     print(f"Results: {len(results)}")
 
-    # Test Case 3: Missing End Date (Should fail/skip)
+    # ) Test Case 3: Missing End Date (Should fail/skip
     content_no_end = """name,startDate,price
     test3.com,2023-01-01,10.00"""
     
@@ -56,7 +56,7 @@ https://www.namecheap.com/market/sale/qMNdQL59ujA93Mo8yDKmzk/,menu.pro,2026-02-0
          print("FAILED to parse user sample")
 
 
-    # Test Case 6: Market Sales with Quoted Headers and Spaces (Simulating potential issue)
+    # ) Test Case 6: Market Sales with Quoted Headers and Spaces (Simulating potential issue
     content_complex = """"Name"," Start Date "," End Date "," Price "
     "quoted.com","2023-01-01","2023-12-31","100.00"
     """
@@ -69,7 +69,7 @@ https://www.namecheap.com/market/sale/qMNdQL59ujA93Mo8yDKmzk/,menu.pro,2026-02-0
         print("FAILED to parse complex headers")
 
 
-    # Test Case 7: Tab Delimited File (Simulating different dialect)
+    # ) Test Case 7: Tab Delimited File (Simulating different dialect
     content_tab = """Name\tStart Date\tEnd Date\tPrice\n"tab.com"\t"2023-01-01"\t"2023-12-31"\t"50.00" """
     print("\n--- Test 7: Tab Delimited Headers ---")
     results = list(parser.parse_csv(content_tab, 'namecheap', 'Namecheap_Market_Sales.csv'))

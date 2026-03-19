@@ -92,7 +92,7 @@ class DataForSEOService:
                 
                 backlinks_summary_data = None
                 if not use_n8n_summary:
-                    # Get backlinks summary data using v3 API (as per documentation)
+                    # ) Get backlinks summary data using v3 API (as per documentation
                     # Only if N8N is not enabled for summary
                     post_data = {}
                     post_data[len(post_data)] = { "target": domain, "internal_list_limit": 10, "include_subdomains": True, "backlinks_filters": ["dofollow", "=", True], "backlinks_status_type": "all" }
@@ -112,12 +112,12 @@ class DataForSEOService:
                         logger.warning("DataForSEO backlinks summary request failed", domain=domain, status=backlinks_summary_response.status_code)
                 else:
                     logger.info("Skipping direct backlinks summary call - using N8N instead", domain=domain)
-                    # Try to get summary from cache (it should be there if N8N already called back)
+                    # ) Try to get summary from cache (it should be there if N8N already called back
                     if cached_data and cached_data.get("backlinks_summary"):
                         backlinks_summary_data = cached_data["backlinks_summary"]
                         logger.info("Using cached N8N backlinks summary data", domain=domain)
                 
-                # Get domain rank overview using v3 API (as per documentation)
+                # ) Get domain rank overview using v3 API (as per documentation
                 domain_rank_post_data = {}
                 domain_rank_post_data[len(domain_rank_post_data)] = { "target": domain, "language_name": "English", "location_code": 2840 }
                 
@@ -171,7 +171,7 @@ class DataForSEOService:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 url = f"{credentials['api_url']}/dataforseo_labs/google/historical_rank_overview/live"
 
-                # DataForSEO provides data since October 1, 2020 (over 5 years of history)
+                # ) DataForSEO provides data since October 1, 2020 (over 5 years of history
                 # Use the maximum available date range
                 end_date = datetime.utcnow() - timedelta(days=1)
                 start_date = datetime(2020, 10, 1)  # October 1, 2020
@@ -208,7 +208,7 @@ class DataForSEOService:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 url = f"{credentials['api_url']}/traffic_analytics/history/live"
 
-                # DataForSEO provides data since October 1, 2020 (over 5 years of history)
+                # ) DataForSEO provides data since October 1, 2020 (over 5 years of history
                 end_date = datetime.utcnow()
                 start_date = datetime(2020, 10, 1)  # October 1, 2020
 
@@ -291,7 +291,7 @@ class DataForSEOService:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 url = f"{credentials['api_url']}/dataforseo_labs/google/historical_bulk_traffic_estimation/live"
                 
-                # Calculate dates (last 2 years approx to get enough history)
+                # ) Calculate dates (last 2 years approx to get enough history
                 end_date = datetime.utcnow()
                 start_date = end_date - timedelta(days=365*2)
                 
@@ -361,12 +361,12 @@ class DataForSEOService:
             total_backlinks = backlinks_summary.get("backlinks", 0)
             total_referring_domains = backlinks_summary.get("referring_domains", 0)
             
-            # Extract organic metrics from domain rank overview (if available)
+            # ) Extract organic metrics from domain rank overview (if available
             organic_metrics = domain_rank.get("organic", {})
             organic_traffic_est = organic_metrics.get("etv", 0)  # Estimated Traffic Value
             total_keywords = organic_metrics.get("count", 0)  # Total keywords count
             
-            # Use DataForSEO's rank from backlinks summary (PageRank-like metric)
+            # ) Use DataForSEO's rank from backlinks summary (PageRank-like metric
             dataforseo_rank = backlinks_summary.get("rank", 0)
             
             # Fallback to calculated DR if DataForSEO rank is not available
@@ -378,7 +378,7 @@ class DataForSEOService:
                 calculated_dr = dataforseo_rank / 10.0
                 logger.info("Using DataForSEO rank", rank=dataforseo_rank, converted_dr=calculated_dr)
             
-            # Extract Spam Score (if available)
+            # ) Extract Spam Score (if available
             backlinks_spam_score = backlinks_summary.get("backlinks_spam_score", backlinks_summary.get("spam_score", 0))
             
             # Create organic and paid metrics objects safely
@@ -408,11 +408,11 @@ class DataForSEOService:
         """
         Calculate Domain Rating (DR) based on available metrics. Uses a logarithmic scale similar to Ahrefs DR (0-100). Detects sandbox environment and adjusts calculation accordingly. """
         try:
-            # Detect if we're in a sandbox environment
-            # Sandbox typically has very high numbers that don't make sense for real domains
-            is_sandbox = ( total_backlinks > 1000000 or  # Over 1M backlinks is unrealistic for most domains
+            is_sandbox = (
+                total_backlinks > 1000000 or  # Over 1M backlinks is unrealistic for most domains
                 total_referring_domains > 10000 or  # Over 10K referring domains is very high
-                organic_traffic_est > 50000 ) # Over $50K ETV is very high
+                organic_traffic_est > 50000   # Over $50K ETV is very high
+            )
             
             if is_sandbox:
                 logger.warning("Sandbox environment detected - using simplified DR calculation")
@@ -429,14 +429,14 @@ class DataForSEOService:
                 traffic_score = min(15, 3 * (1 + (organic_traffic_est / 10000) ** 0.3)) if organic_traffic_est > 0 else 0
                 keywords_score = min(10, 2 * (1 + (total_keywords / 1000) ** 0.3)) if total_keywords > 0 else 0
                 
-                # Quality bonus from referring domains (if we have detailed data)
+                # ) Quality bonus from referring domains (if we have detailed data
                 quality_bonus = 0
                 if referring_domains_info:
                     high_authority_domains = sum(1 for domain in referring_domains_info 
                                                if domain.get('domain_rank', 0) >= 70)
                     quality_bonus = min(15, high_authority_domains * 2)
             
-            # Calculate final DR (0-100 scale)
+            # ) Calculate final DR (0-100 scale
             calculated_dr = min(100, backlinks_score + referring_domains_score + 
                                traffic_score + keywords_score + quality_bonus)
             
@@ -653,7 +653,7 @@ class WaybackMachineService:
                 logger.info("Using cached Wayback Machine data", domain=domain)
                 return cached_data
             
-            # Format domain for Wayback Machine API (remove protocol for domain match)
+            # ) Format domain for Wayback Machine API (remove protocol for domain match
             wayback_url = domain.replace("https://", "").replace("http://", "").replace("www.", "")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
@@ -674,7 +674,7 @@ class WaybackMachineService:
                     logger.warning("No Wayback Machine data found", domain=domain, response_length=len(data) if data else 0, response_preview=str(data)[:200] if data else None)
                     return { "total_captures": 0, "first_capture_year": None, "last_capture_date": None, "captures": [], "timestamp": datetime.utcnow().isoformat() }
                 
-                # Parse data (skip header row)
+                # ) Parse data (skip header row
                 captures = []
                 for row in data[1:]:
                     if len(row) >= 3:
@@ -746,7 +746,7 @@ class LLMService:
                 
             return self._provider, api_key, model_name
             
-        # Fallback to legacy behavior if DB config returns nothing (unlikely with new setup but safe)
+        # ) Fallback to legacy behavior if DB config returns nothing (unlikely with new setup but safe
         if self._provider is None:
             # Try Gemini first
             gemini_key = self.secrets_service.get_gemini_credentials()
@@ -1104,11 +1104,11 @@ class LLMService:
             if not items:
                 return { "overall_quality_score": 0.0, "high_dr_percentage": 0.0, "link_diversity_score": 0.0, "relevance_score": 0.0, "velocity_score": 0.0, "geographic_diversity": 0.0, "anchor_text_diversity": 0.0 }
             
-            # Calculate high DR percentage (DR 70+)
+            # ) Calculate high DR percentage (DR 70+
             high_dr_count = sum(1 for bl in items if bl.get('domain_from_rank', 0) >= 70)
             high_dr_percentage = (high_dr_count / len(items)) * 100 if items else 0
             
-            # Calculate link diversity (unique domains)
+            # ) Calculate link diversity (unique domains
             unique_domains = len(set(bl.get('domain_from', '') for bl in items))
             link_diversity_score = min(10.0, (unique_domains / len(items)) * 10) if items else 0
             
@@ -1122,7 +1122,7 @@ class LLMService:
             avg_dr = sum(dr_scores) / len(dr_scores) if dr_scores else 0
             relevance_score = min(10.0, avg_dr / 10)  # Normalize to 0-10 scale
             
-            # Calculate velocity score (based on first_seen dates)
+            # ) Calculate velocity score (based on first_seen dates
             first_seen_dates = [bl.get('first_seen') for bl in items if bl.get('first_seen')]
             if first_seen_dates:
                 # Simple velocity calculation - more recent links = higher score
@@ -1131,10 +1131,10 @@ class LLMService:
             else:
                 velocity_score = 5.0  # Neutral score if no dates
             
-            # Geographic diversity (simplified - would need country data)
+            # ) Geographic diversity (simplified - would need country data
             geographic_diversity = 7.0  # Placeholder - would need actual country data
             
-            # Overall quality score (weighted average)
+            # ) Overall quality score (weighted average
             overall_quality_score = ( (high_dr_percentage / 10) * 0.25 +
                 (link_diversity_score / 10) * 0.20 +
                 (relevance_score / 10) * 0.20 +
@@ -1263,10 +1263,10 @@ class LLMService:
             
             db = DatabaseService()
             
-            # Get actual keyword and backlink data (await the async calls)
-            keywords_data = asyncio.run(await db.get_detailed_data(domain, 'keywords')) or {'items': []}
-            backlinks_data = asyncio.run(await db.get_detailed_data(domain, 'backlinks')) or {'items': []}
-            referring_domains_data = asyncio.run(await db.get_detailed_data(domain, 'referring_domains')) or {'items': []}
+            # ) Get actual keyword and backlink data (await the async calls
+            keywords_data = asyncio.run(db.get_detailed_data(domain, 'keywords')) or {'items': []}
+            backlinks_data = asyncio.run(db.get_detailed_data(domain, 'backlinks')) or {'items': []}
+            referring_domains_data = asyncio.run(db.get_detailed_data(domain, 'referring_domains')) or {'items': []}
             
             logger.info(f"Retrieved data for development plan", keywords_count=len(keywords_data.get('items', [])), backlinks_count=len(backlinks_data.get('items', [])), referring_domains_count=len(referring_domains_data.get('items', [])))
         except Exception as e:
@@ -1407,7 +1407,7 @@ Focus on creating actionable, data-driven strategies that will genuinely help {d
         formatted.append("TOP PERFORMING KEYWORDS (analyze these for content opportunities):")
         formatted.append("")
         
-        # Sort keywords by rank (best performing first)
+        # ) Sort keywords by rank (best performing first
         sorted_keywords = sorted(keywords, key=lambda x: x.get('rank_group', 999))
         
         for kw in sorted_keywords[:15]:  # Top 15 keywords
@@ -1450,7 +1450,7 @@ Focus on creating actionable, data-driven strategies that will genuinely help {d
         formatted.append("TOP REFERRING DOMAINS (analyze these for content partnership opportunities):")
         formatted.append("")
         
-        # Sort backlinks by domain rank (highest quality first)
+        # ) Sort backlinks by domain rank (highest quality first
         sorted_backlinks = sorted(backlinks, key=lambda x: x.get('domain_rank', 0), reverse=True)
         
         for bl in sorted_backlinks[:15]:  # Top 15 backlinks

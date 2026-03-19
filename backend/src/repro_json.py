@@ -28,7 +28,7 @@ async def test_json_path():
         
         # We need to mock a few things if it fails but let's try calling it
         # Actually, let's just simulate the insertion logic from auctions.py manually
-        # as it's easier than mocking all services. auction_dicts = []
+        # ] as it's easier than mocking all services. auction_dicts = [
         for i, item in enumerate(mock_data):
             auction_dict = { 'domain': item['domainName'], 'expiration_date': item['endTime'], 'auction_site': 'godaddy', 'job_id': job_id, 'offer_type': 'auction' }
             auction_dicts.append(auction_dict)

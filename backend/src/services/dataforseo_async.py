@@ -70,7 +70,7 @@ class DataForSEOAsyncService:
             # Save task to database
             await db.save_async_task(AsyncTask( domain_name=domain, task_id=task_id, task_type=task_type, status=AsyncTaskStatus.PROCESSING ))
             
-            # Step 2: Poll for completion (pass get_endpoint for correct API call)
+            # ) Step 2: Poll for completion (pass get_endpoint for correct API call
             return await self._wait_for_task_completion(domain, task_type, task_id, get_endpoint)
             
         except Exception as e:
@@ -245,7 +245,7 @@ class DataForSEOAsyncService:
                         continue
                     
                     # Validate that the URL is related to the target domain
-                    # The URL should contain the domain name (or be from the domain)
+                    # ) The URL should contain the domain name (or be from the domain
                     if domain_lower not in url_lower:
                         # This might be a keyword ranking for a different domain
                         # For now, we'll keep it but log a warning
@@ -266,7 +266,7 @@ class DataForSEOAsyncService:
                 
                 return results
             
-            # For other data types, return as-is (add validation if needed)
+            # ) For other data types, return as-is (add validation if needed
             return results
             
         except Exception as e:
@@ -307,7 +307,14 @@ class DataForSEOAsyncService:
     
     def get_cost_metrics(self) -> Dict[str, Any]:
         """Get current cost metrics"""
-        return { "total_api_calls": self.cost_tracker["api_calls"], "estimated_total_cost": round(self.cost_tracker["estimated_cost"], 4), "average_cost_per_call": round( self.cost_tracker["estimated_cost"] / max(1, self.cost_tracker["api_calls"]), 4 ), "cost_savings_vs_live": round( self.cost_tracker["estimated_cost"] * 0.7, 4 } # 70% savings with async )
+        return {
+            "total_api_calls": self.cost_tracker["api_calls"],
+            "estimated_total_cost": round(self.cost_tracker["estimated_cost"], 4),
+            "average_cost_per_call": round(
+                self.cost_tracker["estimated_cost"] / max(1, self.cost_tracker["api_calls"]), 4
+            ),
+            "cost_savings_vs_live": round(self.cost_tracker["estimated_cost"] * 0.7, 4)
+        }
     
     def reset_cost_tracker(self):
         """Reset cost tracking metrics"""

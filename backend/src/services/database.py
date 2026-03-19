@@ -446,7 +446,7 @@ class DatabaseService:
             deleted_count += len(config_result.data) if config_result.data else 0
             logger.info("Deleted mode configuration", domain=domain_name, count=len(config_result.data) if config_result.data else 0)
             
-            # Delete main report (this should be last to maintain referential integrity)
+            # ) Delete main report (this should be last to maintain referential integrity
             report_result = await client.table('reports').delete().eq('domain_name', domain_name).execute()
             deleted_count += len(report_result.data) if report_result.data else 0
             logger.info("Deleted main report", domain=domain_name, count=len(report_result.data) if report_result.data else 0)
@@ -556,7 +556,7 @@ class DatabaseService:
             if not domain_names:
                 return []
             
-            # Query in batches (Supabase has limits on IN clause size)
+            # ) Query in batches (Supabase has limits on IN clause size
             batch_size = 100
             all_records = []
             
@@ -779,7 +779,7 @@ class DatabaseService:
             # Apply extension filter at database level using SQL pattern matching
             if extensions:
                 # Build OR conditions for each extension
-                # Use SQL LIKE pattern: name LIKE '%.com' OR name LIKE '%.net' etc. extension_filters = []
+                # ] Use SQL LIKE pattern: name LIKE '%.com' OR name LIKE '%.net' etc. extension_filters = [
                 for ext in extensions:
                     # Remove leading dot if present for pattern matching
                     ext_clean = ext.lstrip('.')
@@ -819,7 +819,7 @@ class DatabaseService:
                     
                     # Apply extension filter
                     if extensions:
-                        # Extract extension (e.g., 'example.com' -> '.com')
+                        # ) Extract extension (e.g., 'example.com' -> '.com'
                         if '.' in domain_name:
                             domain_ext = '.' + domain_name.split('.')[-1]
                             if domain_ext not in extensions:
@@ -830,7 +830,7 @@ class DatabaseService:
                     
                     # Apply no special characters filter
                     if no_special_chars:
-                        # Check if domain has special characters (excluding dots and hyphens which are valid)
+                        # ) Check if domain has special characters (excluding dots and hyphens which are valid
                         # Special chars: anything that's not alphanumeric, dot, or hyphen
                         if re.search(r'[^a-zA-Z0-9.\-]', domain_name):
                             continue
@@ -928,7 +928,7 @@ class DatabaseService:
             
             logger.info("Truncating auctions table", total_records=total_count)
             
-            # For very large tables, try N8N workflow first (executes SQL directly - fastest)
+            # ) For very large tables, try N8N workflow first (executes SQL directly - fastest
             if total_count and total_count > 100000:
                 try:
                     from services.n8n_service import N8NService
@@ -940,7 +940,7 @@ class DatabaseService:
                         result = n8n_service.trigger_truncate_auctions_workflow()
                         if result:
                             logger.info("Truncate triggered via N8N workflow", request_id=result.get('request_id'))
-                            # Wait for N8N to complete (SQL truncate is fast, but give it time)
+                            # ) Wait for N8N to complete (SQL truncate is fast, but give it time
                             import asyncio
                             await asyncio.sleep(5)  # Give N8N time to execute SQL
                             # Verify truncation completed
@@ -1018,12 +1018,12 @@ class DatabaseService:
                 
                 try:
                     # Use upsert to handle duplicates based on unique constraint
-                    # The unique constraint is on (domain, auction_site, expiration_date)
+                    # ) The unique constraint is on (domain, auction_site, expiration_date
                     # Note: backlinks_bulk_page_summary is in bulk_domain_analysis table, not auctions
                     # So it's automatically preserved when we update auctions
                     result = await client.table('auctions').upsert( batch, on_conflict='domain,auction_site,expiration_date' ).execute()
                     
-                    # Approximate: assume all are inserts (upsert will update if exists)
+                    # ) Approximate: assume all are inserts (upsert will update if exists
                     # For accurate counts, we'd need to check each record first, which is expensive
                     inserted_count += len(batch)
                     
@@ -1035,7 +1035,7 @@ class DatabaseService:
                     logger.warning("Batch upsert failed, using individual upserts", batch_num=batch_num, error=str(e))
                     for auction_data in batch:
                         try:
-                            client.table('auctions').upsert( auction_data, on_conflict= await 'domain,auction_site,expiration_date' ).execute()
+                            client.table('auctions').upsert( auction_data, on_conflict='domain,auction_site,expiration_date' ).execute()
                             inserted_count += 1
                         except Exception as e2:
                             if 'duplicate' in str(e2).lower() or 'unique' in str(e2).lower():
@@ -1046,8 +1046,8 @@ class DatabaseService:
             
             logger.info("Bulk upsert auctions complete", processed=inserted_count, skipped=skipped_count, total=len(auctions))
             # Note: We can't easily distinguish inserts from updates without expensive pre-checks
-            # Return processed count (which includes both inserts and updates)
-            return { "inserted": inserted_count,  # Actually processed (inserts + updates)
+            # ) Return processed count (which includes both inserts and updates
+            return { "inserted": inserted_count,   # ) Actually processed (inserts + updates
                 "updated": 0,  # Not tracked separately for performance
                 "skipped": skipped_count, "total": len(auctions) }
             
@@ -1067,10 +1067,10 @@ class DatabaseService:
             if not client:
                 raise Exception("Supabase client not available")
             
-            # Call the optimized RPC function which deletes in chunks (limit 10k)
+            # ) Call the optimized RPC function which deletes in chunks (limit 10k
             result = await client.rpc('delete_expired_auctions', {}).execute()
             
-            # Verify result format (RPC returns integer directly or in data)
+            # ) Verify result format (RPC returns integer directly or in data
             deleted_count = result.data if result.data is not None else 0
             
             logger.info("Deleted expired auctions", count=deleted_count)
@@ -1197,10 +1197,10 @@ class DatabaseService:
                     query = query.ilike('domain', f'%{tld}')
                 if filters.get('tlds'):
                     # Filter by multiple TLDs: domain should end with any of the specified TLDs
-                    # TLDs come as a list like [".com", ".io", ".ai"]
+                    # ] TLDs come as a list like [".com", ".io", ".ai"
                     tlds = filters['tlds']
                     if isinstance(tlds, list) and len(tlds) > 0:
-                        # Normalize TLDs (ensure they start with .)
+                        # ) Normalize TLDs (ensure they start with .
                         normalized_tlds = [tld if tld.startswith('.') else f'.{tld}' for tld in tlds if tld]
                         # Use OR condition for multiple TLDs - PostgREST doesn't support OR directly, # so we'll use a workaround with multiple ilike filters
                         # For now, we'll filter by the first TLD and let the frontend handle multiple
@@ -1210,10 +1210,10 @@ class DatabaseService:
                 if filters.get('offering_type'):
                     query = query.eq('offer_type', filters['offering_type'])
                 if filters.get('expiration_from_date'):
-                    # Filter by expiration date from (greater than or equal)
+                    # ) Filter by expiration date from (greater than or equal
                     query = query.gte('expiration_date', filters['expiration_from_date'])
                 if filters.get('expiration_to_date'):
-                    # Filter by expiration date to (less than or equal)
+                    # ) Filter by expiration date to (less than or equal
                     # If date is provided without time (YYYY-MM-DD), append time to include the full day in UTC
                     exp_to = filters['expiration_to_date']
                     if isinstance(exp_to, str) and len(exp_to) == 10:  # Simple check for YYYY-MM-DD
@@ -1237,7 +1237,7 @@ class DatabaseService:
                     query = query.lte('score', filters['max_score'])
             
             # Default: only show auctions that haven't expired yet
-            # Apply this if no expiration_from_date filter is provided (either filters is None or key missing)
+            # ) Apply this if no expiration_from_date filter is provided (either filters is None or key missing
             if not filters or not filters.get('expiration_from_date'):
                 # Use current UTC time
                 now = datetime.now(timezone.utc).isoformat()
@@ -1446,7 +1446,7 @@ class DatabaseService:
                         first = candidates[0]
                         logger.info("First candidate sample", domain=first.get('domain'), updated_at=first.get('updated_at'), page_statistics=first.get('page_statistics') is not None, organic_traffic=first.get('organic_traffic'), ranking=first.get('ranking'), backlinks=first.get('backlinks'), backlinks_spam_score=first.get('backlinks_spam_score'))
 
-                    # In-memory filtering (fallback)
+                    # ) In-memory filtering (fallback
                     # Logic: Include domain if missing ANY metric
                     # Only skip if updated recently AND has ALL metrics
                     selected = []
@@ -1529,7 +1529,7 @@ class DatabaseService:
             response = await client.table('auctions').select('domain', 'page_statistics').ilike('domain', domain).eq('to_delete', False).execute()
             
             if not response.data or len(response.data) == 0:
-                # logger.warning("Domain not found for statistics update", domain=domain)
+                # ) logger.warning("Domain not found for statistics update", domain=domain
                 return False
                 
             # Use the actual domain as stored in DB for the subsequent update
@@ -1572,7 +1572,7 @@ class DatabaseService:
             if spam_score is not None:
                 update_data['backlinks_spam_score'] = spam_score
             
-            # Domain Rating - handle normalization (DataForSEO rank is 0-1000, we want 0-100)
+            # ) Domain Rating - handle normalization (DataForSEO rank is 0-1000, we want 0-100
             dr_raw = get_metric(updated_stats, ['domain_rating_dr', 'domain_rating', 'calculated_dr', 'rank'])
             if dr_raw is not None:
                 try:
@@ -1622,7 +1622,7 @@ class DatabaseService:
             try:
                 update_response = await client.table('auctions').update(update_data).eq('domain', actual_domain).execute()
             except Exception as e:
-                # Handle missing column gracefully (especially keywords_count which might be new)
+                # ) Handle missing column gracefully (especially keywords_count which might be new
                 error_str = str(e)
                 if 'keywords_count' in error_str or 'PGRST204' in error_str:
                     logger.warning("keywords_count column missing or update failed, retrying without it", domain=domain, error=error_str)
@@ -1660,7 +1660,7 @@ class DatabaseService:
         client = await self._get_client()
         try:
             # Fetch domains and extract TLDs
-            # Note: With 1.6M+ rows, fetching all domains is a performance disaster (OOM risk)
+            # ) Note: With 1.6M+ rows, fetching all domains is a performance disaster (OOM risk
             # We'll limit to a large enough sample of recent auctions to get the current TLDs
             result = await (client.table('auctions').select('domain').limit(10000) ) # Moderate sample for performance.execute(
             
@@ -1668,7 +1668,7 @@ class DatabaseService:
             for auction in result.data if result.data else []:
                 domain = auction.get('domain', '')
                 if '.' in domain:
-                    # Extract TLD (last part after last dot)
+                    # ) Extract TLD (last part after last dot
                     parts = domain.rsplit('.', 1)
                     if len(parts) == 2:
                         tld = '.' + parts[1].lower()
@@ -1753,7 +1753,7 @@ class DatabaseService:
                 return True
             else:
                 # Note: Supabase implementation of storage.remove might return empty list 
-                # even if successful if it doesn't return metadata, or if file didn't exist. # But typically it returns the deleted object metadata. logger.warning("Storage delete response empty (file might not exist)", bucket=bucket, path=path)
+                # ) even if successful if it doesn't return metadata, or if file didn't exist. # But typically it returns the deleted object metadata. logger.warning("Storage delete response empty (file might not exist)", bucket=bucket, path=path
                 return False
                 
         except Exception as e:
@@ -1780,7 +1780,7 @@ class DatabaseService:
             import httpx
             
             # Construct the Storage API URL
-            # Supabase Storage API: /storage/v1/object/{bucket}/{path}
+            # } Supabase Storage API: /storage/v1/object/{bucket}/{path
             storage_url = f"{self.settings.SUPABASE_URL}/storage/v1/object/{bucket}/{path}"
             
             # Get service role key for authentication
@@ -1865,7 +1865,7 @@ class DatabaseService:
                         if response.status_code == 404:
                             raise Exception(f"File not found in storage: bucket={bucket}, path={path}")
                         
-                        # Handle case where file is already fully downloaded (Range Not Satisfiable)
+                        # ) Handle case where file is already fully downloaded (Range Not Satisfiable
                         if response.status_code == 416:
                             if os.path.exists(target_path):
                                 total_size = os.path.getsize(target_path)
@@ -1932,7 +1932,7 @@ class DatabaseService:
                     raise Exception("Failed to create job record")
             except Exception as table_error:
                 error_str = str(table_error).lower()
-                # Check if table doesn't exist (404 or "relation does not exist")
+                # ) Check if table doesn't exist (404 or "relation does not exist"
                 if '404' in error_str or 'relation' in error_str or 'does not exist' in error_str:
                     logger.warning("csv_upload_progress table not found, attempting to create it", error=str(table_error))
                     # Try to create the table
@@ -1975,14 +1975,14 @@ class DatabaseService:
             # Try to execute SQL via Supabase REST API using RPC
             # Some self-hosted Supabase instances support executing SQL via RPC
             try:
-                # Try using the REST API to execute SQL (if supported)
+                # ) Try using the REST API to execute SQL (if supported
                 import httpx
                 import json
                 
                 # Use the service role key for admin operations
                 headers = { 'apikey': self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY, 'Authorization': f'Bearer {self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY}', 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
                 
-                # Try to execute via REST API (this may not work for all Supabase instances)
+                # ) Try to execute via REST API (this may not work for all Supabase instances
                 # For self-hosted Supabase, you typically need to use psql or Supabase Studio
                 logger.warning( "csv_upload_progress table does not exist. Attempting automatic creation...", migration_file=str(migration_file) )
                 
@@ -2148,7 +2148,7 @@ class DatabaseService:
                 raise Exception("Supabase client not available")
 
             # 1. Get the default provider
-            provider_result = await client.table('llm_providers')\.select('*')\.eq('is_default', True)\.limit(1)\.execute()
+            provider_result = await client.table('llm_providers').select('*').eq('is_default', True).limit(1).execute()
 
             if not provider_result.data:
                 logger.warning("No default LLM provider found in llm_providers table")
@@ -2162,7 +2162,7 @@ class DatabaseService:
                 return None
 
             # 2. Get the API key
-            key_result = await client.table('api_keys')\.select('*')\.eq('id', api_keys_id)\.limit(1)\.execute()
+            key_result = await client.table('api_keys').select('*').eq('id', api_keys_id).limit(1).execute()
                 
             if not key_result.data:
                 logger.error("API key record not found for default provider", api_keys_id=api_keys_id)
@@ -2185,7 +2185,7 @@ class DatabaseService:
                 raise Exception("Supabase client not available")
             
             # Query for active DataForSEO key
-            result = await client.table('api_keys')\.select('*')\.eq('provider', 'dataforseo')\.eq('is_active', True)\.limit(1)\.execute()
+            result = await client.table('api_keys').select('*').eq('provider', 'dataforseo').eq('is_active', True).limit(1).execute()
                 
             if not result.data:
                 logger.warning("No active DataForSEO key found in api_keys table")
@@ -2208,7 +2208,7 @@ async def init_database():
     global _db_service
     if _db_service is None:
         _db_service = DatabaseService()
-        await _await db_service.init_database()
+        await _db_service.init_database()
     return _db_service
 
 

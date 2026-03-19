@@ -75,10 +75,10 @@ class N8NService:
             return False
         
         try:
-            # Try to ping N8N (if it has a health endpoint)
+            # ) Try to ping N8N (if it has a health endpoint
             # Otherwise, just check if webhook URL is configured
             async with httpx.AsyncClient(timeout=5.0) as client:
-                # Try to access N8N base URL (without webhook path)
+                # ) Try to access N8N base URL (without webhook path
                 base_url = self.settings.N8N_WEBHOOK_URL.rsplit('/', 1)[0] if '/' in self.settings.N8N_WEBHOOK_URL else self.settings.N8N_WEBHOOK_URL
                 response = client.get(f"{base_url}/healthz", follow_redirects=True)
                 return response.status_code in [200, 404]  # 404 is OK, means N8N is running
@@ -275,7 +275,7 @@ class N8NService:
                 logger.warning("No valid domains after normalization")
                 return None
             
-            # Limit to 1000 domains (DataForSEO bulk rank endpoint limit)
+            # ) Limit to 1000 domains (DataForSEO bulk rank endpoint limit
             if len(normalized_domains) > 1000:
                 logger.warning("Domain list exceeds 1000, truncating", original_count=len(normalized_domains), truncated_count=1000)
                 normalized_domains = normalized_domains[:1000]
@@ -294,8 +294,12 @@ class N8NService:
                 bulk_rank_callback_url = f"{callback_url}/backlinks-bulk-rank"
             
             # Prepare webhook payload
-            payload = { "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_rank_callback_url, "request_id": request_id, "type": "bulk_rank" } # Indicate this is a bulk rank request
+            payload = {
+                "domains": normalized_domains,  # Array of clean domain strings
+                "callback_url": bulk_rank_callback_url,
+                "request_id": request_id,
+                "type": "bulk_rank"
+            }
             
             # Use configured bulk rank webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_RANK
@@ -339,7 +343,7 @@ class N8NService:
             return None
         
         try:
-            # Normalize domains (remove www, protocols, paths)
+            # ) Normalize domains (remove www, protocols, paths
             normalized_domains = []
             for domain in domains:
                 if not domain or not isinstance(domain, str):
@@ -349,12 +353,11 @@ class N8NService:
                 # Remove path if present
                 domain = domain.split("/")[0]
                 # Remove www.
-                if present
                 domain = domain.replace("www.", "").strip().lower()
                 if domain and domain not in normalized_domains:
                     normalized_domains.append(domain)
             
-            # Limit to 1000 domains (DataForSEO bulk backlinks limit)
+            # ) Limit to 1000 domains (DataForSEO bulk backlinks limit
             if len(normalized_domains) > 1000:
                 logger.warning("Domain list exceeds 1000, truncating", original_count=len(normalized_domains), truncated_count=1000)
                 normalized_domains = normalized_domains[:1000]
@@ -373,8 +376,12 @@ class N8NService:
                 bulk_backlinks_callback_url = f"{callback_url}/backlinks-bulk-backlinks"
             
             # Prepare webhook payload
-            payload = { "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_backlinks_callback_url, "request_id": request_id, "type": "bulk_backlinks" } # Indicate this is a bulk backlinks request
+            payload = {
+                "domains": normalized_domains,  # Array of clean domain strings
+                "callback_url": bulk_backlinks_callback_url,
+                "request_id": request_id,
+                "type": "bulk_backlinks"
+            }
             
             # Use configured bulk backlinks webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_BACKLINKS
@@ -445,7 +452,8 @@ class N8NService:
             # Prepare webhook payload
             # Send domains as an array - n8n will map this to DataForSEO's "targets" field
             payload = { "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_callback_url, "request_id": request_id, "type": "bulk_traffic" } # Indicate this is a bulk traffic request
+                "callback_url": bulk_callback_url, "request_id": request_id, "type": "bulk_traffic"
+            }  # Indicate this is a bulk traffic request
             
             # Use configured bulk traffic webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_TRAFFIC
@@ -489,7 +497,7 @@ class N8NService:
             return None
         
         try:
-            # Normalize domains (remove www, protocols, paths)
+            # ) Normalize domains (remove www, protocols, paths
             normalized_domains = []
             for domain in domains:
                 if not domain or not isinstance(domain, str):
@@ -499,12 +507,11 @@ class N8NService:
                 # Remove path if present
                 domain = domain.split("/")[0]
                 # Remove www.
-                if present
                 domain = domain.replace("www.", "").strip().lower()
                 if domain and domain not in normalized_domains:
                     normalized_domains.append(domain)
             
-            # Limit to 1000 domains (DataForSEO bulk spam score limit)
+            # ) Limit to 1000 domains (DataForSEO bulk spam score limit
             if len(normalized_domains) > 1000:
                 logger.warning("Domain list exceeds 1000, truncating", original_count=len(normalized_domains), truncated_count=1000)
                 normalized_domains = normalized_domains[:1000]
@@ -524,7 +531,8 @@ class N8NService:
             
             # Prepare webhook payload
             payload = { "domains": normalized_domains,  # Array of clean domain strings
-                "callback_url": bulk_spam_score_callback_url, "request_id": request_id, "type": "bulk_spam_score" } # Indicate this is a bulk spam score request
+                "callback_url": bulk_spam_score_callback_url, "request_id": request_id, "type": "bulk_spam_score"
+            }  # Indicate this is a bulk spam score request
             
             # Use configured bulk spam score webhook URL
             webhook_url = self.settings.N8N_WEBHOOK_URL_BULK_SPAM_SCORE
@@ -638,7 +646,7 @@ class N8NService:
                     logger.error("N8N auction scoring webhook URL not configured")
                     return None
             
-            # Include Supabase credentials in payload (N8N blocks env var access)
+            # ) Include Supabase credentials in payload (N8N blocks env var access
             payload = { "file_path": file_path, "auction_site": auction_site, "request_id": request_id, "supabase_url": self.settings.SUPABASE_URL, "supabase_service_role_key": self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY }
             
             if config_id:

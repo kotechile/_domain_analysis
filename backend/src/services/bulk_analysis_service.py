@@ -31,7 +31,7 @@ class BulkAnalysisService:
             BulkDomainSyncResult with sync statistics
         """
         try:
-            result = self.await db.sync_bulk_domains(domains)
+            result = await self.db.sync_bulk_domains(domains)
             logger.info("Synced domains to Supabase", created=result.created_count, updated=result.updated_count, skipped=result.skipped_count)
             return result
         except Exception as e:
@@ -49,7 +49,7 @@ class BulkAnalysisService:
         try:
             # Get domains missing summary if not provided
             if domains is None:
-                domains = self.await db.get_bulk_domains_missing_summary()
+                domains = await self.db.get_bulk_domains_missing_summary()
             
             if not domains:
                 logger.info("No domains need bulk data collection")
@@ -94,10 +94,10 @@ class BulkAnalysisService:
             for domain_name in domain_names:
                 try:
                     # Check if data exists in bulk_domain_analysis table
-                    existing = self.await db.get_bulk_domain(domain_name)
+                    existing = await self.db.get_bulk_domain(domain_name)
                     
                     # Get Namecheap domain data
-                    namecheap_domain = self.await db.get_namecheap_domain_by_name(domain_name)
+                    namecheap_domain = await self.db.get_namecheap_domain_by_name(domain_name)
                     
                     if existing and existing.backlinks_bulk_page_summary:
                         # Data exists - return it
@@ -110,7 +110,7 @@ class BulkAnalysisService:
                         # First, ensure record exists in bulk_domain_analysis
                         from models.domain_analysis import BulkDomainInput
                         domain_input = BulkDomainInput(domain=domain_name, provider="Namecheap")
-                        await self.await db.sync_bulk_domains([domain_input])
+                        await self.db.sync_bulk_domains([domain_input])
                         
                         # Add to list for batch triggering
                         domains_to_trigger.append(domain_name)
@@ -124,7 +124,7 @@ class BulkAnalysisService:
                     logger.error("Failed to process domain", domain=domain_name, error=str(e))
                     # Try to get Namecheap data even on error
                     try:
-                        namecheap_domain = self.await db.get_namecheap_domain_by_name(domain_name)
+                        namecheap_domain = await self.db.get_namecheap_domain_by_name(domain_name)
                     except:
                         namecheap_domain = None
                     

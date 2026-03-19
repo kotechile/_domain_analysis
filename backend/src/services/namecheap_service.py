@@ -40,9 +40,9 @@ class NamecheapService:
             csv_file = io.StringIO(file_content)
             reader = csv.DictReader(csv_file)
             
-            for row_num, row in enumerate(reader, start=2):  # Start at 2 (header is row 1)
+            for row_num, row in enumerate(reader, start=2):   # ) Start at 2 (header is row 1
                 try:
-                    # Parse dates (format: 2025-11-29T23:30:00Z)
+                    # ) Parse dates (format: 2025-11-29T23:30:00Z
                     def parse_date(date_str):
                         if not date_str or date_str.strip() == '':
                             return None
@@ -121,7 +121,7 @@ class NamecheapService:
             if not domains:
                 return { "success": False, "message": "No valid domains found in CSV", "loaded_count": 0, "skipped_count": 0, "total_count": 0, "passed_count": 0, "failed_count": 0 }
             
-            # Step 2: Score domains (pre-screening + semantic analysis)
+            # ) Step 2: Score domains (pre-screening + semantic analysis
             logger.info("Step 2: Scoring domains (pre-screening + semantic analysis)...")
             scoring_service = DomainScoringService()
             scored_domains = scoring_service.score_domains(domains)
@@ -134,7 +134,7 @@ class NamecheapService:
             
             # Step 3: Truncate existing table
             logger.info("Step 3: Truncating existing table...")
-            await self.await db.truncate_namecheap_domains()
+            await self.db.truncate_namecheap_domains()
             logger.info("Table truncated successfully")
             
             # Step 4: Bulk insert new records with scores

@@ -69,7 +69,7 @@ settings = get_settings()
 app.add_middleware( CORSMiddleware, allow_origins=settings.ALLOWED_ORIGINS, allow_credentials=True, allow_methods=["GET", "POST", "PUT", "DELETE"], allow_headers=["*"], )
 
 # Add trusted host middleware for security
-# Note: Disable when N8N is enabled (requests come through ngrok with dynamic domains)
+# ) Note: Disable when N8N is enabled (requests come through ngrok with dynamic domains
 # In production with a fixed domain, re-enable this with your actual domain
 if not settings.N8N_ENABLED:
     app.add_middleware( TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS )

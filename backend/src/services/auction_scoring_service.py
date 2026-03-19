@@ -40,7 +40,7 @@ class AuctionScoringService:
                 raise Exception("Supabase client not available")
             
             # Call the optimized PostgreSQL function
-            result = (await self.await db_service._get_client()).rpc( 'filter_and_pre_score_auctions', { 'p_batch_limit': batch_size, 'p_config_id': config_id } ).execute()
+            result = (await self.db_service._get_client()).rpc( 'filter_and_pre_score_auctions', { 'p_batch_limit': batch_size, 'p_config_id': config_id } ).execute()
             
             if result.data:
                 logger.info("Fetched unprocessed batch", count=len(result.data), batch_size=batch_size)
@@ -72,7 +72,7 @@ class AuctionScoringService:
                     else:
                         registered_date = None
                 else:
-                    # Not a string, use as-is (could be datetime object)
+                    # ) Not a string, use as-is (could be datetime object
                     registered_date = reg_date
             else:
                 registered_date = None
@@ -130,7 +130,7 @@ class AuctionScoringService:
                     failed_count += 1
                     continue
                 
-                # Get config weights (default if not available)
+                # ) Get config weights (default if not available
                 # We'll use the weights from the scoring config, but for now use defaults
                 age_weight = 0.40
                 lfs_weight = 0.30
@@ -182,7 +182,7 @@ class AuctionScoringService:
                 scores_jsonb[domain_id] = { 'score': score_data.get('score'), 'lfs_score': score_data.get('lfs_score'), 'sv_score': score_data.get('sv_score') }
             
             # Call bulk update function
-            result = (await self.await db_service._get_client()).rpc( 'bulk_update_auction_scores', {'p_scores': scores_jsonb} ).execute()
+            result = (await self.db_service._get_client()).rpc( 'bulk_update_auction_scores', {'p_scores': scores_jsonb} ).execute()
             
             if result.data and 'updated_count' in result.data:
                 updated_count = result.data['updated_count']
@@ -214,7 +214,7 @@ class AuctionScoringService:
             if use_chunked:
                 try:
                     logger.info("Attempting chunked ranking recalculation")
-                    result = (await self.await db_service._get_client()).rpc( 'recalculate_auction_rankings_chunked', {'p_batch_size': 50000} ).execute()
+                    result = (await self.db_service._get_client()).rpc( 'recalculate_auction_rankings_chunked', {'p_batch_size': 50000} ).execute()
                     
                     if result.data and result.data.get('success'):
                         logger.info("Chunked ranking recalculation successful", result=result.data)
@@ -230,7 +230,7 @@ class AuctionScoringService:
             
             # Fallback to standard approach
             logger.info("Using standard ranking recalculation")
-            result = (await self.await db_service._get_client()).rpc('recalculate_auction_rankings').execute()
+            result = (await self.db_service._get_client()).rpc('recalculate_auction_rankings').execute()
             
             if result.data:
                 logger.info("Recalculated rankings", result=result.data)
@@ -243,7 +243,7 @@ class AuctionScoringService:
             logger.error("Failed to recalculate rankings", error=str(e))
             raise
     
-    async def process_batch( self, batch_size: int = 10000, config_id: Optional[str] = None, recalculate_rankings_after: bool = False  # Changed default to False to avoid timeouts ) -> Dict[str, Any]:
+    async def process_batch( self, batch_size: int = 10000, config_id: Optional[str] = None, recalculate_rankings_after: bool = False) -> Dict[str, Any]: # Changed default to False to avoid timeouts
         """
         Process a single batch of unprocessed auctions
         
@@ -277,7 +277,7 @@ class AuctionScoringService:
             # Step 3: Update scores in database
             updated_count = self.update_scores_in_database(scores)
             
-            # Step 4: Recalculate rankings if requested (but skip if large dataset to avoid timeout)
+            # ) Step 4: Recalculate rankings if requested (but skip if large dataset to avoid timeout
             ranking_stats = {}
             if recalculate_rankings_after:
                 try:
@@ -320,17 +320,17 @@ class AuctionScoringService:
                 raise Exception("Supabase client not available")
             
             # Query unprocessed count
-            unprocessed_result = ( (await self.await db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', False).execute() )
+            unprocessed_result = ( (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', False).execute() )
             
             unprocessed_count = unprocessed_result.count if hasattr(unprocessed_result, 'count') else 0
             
             # Query processed count
-            processed_result = ( (await self.await db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).execute() )
+            processed_result = ( (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).execute() )
             
             processed_count = processed_result.count if hasattr(processed_result, 'count') else 0
             
-            # Query scored count (processed with non-null score)
-            scored_result = ( (await self.await db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).not_.is_('score', 'null').execute() )
+            # ) Query scored count (processed with non-null score
+            scored_result = ( (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).not_.is_('score', 'null').execute() )
             
             scored_count = scored_result.count if hasattr(scored_result, 'count') else 0
             

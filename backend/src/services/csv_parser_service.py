@@ -101,7 +101,7 @@ class CSVParserService:
                 logger.warning("CSV file has no headers or is empty", filename=filename)
                 return
             
-            # Clean headers (strip whitespace)
+            # ) Clean headers (strip whitespace
             reader.fieldnames = [str(h).strip() for h in reader.fieldnames] if reader.fieldnames else []
             
             logger.info("Final Cleaned Headers", headers=reader.fieldnames)
@@ -120,7 +120,7 @@ class CSVParserService:
                         return lower_map[name.lower()]
                 return None
 
-            # Check if this is the Buy Now format (has 'domain' and 'permalink' columns, no 'name' or 'startDate')
+            # ) Check if this is the Buy Now format (has 'domain' and 'permalink' columns, no 'name' or 'startDate'
             is_buy_now_format = False
             if reader.fieldnames:
                 # Use flexible column detection
@@ -153,14 +153,14 @@ class CSVParserService:
                         from datetime import datetime, timezone
                         far_future_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
                         
-                        # Parse price (this is the buy now price)
+                        # ) Parse price (this is the buy now price
                         current_bid = self._parse_price(row.get(price_key, ''))
                         
                         # Store all original data in source_data
                         source_data = {k: v for k, v in row.items()}
                         
                         auction = AuctionInput( domain=domain_name, start_date=None,  # Buy Now listings don't have start dates
-                            expiration_date=far_future_date,  # Use far future date (no expiration)
+                            expiration_date=far_future_date,   # ) Use far future date (no expiration
                             end_date=far_future_date,  # Also set to far future date
                             current_bid=current_bid, auction_site='namecheap', source_data=source_data )
                         
@@ -172,7 +172,7 @@ class CSVParserService:
                 
                 logger.info("Parsed NameCheap Buy Now CSV")
             else:
-                # Parse Market Sales format: url, name, startDate, endDate, price, ... logger.info("Detected headers for Market Sales", headers=reader.fieldnames, filename=filename)
+                # ) Parse Market Sales format: url, name, startDate, endDate, price, ... logger.info("Detected headers for Market Sales", headers=reader.fieldnames, filename=filename
                 
                 name_key = find_col(['name', 'Name', 'Domain', 'domain', 'domain_name']) or 'name'
                 
@@ -369,7 +369,7 @@ class CSVParserService:
                 # Parse buy_now price as current_bid
                 try:
                     buy_now_str = row.get('Buy_Now', '0').strip()
-                    # Remove non-numeric characters (like " (hidden)")
+                    # ) Remove non-numeric characters (like " (hidden)"
                     buy_now_clean = ''.join(c for c in buy_now_str if c.isdigit() or c == '.')
                     current_bid = float(buy_now_clean) if buy_now_clean else 0.0
                 except (ValueError, TypeError):
@@ -400,13 +400,13 @@ class CSVParserService:
 
         for row_num, row in enumerate(reader, start=2):
             try:
-                # NameSilo format uses "Domain" column (case-sensitive)
+                # ) NameSilo format uses "Domain" column (case-sensitive
                 domain_name = row.get('Domain', '').strip()
                 if not domain_name:
                     logger.warning("Skipping row with empty Domain", row=row_num, available_keys=list(row.keys()))
                     continue
 
-                # Parse "Domain Created On" as start_date (when domain was created)
+                # ) Parse "Domain Created On" as start_date (when domain was created
                 start_date = self._parse_date(row.get('Domain Created On', ''))
 
                 # NameSilo auctions SHOULD have an expiration_date for auctions
@@ -607,7 +607,7 @@ class CSVParserService:
                     auction_type = listing.get('auctionType', '').strip()
                     is_buynow = auction_type.lower() == 'buynow'
 
-                    # Parse auction end time (expiration_date)
+                    # ) Parse auction end time (expiration_date
                     # For BuyNow offers, use far future date (2099-12-31) since they're available until sold
                     # For Bid auctions, use the auctionEndTime
                     if is_buynow:
@@ -624,11 +624,11 @@ class CSVParserService:
                             logger.warning("Could not parse auctionEndTime", index=idx, domain=domain_name, date_str=auction_end_time_str)
                             continue
                     
-                    # Parse price (current bid)
+                    # ) Parse price (current bid
                     price_str = listing.get('price', '')
                     current_bid = self._parse_price(price_str)
                     
-                    # Extract link (auction URL)
+                    # ) Extract link (auction URL
                     link = listing.get('link', '').strip() or None
                     
                     # Store all original data in source_data

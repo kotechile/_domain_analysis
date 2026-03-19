@@ -59,7 +59,7 @@ async def _mark_auctions_for_deletion(db, auction_site: str):
         # Update all records for this auction_site to set to_delete = true
         # We do this in chunks to avoid timeouts
         while True:
-            result = (await db._get_client()).table('auctions')\.select('domain')\.eq('auction_site', auction_site)\.eq('to_delete', False)\.limit(5000)\.execute()
+            result = (await db._get_client()).table('auctions').select('domain').eq('auction_site', auction_site).eq('to_delete', False).limit(5000).execute()
 
             if not result.data:
                 break
@@ -69,7 +69,7 @@ async def _mark_auctions_for_deletion(db, auction_site: str):
             # Update in smaller batches
             for i in range(0, len(domains), 100):
                 batch = domains[i:i+100]
-                (await db._get_client()).table('auctions')\.update({'to_delete': True})\.eq('auction_site', auction_site)\.in_('domain', batch)\.execute()
+                (await db._get_client()).table('auctions').update({'to_delete': True}).eq('auction_site', auction_site).in_('domain', batch).execute()
 
             await asyncio.sleep(0.01)
 
@@ -89,7 +89,7 @@ async def _delete_flagged_auctions(db, auction_site: str):
         # Delete in chunks to avoid timeouts
         while True:
             # Get batch of records to delete
-            result = (await db._get_client()).table('auctions')\.select('domain')\.eq('auction_site', auction_site)\.eq('to_delete', True)\.limit(1000)\.execute()
+            result = (await db._get_client()).table('auctions').select('domain').eq('auction_site', auction_site).eq('to_delete', True).limit(1000).execute()
 
             if not result.data:
                 break
@@ -99,7 +99,7 @@ async def _delete_flagged_auctions(db, auction_site: str):
             # Delete in smaller batches
             for i in range(0, len(domains), 100):
                 batch = domains[i:i+100]
-                (await db._get_client()).table('auctions')\.delete()\.eq('auction_site', auction_site)\.eq('to_delete', True)\.in_('domain', batch)\.execute()
+                (await db._get_client()).table('auctions').delete().eq('auction_site', auction_site).eq('to_delete', True).in_('domain', batch).execute()
                 total_deleted += len(batch)
 
             await asyncio.sleep(0.01)
@@ -129,9 +129,8 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
             break
 
         # 2. Prepare for upsert to main table
-        # Deduplicate records based on domain, auction_site, and expiration_date to match
-        # the database unique constraint and prevent "ON CONFLICT DO UPDATE command cannot
-        # affect row a second time" error. unique_records = {}
+        # ON CONFLICT DO UPDATE command cannot affect row a second time" error.
+        unique_records = {}
         for r in records:
             # Key must match the database unique constraint: domain + auction_site + expiration_date
             key = (r.get('domain'), r.get('auction_site'), r.get('expiration_date'))
@@ -157,7 +156,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
             (await db._get_client()).table('auctions').upsert( main_records, on_conflict='domain,auction_site,expiration_date' ).execute()
 
             # 4. Delete merged records from staging in small sub-batches
-            # Use smaller batches for the IN filter to avoid "URL component 'query' too long" (max ~2000 chars)
+            # ) Use smaller batches for the IN filter to avoid "URL component 'query' too long" (max ~2000 chars
             domains = [r['domain'] for r in records]
             sub_batch_size = 100 # Safe size for URLs
             for j in range(0, len(domains), sub_batch_size):
@@ -203,7 +202,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
     
     try:
         # 1. Count Total Lines (approx) for progress tracking
-        # This is creating an extra pass but on local FS it's fast (O(n) sequential read)
+        # ) This is creating an extra pass but on local FS it's fast (O(n) sequential read
         total_records = 0
         if is_file:
             try:
@@ -282,7 +281,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                 return
 
             # Insert into staging
-            # Prepare staging records (remove 'ranking', 'score' if None, etc.)
+            # ) Prepare staging records (remove 'ranking', 'score' if None, etc.
             staging_batch = []
             for record in batch:
                 # Create a clean dict for staging
@@ -329,7 +328,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                 auction = auction_input.to_auction()
                 
                 # Logic copied from original process_csv_upload_async
-                # ... score ... # ... map types ... # Convert date types for JSON serialization (Supabase expects ISO strings)
+                # ) ... score ... # ... map types ... # Convert date types for JSON serialization (Supabase expects ISO strings
                 start_date_iso = auction.start_date.isoformat() if auction.start_date else None
                 expiration_date = auction.expiration_date
 
@@ -373,7 +372,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     record_offer_type = map_namesilo_type_to_offer_type(type_field)
                     namesilo_type_counts[type_field] = namesilo_type_counts.get(type_field, 0) + 1
                 elif auction_site.lower() == 'godaddy':
-                    # Extract auctionType from GoDaddy JSON (BuyNow or Bid)
+                    # ) Extract auctionType from GoDaddy JSON (BuyNow or Bid
                     auction_type = auction.source_data.get('auctionType', '').strip() if auction.source_data else ''
                     if auction_type.lower() == 'buynow':
                         record_offer_type = 'buy_now'
@@ -552,7 +551,7 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
         # Update stage
         await db.update_csv_upload_progress( job_id=job_id, processed_records=len(auction_dicts), skipped_count=skipped_count, current_stage='loading_staging' )
 
-        # Loading and Merging (simplified logic)
+        # ) Loading and Merging (simplified logic
         if db.client:
              # General "Mark & Sweep" cleanup logic - Mark Phase - DISABLED
              effective_offering_type = offering_type or 'auction'
@@ -560,18 +559,18 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
              
              # try:
              #     # Build the base query
-             #     mark_query = (await db._get_client()).table('auctions').update({'deletion_flag': True}).eq('auction_site', auction_site)
+             # ) mark_query = (await db._get_client()).table('auctions').update({'deletion_flag': True}).eq('auction_site', auction_site
              #     
              #     # Apply scope rules
              #     if auction_site.lower() != 'namesilo':
-             #         mark_query = mark_query.eq('offer_type', effective_offering_type)
+             # ) mark_query = mark_query.eq('offer_type', effective_offering_type
              #     
-             await #     mark_result = mark_query.execute()
+             # ) await      mark_result = mark_query.execute(
              #     marked_count = len(mark_result.data) if mark_result.data else 0
              #     
-             #     logger.info("Marked records for deletion", #               job_id=job_id, #               count=marked_count, #               scope_site=auction_site, #               scope_type=effective_offering_type if auction_site.lower() != 'namesilo' else 'ALL')
+             # ) logger.info("Marked records for deletion", #               job_id=job_id, #               count=marked_count, #               scope_site=auction_site, #               scope_type=effective_offering_type if auction_site.lower() != 'namesilo' else 'ALL'
              # except Exception as e:
-             #     logger.warning("Failed to mark records for deletion", job_id=job_id, error=str(e))
+             # ) logger.warning("Failed to mark records for deletion", job_id=job_id, error=str(e)
 
              # Clear
              # Use chunked delete helper
@@ -592,24 +591,24 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
 
              # Cleanup (Sweep phase) - DISABLED
              deleted_count = 0
-             # logger.info("Cleaning up stale records (cleanup phase 2)", job_id=job_id)
+             # ) logger.info("Cleaning up stale records (cleanup phase 2)", job_id=job_id
              # try:
              #     # Build the base query
-             #     delete_query = (await db._get_client()).table('auctions').delete().eq('auction_site', auction_site).eq('deletion_flag', True)
+             # ) delete_query = (await db._get_client()).table('auctions').delete().eq('auction_site', auction_site).eq('deletion_flag', True
              #     
              #     # Apply same scope rules as Mark phase
              #     # Use effective_offering_type
              #     effective_offering_type = offering_type or 'auction'
              #     if auction_site.lower() != 'namesilo':
-             #          delete_query = delete_query.eq('offer_type', effective_offering_type)
+             # ) delete_query = delete_query.eq('offer_type', effective_offering_type
              #     
-             await #     delete_result = delete_query.execute()
+             # ) await      delete_result = delete_query.execute(
              #     deleted_count = len(delete_result.data) if delete_result.data else 0
              #     
-             #     logger.info("Cleanup complete: deleted stale records", #               job_id=job_id, #               deleted=deleted_count, #               site=auction_site)
+             # ) logger.info("Cleanup complete: deleted stale records", #               job_id=job_id, #               deleted=deleted_count, #               site=auction_site
              #               
              # except Exception as e:
-             #     logger.error("Failed to cleanup stale records", job_id=job_id, error=str(e))
+             # ) logger.error("Failed to cleanup stale records", job_id=job_id, error=str(e)
 
              result = { 'inserted': inserted_count, 'updated': 0, 'skipped': 0, 'total': total_records, 'deleted': deleted_count }
 
@@ -654,7 +653,7 @@ async def upload_auctions_csv( background_tasks: BackgroundTasks, file: UploadFi
         with os.fdopen(fd, 'wb') as tmp:
             tmp.write(content)
             
-        # Create job entry (so we have a record even before processing starts)
+        # ) Create job entry (so we have a record even before processing starts
         db = get_database()
         await db.create_csv_upload_job( job_id=job_id, filename=safe_filename, auction_site=auction_site, offering_type=offering_type )
         
@@ -685,7 +684,7 @@ async def process_existing_upload( request: StorageProcessingRequest ):
     try:
         job_id = str(uuid.uuid4())
 
-        # Start background processing using asyncio.create_task (proper for async functions)
+        # ) Start background processing using asyncio.create_task (proper for async functions
         # BackgroundTasks.add_task is for sync functions only and can swallow exceptions
         asyncio.create_task( process_file_from_storage_async( job_id=job_id, bucket=request.bucket, path=request.storage_path, filename=request.filename, auction_site=request.auction_site, offering_type=request.offering_type ) )
 
@@ -846,7 +845,7 @@ async def background_handle_upload_and_process( job_id: str, local_path: str, fi
         storage_path = await db.upload_csv_to_storage(file_content, filename)
         logger.info("Background storage upload complete", job_id=job_id, storage_path=storage_path)
         
-        # 2. Process (using local path)
+        # ) 2. Process (using local path
         is_json = filename.lower().endswith('.json')
         is_csv = filename.lower().endswith('.csv')
         
@@ -994,10 +993,10 @@ async def process_file_from_storage_async( job_id: str, bucket: str, path: str, 
     try:
         db = get_database()
         
-        # Create progress tracking job (moved from endpoint to prevent timeouts)
+        # ) Create progress tracking job (moved from endpoint to prevent timeouts
         await db.create_csv_upload_job( job_id=job_id, filename=filename, auction_site=auction_site, offering_type=offering_type )
         
-        # Sanitize filename for temp file usage (replace slashes with underscores)
+        # ) Sanitize filename for temp file usage (replace slashes with underscores
         # This prevents "No such file or directory" errors if filename contains folders
         safe_filename = filename.replace('/', '_').replace('\\', '_')
         
@@ -1083,7 +1082,7 @@ async def process_from_storage( bucket: str = Body(..., description="Supabase st
         # Generate unique job ID
         job_id = str(uuid.uuid4())
 
-        # Start background task using asyncio.create_task (proper for async functions)
+        # ) Start background task using asyncio.create_task (proper for async functions
         # BackgroundTasks.add_task is for sync functions only and can swallow exceptions
         asyncio.create_task( process_file_from_storage_async( job_id=job_id, bucket=bucket, path=path, filename=file_path, auction_site=auction_site, offering_type=offering_type ) )
 
@@ -1202,7 +1201,7 @@ async def trigger_auctions_analysis( limit: int = Query(100, description="Maximu
         
         auctions_service = AuctionsService()
         
-        # Get scored auctions without page_statistics (most recent first)
+        # ) Get scored auctions without page_statistics (most recent first
         auctions = auctions_service.get_scored_auctions_without_page_statistics(limit=limit)
         
         if not auctions:
@@ -1457,7 +1456,7 @@ async def process_traffic_metrics_background_task(domains: list[str]):
         
         logger.info("Starting background processing for traffic data", domains=len(domains))
         
-        # Call Live API (this blocks this task but not the main thread)
+        # ) Call Live API (this blocks this task but not the main thread
         items = service.fetch_bulk_traffic_estimation_live(domains)
         
         if items:
@@ -1466,7 +1465,7 @@ async def process_traffic_metrics_background_task(domains: list[str]):
             success_count = 0
             for item in items:
                 # "item" structure based on verification:
- } # { "se_type": "google", "target": "google.com", "metrics": { "organic": { "etv": ..., "count": ...
+ # }  { "se_type": "google", "target": "google.com", "metrics": { "organic": { "etv": ..., "count": ...
                 target = item.get('target')
                 metrics = item.get('metrics', {})
                 
@@ -1543,7 +1542,7 @@ async def trigger_bulk_all_metrics_analysis( preferred: Optional[bool] = Query(N
     try:
         logger.info("Triggering bulk all metrics analysis", limit=limit)
         
-        # Build filters (same as get_auctions_report)
+        # ) Build filters (same as get_auctions_report
         filters = {}
         if preferred is not None:
             filters['preferred'] = preferred
@@ -1574,8 +1573,8 @@ async def trigger_bulk_all_metrics_analysis( preferred: Optional[bool] = Query(N
         
         auctions_service = AuctionsService()
         
-        # Get auctions matching filters (missing any metric OR force refresh)
-        auctions = auctions_await service.get_auctions_missing_any_metric_with_filters( filters=filters, sort_by=sort_by, sort_order=sort_order, limit=limit, force_refresh=force_refresh )
+        # ) Get auctions matching filters (missing any metric OR force refresh
+        auctions = await service.get_auctions_missing_any_metric_with_filters( filters=filters, sort_by=sort_by, sort_order=sort_order, limit=limit, force_refresh=force_refresh )
         
         if not auctions:
             return { "success": True, "message": "No domains matching filters and missing any DataForSEO metric found", "triggered_count": 0, "skipped_count": 0, "triggered_domains": [], "results": { "traffic_data": {"triggered": 0, "success": False}, "rank": {"triggered": 0, "success": False}, "backlinks": {"triggered": 0, "success": False}, "spam_score": {"triggered": 0, "success": False} } }
@@ -1601,7 +1600,7 @@ async def trigger_bulk_all_metrics_analysis( preferred: Optional[bool] = Query(N
         # ------------------------------
         
         # Trigger all four analyses sequentially
-        # Trigger all four analyses in background to avoid API timeout (503)
+        # ) Trigger all four analyses in background to avoid API timeout (503
         n8n_service = N8NService()
         background_tasks.add_task( trigger_full_analysis_background, domain_names, n8n_service, str(current_user.id) )
         
@@ -1663,7 +1662,7 @@ async def get_auctions_report( search: Optional[str] = Query(None, description="
         if expiration_from_date:
             try:
                 # Try simple format first
-                # Check if it's already ISO format (contains T)
+                # ) Check if it's already ISO format (contains T
                 if 'T' in expiration_from_date:
                     # Validate it's parseable
                     datetime.fromisoformat(expiration_from_date.replace('Z', '+00:00'))
@@ -1821,7 +1820,7 @@ async def fetch_wayback_first_seen(domain: str):
         if not first_timestamp:
             return { "success": False, "message": "Invalid timestamp in capture data", "first_seen": None }
         
-        # Parse timestamp (format: YYYYMMDDHHMMSS)
+        # ) Parse timestamp (format: YYYYMMDDHHMMSS
         try:
             first_seen_dt = datetime.strptime(first_timestamp, "%Y%m%d%H%M%S")
         except ValueError:
@@ -1879,7 +1878,7 @@ async def process_dataforseo_queue():
             logger.error("Database connection not available for queue processing")
             return
         
-        # Get 100 pending domains ordered by expiration_date ASC (closest to NOW first)
+        # ) Get 100 pending domains ordered by expiration_date ASC (closest to NOW first
         queue_result = (await db._get_client()).table('dataforseo_queue').select( 'id,domain,expiration_date' ).eq('status', 'pending').order('expiration_date', desc= False).limit(100).execute()
         
         if not queue_result.data or len(queue_result.data) < 100:
@@ -1937,7 +1936,7 @@ async def queue_domain_for_dataforseo(domain: str):
         
         auction = auction_result.data[0]
         
-        # Check if domain is scored (score > 0)
+        # ) Check if domain is scored (score > 0
         if not auction.get('score') or auction['score'] <= 0:
             return { "success": False, "message": "Domain must be scored (score > 0) to queue for DataForSEO analysis", "queued": False }
         
@@ -1975,7 +1974,7 @@ async def queue_domain_for_dataforseo(domain: str):
             # Trigger processing in background
             asyncio.create_task(process_dataforseo_queue())
         
-        # Get position in queue (ordered by expiration_date ASC)
+        # ) Get position in queue (ordered by expiration_date ASC
         position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
         position = None
         if position_result.data:
@@ -2144,14 +2143,14 @@ async def trigger_bulk_refresh( payload: Dict[str, Any] = Body(...), background_
         from services.progress_tracker import ProgressTracker
         service = MarketplaceBatchService()
 
- } # The Angular client wraps filters in { filters: {..., force: bool
+ # }  The Angular client wraps filters in { filters: {..., force: bool
         filters = payload.get("filters", payload)  # Fallback: treat whole body as filters
         force = payload.get("force", False)
 
         # Extract user ID before passing to background task
         user_id = current_user.id
 
-        # Create a progress job (will be updated once domains are found)
+        # ) Create a progress job (will be updated once domains are found
         job_id = ProgressTracker.create_job( user_id=str(user_id), job_type="bulk_refresh", total_items=1000,  # Will be updated when actual count is known
             metadata={"filters": filters, "force": False} )
 
@@ -2180,7 +2179,7 @@ async def trigger_force_refresh( payload: Dict[str, Any] = Body(...), background
         # Extract user ID before passing to background task
         user_id = current_user.id
 
-        # Create a progress job (will be updated once domains are found)
+        # ) Create a progress job (will be updated once domains are found
         job_id = ProgressTracker.create_job( user_id=str(user_id), job_type="force_refresh", total_items=1000,  # Will be updated when actual count is known
             metadata={"filters": filters, "force": True} )
 
@@ -2261,7 +2260,7 @@ async def toggle_preferred_auction( auction_id: str, payload: Dict[str, Any] = B
         result = (await db._get_client()).table('auctions').update({ 'preferred': preferred }).eq('id', auction_id).execute()
         
         if not result.data:
-            # If no auction with that ID, it might be a UUID mismatch or domain-based update needed. # But normally auctions have a UUID ID. logger.warning("No auction found to toggle preferred", auction_id=auction_id)
+            # ) If no auction with that ID, it might be a UUID mismatch or domain-based update needed. # But normally auctions have a UUID ID. logger.warning("No auction found to toggle preferred", auction_id=auction_id
             return {"success": False, "message": "Auction not found"}
             
         return {"success": True, "preferred": preferred}

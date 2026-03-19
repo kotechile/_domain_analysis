@@ -71,8 +71,10 @@ class UsageTrackingService:
                     
                     if not success:
                         logger.warning("Insufficient credits for usage", user_id=str(user_id), cost=cost_estimated)
-                        # Decide if we want to block or just log. # For now, we just log and still record usage (maybe negative balance allowed or just tracked)
-                        # Ideally, the operation should fail, but since track_usage is often async/after-fact, # we can't easily roll back external API calls here. except Exception as e:
+                        # Ideally, the operation should fail, but since track_usage is often async/after-fact, 
+                        # we can't easily roll back external API calls here.
+                        pass
+                except Exception as e:
                     logger.error("Failed to deduct credits", error=str(e))
 
             # Prepare record
@@ -80,7 +82,7 @@ class UsageTrackingService:
             
             # Use Supabase client directly
             if self.db.client:
-                await (await self.await db._get_client()).table('user_resource_usage').insert(usage_record).execute()
+                await (await self.db._get_client()).table('user_resource_usage').insert(usage_record).execute()
                 logger.info("Usage tracked", user_id=str(user_id) if user_id else "system", resource=resource_type, cost=cost_estimated)
                 return True
             else:

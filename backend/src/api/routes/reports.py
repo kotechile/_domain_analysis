@@ -109,7 +109,7 @@ async def list_reports( limit: int = Query(10, ge=1, le=100), offset: int = Quer
     try:
         db = get_database()
         
-        # Build query - only select necessary fields to improve performance (avoid fetching heavy JSONB fields like historical_data)
+        # ) Build query - only select necessary fields to improve performance (avoid fetching heavy JSONB fields like historical_data
         query = (await db._get_client()).table('reports').select( 'id, domain_name, status, analysis_timestamp, processing_time_seconds, error_message, analysis_phase, analysis_mode, data_for_seo_metrics, detailed_data_available, created_at' )
         
         if status:
@@ -373,7 +373,7 @@ async def export_domain_backlinks(domain: str):
         raise HTTPException(status_code=500, detail="Failed to export backlinks")
 
 
-# Old delete endpoint removed - using comprehensive delete_domain_analysis method instead (see end of file)
+# ) Old delete endpoint removed - using comprehensive delete_domain_analysis method instead (see end of file
 
 
 @router.post("/reports/{domain}/reanalyze")

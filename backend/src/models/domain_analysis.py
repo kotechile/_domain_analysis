@@ -140,7 +140,7 @@ class WaybackMachineSummary(BaseModel):
 
 class LLMAnalysis(BaseModel):
     """LLM-generated analysis results"""
-    # Legacy fields (kept for backward compatibility)
+    # ) Legacy fields (kept for backward compatibility
     good_highlights: List[str] = Field(default_factory=list, max_items=5)
     bad_highlights: List[str] = Field(default_factory=list, max_items=5)
     suggested_niches: List[str] = Field(default_factory=list, max_items=5)
@@ -267,7 +267,7 @@ class DomainAnalysisReport(BaseModel):
     analysis_phase: AnalysisPhase = AnalysisPhase.ESSENTIAL
     analysis_mode: AnalysisMode = AnalysisMode.LEGACY
     progress_data: Optional[ProgressInfo] = None
-    # Backlinks page summary (from DataForSEO backlinks summary endpoint)
+    # ) Backlinks page summary (from DataForSEO backlinks summary endpoint
     # Using forward reference since BulkPageSummaryResult is defined later
     backlinks_page_summary: Optional['BulkPageSummaryResult'] = None
     historical_data: Optional['HistoricalData'] = None

@@ -18,11 +18,11 @@ from models.domain_analysis import ( BulkDomainAnalysis, NamecheapDomain, Namech
 logger = structlog.get_logger()
 router = APIRouter()
 
-# In-memory storage for CSV files (keyed by file_id)
+# ) In-memory storage for CSV files (keyed by file_id
 # In production, consider using Redis or a proper cache
 _csv_cache: Dict[str, Dict[str, Any]] = {}
 
-# In-memory storage for scored domains (keyed by file_id)
+# ) In-memory storage for scored domains (keyed by file_id
 _csv_scored_cache: Dict[str, Dict[str, Any]] = {}
 
 
@@ -83,7 +83,7 @@ async def upload_namecheap_csv( file: UploadFile = File(...), load_to_db: bool =
             file_id = str(uuid.uuid4())
             _csv_cache[file_id] = { "domains": domains, "filename": file.filename, "uploaded_at": datetime.now(), "total_count": len(domains) }
             
-            # Score domains automatically (with error handling)
+            # ) Score domains automatically (with error handling
             logger.info("Starting domain scoring", file_id=file_id, domain_count=len(domains))
             passed_domains = []
             failed_domains = []
@@ -104,7 +104,7 @@ async def upload_namecheap_csv( file: UploadFile = File(...), load_to_db: bool =
                 passed_domains = [s for s in scored_domains if s.filter_status == 'PASS']
                 failed_domains = [s for s in scored_domains if s.filter_status == 'FAIL']
                 
-                # Get top 3000 domain names (for auto-trigger logic)
+                # ) Get top 3000 domain names (for auto-trigger logic
                 top_3000_domains = [s.domain.name for s in scored_domains[:3000]]
                 
                 # Store scored domains in cache
@@ -119,7 +119,7 @@ async def upload_namecheap_csv( file: UploadFile = File(...), load_to_db: bool =
                 # Store empty scoring cache to indicate scoring failed
                 _csv_scored_cache[file_id] = { "scored_domains": [], "ranked_domains": [], "top_3000_domains": [], "scored_at": datetime.now(), "passed_count": 0, "failed_count": 0, "scoring_error": scoring_error }
             
-            # Clean up old cache entries (older than 1 hour)
+            # ) Clean up old cache entries (older than 1 hour
             cutoff_time = datetime.now() - timedelta(hours=1)
             keys_to_remove = [ k for k, v in _csv_cache.items() 
                 if v.get("uploaded_at", datetime.min) < cutoff_time
@@ -191,8 +191,8 @@ async def get_csv_domains( file_id: str = Query(..., description="File ID return
         ranked_scored_map = {}  # Map normalized domain name -> ScoredDomain for ranked domains
         ranked_scored_domains = []  # Store ScoredDomain objects for PASS filter
         
-        # Check if we should use ranked domains (when sorting by score/rank OR filtering by PASS)
-        # Also use ranked domains if filter_status is PASS (only show passed domains)
+        # ) Check if we should use ranked domains (when sorting by score/rank OR filtering by PASS
+        # ) Also use ranked domains if filter_status is PASS (only show passed domains
         use_ranked_domains = (sort_by in ['total_meaning_score', 'rank'] or filter_status == 'PASS') and scored_cache
         
         if scored_cache:
@@ -240,7 +240,7 @@ async def get_csv_domains( file_id: str = Query(..., description="File ID return
                 
                 logger.info("Built scored domains map", map_size=len(scored_domains_map), sample_keys=list(scored_domains_map.keys())[:5])
                 
-                # Get ranked domains if sorting by score or filtering by PASS (keep as ScoredDomain objects for score attachment)
+                # ) Get ranked domains if sorting by score or filtering by PASS (keep as ScoredDomain objects for score attachment
                 if use_ranked_domains:
                     ranked_scored_domains = scored_cache.get("ranked_domains", [])
                     logger.info("Processing ranked domains", count=len(ranked_scored_domains), filter_status=filter_status, sort_by=sort_by)
@@ -276,7 +276,7 @@ async def get_csv_domains( file_id: str = Query(..., description="File ID return
                         except Exception as e:
                             logger.warning("Failed to add ranked domain to map", error=str(e), exc_info=True)
                     
-                    # Build ranked_domains_list for reference (used when not filtering by PASS)
+                    # ) Build ranked_domains_list for reference (used when not filtering by PASS
                     # When filtering by PASS, we'll rebuild this list directly from ranked_scored_domains
                     if ranked_scored_domains:
                         try:
@@ -387,10 +387,10 @@ async def get_csv_domains( file_id: str = Query(..., description="File ID return
             if search and search.lower() not in domain_name.lower():
                 continue
             
-            # Filter by status (PASS/FAIL) - but skip if we're already using ranked domains (all PASS)
+            # ) Filter by status (PASS/FAIL) - but skip if we're already using ranked domains (all PASS
             # Only apply this filter if we're NOT using ranked domains for PASS
             if filter_status and filter_status in ['PASS', 'FAIL']:
-                # If we're using ranked domains and filtering by PASS, skip this check (all are PASS)
+                # ) If we're using ranked domains and filtering by PASS, skip this check (all are PASS
                 if not (use_ranked_domains and filter_status == 'PASS' and ranked_scored_domains):
                     # Normalize domain name for lookup
                     normalized_domain_name = normalize_domain_name(domain.name)
@@ -408,7 +408,7 @@ async def get_csv_domains( file_id: str = Query(..., description="File ID return
                         # If no score data and filtering by PASS, skip it
                         if filter_status == 'PASS':
                             continue
-                        # If filtering by FAIL and no score, include it (likely failed)
+                        # ) If filtering by FAIL and no score, include it (likely failed
                         # This handles edge cases
             
             filtered_domains.append(domain)
@@ -524,7 +524,7 @@ async def get_csv_domains( file_id: str = Query(..., description="File ID return
                             domain_dict["lexical_frequency_score"] = scored.lexical_frequency_score
                             domain_dict["semantic_value_score"] = scored.semantic_value_score
                             domain_dict["rank"] = scored.rank
-                    # If no match found, domain likely failed filtering (no score)
+                    # ) If no match found, domain likely failed filtering (no score
                     # This is expected for domains that didn't pass Stage 1 filtering
                 except Exception as e:
                     logger.warning("Failed to add scoring data", domain=domain.name, error=str(e), exc_info=True)
@@ -551,7 +551,7 @@ async def get_csv_domains( file_id: str = Query(..., description="File ID return
         
         response = NamecheapDomainListResponse( success=True, count=len(domains_objects), domains=domains_objects, total_count=total_count, has_more=(offset + limit < total_count) )
         
-        # Add scoring stats to response (convert to dict to include extra fields)
+        # ) Add scoring stats to response (convert to dict to include extra fields
         response_dict = response.dict()
         if scoring_stats:
             response_dict["scoring_stats"] = scoring_stats

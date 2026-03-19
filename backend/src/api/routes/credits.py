@@ -86,7 +86,7 @@ async def get_payments( limit: int = 20, offset: int = 0, current_user = Depends
         # Or just get all and filter in python if the table is small
         transactions = credits_service.get_transactions(current_user.id, limit=100, offset=0)
         
-        # Filter for top-ups/purchases (amount > 0)
+        # ) Filter for top-ups/purchases (amount > 0
         payments = [t for t in transactions if t.get('transaction_type') in ['purchase', 'admin_add'] or t.get('amount', 0) > 0]
         
         # Apply limit/offset manually if we filtered
@@ -102,7 +102,7 @@ async def get_payments( limit: int = 20, offset: int = 0, current_user = Depends
         logger.error("Failed to get payments", user_id=str(current_user.id), error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve payment history")
 
-# Internal/Admin endpoint for adding credits (Mocking purchase flow)
+# ) Internal/Admin endpoint for adding credits (Mocking purchase flow
 # In production, this would be a webhook from Stripe/LemonSqueezy
 @router.post("/credits/purchase", response_model=PurchaseResponse)
 async def purchase_credits( request: PurchaseRequest, current_user = Depends(get_current_user) ):

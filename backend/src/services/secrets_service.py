@@ -41,7 +41,7 @@ class SecretsService:
                 return self._cache[service_name]
             
             # Query Supabase for the secret
-            result = (await self.await db._get_client()).table('secrets').select('credentials').eq('service_name', service_name).execute()
+            result = (await self.db._get_client()).table('secrets').select('credentials').eq('service_name', service_name).execute()
             
             if not result.data:
                 logger.warning("Secret not found in database", service=service_name)
@@ -63,7 +63,7 @@ class SecretsService:
     async def get_dataforseo_credentials(self) -> Optional[Dict[str, str]]:
         """Get DataForSEO credentials from api_keys table"""
         # Retrieve from database which queries api_keys table directly
-        credentials = self.await db.get_dataforseo_key()
+        credentials = await self.db.get_dataforseo_key()
         if not credentials:
             return None
             
@@ -88,7 +88,7 @@ class SecretsService:
     async def get_active_llm_config(self) -> Optional[Dict[str, Any]]:
         """
         Get the currently active LLM provider configuration. """
-        return await self.await db.get_default_llm_provider()
+        return await self.db.get_default_llm_provider()
     
     async def get_gemini_credentials(self) -> Optional[str]:
         """Get Gemini API key"""
@@ -219,7 +219,7 @@ class SecretsService:
             True if successful, False otherwise
         """
         try:
-            result = (await self.await db._get_client()).table('secrets').upsert({ 'service_name': service_name, 'credentials': credentials, 'is_active': True, 'updated_at': datetime.utcnow().isoformat() }).execute()
+            result = (await self.db._get_client()).table('secrets').upsert({ 'service_name': service_name, 'credentials': credentials, 'is_active': True, 'updated_at': datetime.utcnow().isoformat() }).execute()
             
             if result.data:
                 # Clear cache for this service

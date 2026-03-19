@@ -35,8 +35,8 @@ class AutoTriggerService:
             if not domain_names:
                 return set()
             
-            # Query database for existing domains (check if they have summary data)
-            existing_domains = self.await db.get_bulk_domains_by_names(domain_names)
+            # ) Query database for existing domains (check if they have summary data
+            existing_domains = await self.db.get_bulk_domains_by_names(domain_names)
             existing_set = {d.domain_name for d in existing_domains if d.backlinks_bulk_page_summary is not None}
             
             logger.info("Checked existing domains", checked=len(domain_names), existing=len(existing_set))
@@ -70,7 +70,7 @@ class AutoTriggerService:
             if top_rank_threshold is None:
                 top_rank_threshold = self.settings.TOP_RANK_THRESHOLD
             
-            # Get top N domains (only PASS domains)
+            # ) Get top N domains (only PASS domains
             top_domains = [s for s in ranked_domains if s.filter_status == 'PASS'][:top_n]
             
             if not top_domains:
