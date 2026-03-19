@@ -141,7 +141,7 @@ async def list_reports(
         query = query.order('created_at', desc=True).range(offset, offset + limit - 1)
         
         try:
-            await result = await query.execute()
+            result = await query.execute()
         except Exception as query_error:
             logger.error("Database query failed in list_reports", error=str(query_error))
             raise HTTPException(status_code=500, detail="Failed to query reports from database")

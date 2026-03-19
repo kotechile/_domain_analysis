@@ -54,7 +54,7 @@ async def test_json_path():
             await (await db._get_client()).table('auctions_staging').insert(staging_batch).execute()
         
         # Check if they are there
-        await res = (await db._get_client()).table('auctions_staging').select('job_id').eq('job_id', job_id).execute()
+        res = await (await db._get_client()).table('auctions_staging').select('job_id').eq('job_id', job_id).execute()
         print(f"Verification: Found {len(res.data)} records with job_id {job_id}")
         
         # Cleanup

@@ -18,16 +18,16 @@ async def debug_offer_types():
         db = get_database()
         
         # Query to get count of each offer_type
-        await result = (await db._get_client()).table('auctions').select('offer_type', count='exact').execute()
+        result = await (await db._get_client()).table('auctions').select('offer_type', count='exact').execute()
         
         # Get sample records for each offer_type
-        await buy_now_sample = (await db._get_client()).table('auctions').select('domain, offer_type').eq('offer_type', 'buy_now').limit(5).execute()
-        await auction_sample = (await db._get_client()).table('auctions').select('domain, offer_type').eq('offer_type', 'auction').limit(5).execute()
-        await null_sample = (await db._get_client()).table('auctions').select('domain, offer_type').is_('offer_type', 'null').limit(5).execute()
+        buy_now_sample = await (await db._get_client()).table('auctions').select('domain, offer_type').eq('offer_type', 'buy_now').limit(5).execute()
+        auction_sample = await (await db._get_client()).table('auctions').select('domain, offer_type').eq('offer_type', 'auction').limit(5).execute()
+        null_sample = await (await db._get_client()).table('auctions').select('domain, offer_type').is_('offer_type', 'null').limit(5).execute()
         
         # Count by offer_type using a raw query approach
         # Since Supabase doesn't support GROUP BY directly, we'll use RPC or count manually
-        await all_records = (await db._get_client()).table('auctions').select('offer_type').limit(1000).execute()
+        all_records = await (await db._get_client()).table('auctions').select('offer_type').limit(1000).execute()
         
         counts = {}
         for record in all_records.data:

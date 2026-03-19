@@ -311,7 +311,7 @@ class AuctionScoringService:
             
             # Fallback to standard approach
             logger.info("Using standard ranking recalculation")
-            await result = (await self.db_service._get_client()).rpc('recalculate_auction_rankings').execute()
+            result = await (await self.db_service._get_client()).rpc('recalculate_auction_rankings').execute()
             
             if result.data:
                 logger.info("Recalculated rankings", result=result.data)

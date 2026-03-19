@@ -16,20 +16,20 @@ async def check_db_counts():
     print("--- Auctions Staging Counts ---")
     try:
         # Check Total counts
-        await res_total = (await db._get_client()).table('auctions_staging').select('domain', count='exact').execute()
+        res_total = await (await db._get_client()).table('auctions_staging').select('domain', count='exact').execute()
         print(f"Total records in staging: {res_total.count}")
 
         # Check records WITH job_id
-        await res_job = (await db._get_client()).table('auctions_staging').select('job_id', count='exact').not_.is_('job_id', 'null').execute()
+        res_job = await (await db._get_client()).table('auctions_staging').select('job_id', count='exact').not_.is_('job_id', 'null').execute()
         print(f"Records with JOB_ID: {res_job.count}")
 
         # Check records WITHOUT job_id
-        await res_no_job = (await db._get_client()).table('auctions_staging').select('job_id', count='exact').is_('job_id', 'null').execute()
+        res_no_job = await (await db._get_client()).table('auctions_staging').select('job_id', count='exact').is_('job_id', 'null').execute()
         print(f"Records without JOB_ID (None): {res_no_job.count}")
 
         # Sample some job_ids
         if res_job.count > 0:
-            await res_samples = (await db._get_client()).table('auctions_staging').select('job_id, auction_site').not_.is_('job_id', 'null').limit(10).execute()
+            res_samples = await (await db._get_client()).table('auctions_staging').select('job_id, auction_site').not_.is_('job_id', 'null').limit(10).execute()
             print("Sample active Jobs in staging:", res_samples.data)
 
     except Exception as e:
@@ -40,14 +40,14 @@ async def check_db_counts():
         # Check counts per site
         sites = ['godaddy', 'namecheap', 'namesilo']
         for site in sites:
-            await res = (await db._get_client()).table('auctions').select('domain', count='exact').eq('auction_site', site).execute()
+            res = await (await db._get_client()).table('auctions').select('domain', count='exact').eq('auction_site', site).execute()
             print(f"Site: {site}, Count: {res.count}")
     except Exception as e:
         print(f"Error checking auctions: {e}")
 
     print("\n--- Job Progress Status ---")
     try:
-        await res = (await db._get_client()).table('csv_upload_progress').select('*').order('created_at', desc=True).limit(10).execute()
+        res = await (await db._get_client()).table('csv_upload_progress').select('*').order('created_at', desc=True).limit(10).execute()
         for r in res.data:
             print(f"Job: {r['job_id']}, Site: {r['auction_site']}, Status: {r['status']}, Stage: {r['current_stage']}, Records: {r.get('processed_records', 0)}/{r.get('total_records', 0)}, Created: {r['created_at']}")
     except Exception as e:
