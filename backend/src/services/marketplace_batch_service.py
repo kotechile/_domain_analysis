@@ -85,9 +85,9 @@ class MarketplaceBatchService:
 
             logger.info(f"[Background] Credits deducted successfully", user_id=str(user_id), cost=cost)
 
-            # ) 3. Trigger DataForSEO via N8N (in smaller batches to avoid overwhelming N8N
+            # ) 3. Trigger DataForSEO via N8N (increase batch size to 1000 as requested
             import asyncio
-            batch_size = 20  # Reduced from 25 to prevent overwhelming N8N
+            batch_size = 1000  # Increased from 20 to 1000 for efficiency
             total_batches = (len(domain_names) + batch_size - 1) // batch_size
             logger.info(f"[Background] Triggering N8N for {len(domain_names)} domains in {total_batches} batches", user_id=str(user_id), domain_count=len(domain_names), batches=total_batches)
 
@@ -109,10 +109,9 @@ class MarketplaceBatchService:
                     if job_id:
                         await ProgressTracker.update_progress( job_id, processed_items=processed_count, failed_items=failed_count, current_batch=batch_num, total_batches=total_batches, message=f"Batch {batch_num}/{total_batches} sent to N8N ({processed_count}/{len(domain_names)} domains)" )
 
-                    # Add longer delay between batches to prevent overwhelming the system
-                    # and allow webhook processing to complete before next batch
+                    # Send next batch if any after a small delay
                     if i + batch_size < len(domain_names):
-                        await asyncio.sleep(8)  # Increased from 5s to 8s to give N8N more time
+                        await asyncio.sleep(2)
                 except Exception as n8n_err:
                     failed_count += len(batch)
                     logger.error(f"[Background] Failed to trigger N8N batch {batch_num}", user_id=str(user_id), error=str(n8n_err))
