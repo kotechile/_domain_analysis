@@ -41,7 +41,7 @@ class SecretsService:
                 return self._cache[service_name]
             
             # Query Supabase for the secret
-            result = (await self.db._get_client()).table('secrets').select('credentials').eq('service_name', service_name).execute()
+            result = await (await self.db._get_client()).table('secrets').select('credentials').eq('service_name', service_name).execute()
             
             if not result.data:
                 logger.warning("Secret not found in database", service=service_name)
@@ -92,7 +92,7 @@ class SecretsService:
     
     async def get_gemini_credentials(self) -> Optional[str]:
         """Get Gemini API key"""
-        credentials = self.get_secret('gemini')
+        credentials = await self.get_secret('gemini')
         if not credentials:
             return None
         
@@ -100,7 +100,7 @@ class SecretsService:
     
     async def get_openai_credentials(self) -> Optional[str]:
         """Get OpenAI API key"""
-        credentials = self.get_secret('openai')
+        credentials = await self.get_secret('openai')
         if not credentials:
             return None
         
@@ -108,7 +108,7 @@ class SecretsService:
     
     async def get_wayback_machine_config(self) -> Dict[str, str]:
         """Get Wayback Machine configuration"""
-        credentials = self.get_secret('wayback_machine')
+        credentials = await self.get_secret('wayback_machine')
         if not credentials:
             return { 'api_url': 'http://web.archive.org/cdx/search/cdx' }
         
@@ -116,7 +116,7 @@ class SecretsService:
     
     async def get_google_trends_credentials(self) -> Optional[str]:
         """Get Google Trends API key"""
-        credentials = self.get_secret('google_trends')
+        credentials = await self.get_secret('google_trends')
         if not credentials:
             return None
         
@@ -130,7 +130,7 @@ class SecretsService:
             logger.error("Invalid affiliate network", network=network)
             return None
         
-        credentials = self.get_secret(network)
+        credentials = await self.get_secret(network)
         if not credentials:
             return None
         
@@ -144,7 +144,7 @@ class SecretsService:
             logger.error("Invalid social media platform", platform=platform)
             return None
         
-        credentials = self.get_secret(platform)
+        credentials = await self.get_secret(platform)
         if not credentials:
             return None
         
@@ -158,7 +158,7 @@ class SecretsService:
             logger.error("Invalid content optimization service", service=service)
             return None
         
-        credentials = self.get_secret(service)
+        credentials = await self.get_secret(service)
         if not credentials:
             return None
         
@@ -172,7 +172,7 @@ class SecretsService:
             logger.error("Invalid export platform", platform=platform)
             return None
         
-        credentials = self.get_secret(platform)
+        credentials = await self.get_secret(platform)
         if not credentials:
             return None
         
@@ -180,7 +180,7 @@ class SecretsService:
     
     async def get_linkup_credentials(self) -> Optional[str]:
         """Get LinkUp API credentials"""
-        credentials = self.get_secret('linkup')
+        credentials = await self.get_secret('linkup')
         if not credentials:
             return None
         
@@ -219,7 +219,7 @@ class SecretsService:
             True if successful, False otherwise
         """
         try:
-            result = (await self.db._get_client()).table('secrets').upsert({ 'service_name': service_name, 'credentials': credentials, 'is_active': True, 'updated_at': datetime.utcnow().isoformat() }).execute()
+            result = await (await self.db._get_client()).table('secrets').upsert({ 'service_name': service_name, 'credentials': credentials, 'is_active': True, 'updated_at': datetime.utcnow().isoformat() }).execute()
             
             if result.data:
                 # Clear cache for this service

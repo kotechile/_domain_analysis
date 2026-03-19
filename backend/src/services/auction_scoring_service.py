@@ -266,7 +266,7 @@ class AuctionScoringService:
         
         try:
             # Step 1: Fetch unprocessed batch with pre-scoring
-            auction_records = self.get_unprocessed_batch(batch_size, config_id)
+            auction_records = await self.get_unprocessed_batch(batch_size, config_id)
             
             if not auction_records:
                 return { 'success': True, 'processed_count': 0, 'message': 'No unprocessed records found' }
@@ -275,21 +275,21 @@ class AuctionScoringService:
             scores = self.calculate_complex_scores(auction_records)
             
             # Step 3: Update scores in database
-            updated_count = self.update_scores_in_database(scores)
+            updated_count = await self.update_scores_in_database(scores)
             
             # ) Step 4: Recalculate rankings if requested (but skip if large dataset to avoid timeout
             ranking_stats = {}
             if recalculate_rankings_after:
                 try:
                     # Check current scored count to estimate if it might timeout
-                    stats = self.get_processing_stats()
+                    stats = await self.get_processing_stats()
                     scored_count = stats.get('scored_count', 0)
                     
                     if scored_count > 100000:
                         logger.warning("Very large dataset detected, skipping ranking recalculation to avoid timeout", scored_count=scored_count)
                         ranking_stats = { 'success': False, 'skipped': True, 'reason': 'Dataset too large, will recalculate after all processing complete', 'scored_count': scored_count }
                     else:
-                        ranking_stats = self.recalculate_rankings()
+                        ranking_stats = await self.recalculate_rankings()
                 except Exception as e:
                     # Log but don't fail the batch if ranking recalculation times out
                     error_msg = str(e)

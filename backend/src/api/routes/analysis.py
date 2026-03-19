@@ -47,16 +47,16 @@ async def analyze_domain( request: DomainAnalysisRequest, background_tasks: Back
         # Determine action and cost
         # Map LEGACY mode to ai_domain_summary, DUAL/ASYNC to deep_content_analysis
         action_name = "ai_domain_summary" if request.mode == AnalysisMode.LEGACY else "deep_content_analysis"
-        cost = pricing_service.calculate_action_cost(action_name)
+        cost = await pricing_service.calculate_action_cost(action_name)
         
         # Check balance
-        balance = credits_service.get_balance(current_user.id)
+        balance = await credits_service.get_balance(current_user.id)
         if balance < cost:
             raise HTTPException( status_code=402, detail=f"Insufficient credits. This analysis requires {cost} credits but you only have {balance}." )
             
         # Deduct credits
         description = f"Domain analysis for {request.domain} ({'Summary' if action_name == 'ai_domain_summary' else 'Deep'})"
-        success = credits_service.deduct_credits(current_user.id, cost, description, f"analysis_{request.domain}")
+        success = await credits_service.deduct_credits(current_user.id, cost, description, f"analysis_{request.domain}")
         
         if not success:
             raise HTTPException(status_code=402, detail="Insufficient credits or credit deduction failed")
@@ -193,7 +193,7 @@ async def analyze_domain_v2( request: DomainAnalysisRequest, mode: str = "dual" 
         analysis_service = AnalysisService()
         
         # Start analysis with specified mode
-        report = analysis_service.analyze_domain(request.domain, mode=mode)
+        report = await analysis_service.analyze_domain(request.domain, mode=mode)
         
         return AnalysisResponse( success=True, message="Analysis completed successfully", report_id=report.domain_name, estimated_completion_time=int(report.processing_time_seconds) if report.processing_time_seconds else None )
         
@@ -315,11 +315,11 @@ async def refresh_analysis_data(domain: str, data_types: Optional[list] = None, 
             
             # Collect fresh data
             if data_type == DetailedDataType.BACKLINKS:
-                data = analysis_service.dataforseo_async_service.get_detailed_backlinks_async(domain, 1000)
+                data = await analysis_service.dataforseo_async_service.get_detailed_backlinks_async(domain, 1000)
             elif data_type == DetailedDataType.KEYWORDS:
-                data = analysis_service.dataforseo_async_service.get_detailed_keywords_async(domain, 1000)
+                data = await analysis_service.dataforseo_async_service.get_detailed_keywords_async(domain, 1000)
             elif data_type == DetailedDataType.REFERRING_DOMAINS:
-                data = analysis_service.dataforseo_async_service.get_referring_domains_async(domain, 800)
+                data = await analysis_service.dataforseo_async_service.get_referring_domains_async(domain, 800)
             
             if data:
                 from models.domain_analysis import DetailedAnalysisData

@@ -53,17 +53,15 @@ async def health_check():
                 logger.warning("SUPABASE_URL contains 'sb_domain' - verify this matches your actual server URL", url=supabase_url)
             
             # Try to get or initialize database
-            # If init_database fails due to table creation, that's okay - we just need the client
             try:
-                db = init_database()
-            except Exception as init_error:
-                # If init fails, try to get existing instance or create a new one
-                logger.debug("init_database failed, trying to get existing instance", error=str(init_error))
-                from services.database import get_database, DatabaseService
+                db = get_database()
+            except RuntimeError:
+                # If not initialized, try to initialize it now
                 try:
-                    db = get_database()
-                except RuntimeError:
-                    # ) No existing instance, create a new one (client should still be initialized
+                    db = await init_database()
+                except Exception as init_error:
+                    logger.debug("init_database failed, trying new instance", error=str(init_error))
+                    from services.database import DatabaseService
                     db = DatabaseService()
             
             if db.client is None:
@@ -72,7 +70,7 @@ async def health_check():
             else:
                 # ) Test with secrets table first (known to exist
                 try:
-                    result = (await db._get_client()).table('secrets').select('id').limit(1).execute()
+                    result = await (await db._get_client()).table('secrets').select('id').limit(1).execute()
                     # Test reports table access
                     try:
                         await (await db._get_client()).table('reports').select('id').limit(1).execute()
@@ -118,9 +116,15 @@ async def health_check():
             await service.health_check()
         
         # Run external API checks in parallel with timeouts
-        services_status['dataforseo'] = check_service_with_timeout( 'DataForSEO', check_dataforseo, timeout=5.0 )
-        services_status['wayback_machine'] = check_service_with_timeout( 'Wayback Machine', check_wayback, timeout=10.0 )
-        services_status['llm'] = check_service_with_timeout( 'LLM', check_llm, timeout=5.0 )
+        dataforseo_status, wayback_status, llm_status = await asyncio.gather(
+            check_service_with_timeout('DataForSEO', check_dataforseo, timeout=5.0),
+            check_service_with_timeout('Wayback Machine', check_wayback, timeout=10.0),
+            check_service_with_timeout('LLM', check_llm, timeout=5.0)
+        )
+        
+        services_status['dataforseo'] = dataforseo_status
+        services_status['wayback_machine'] = wayback_status
+        services_status['llm'] = llm_status
         
         # Determine overall status
         overall_status = 'healthy' if all(status == 'healthy' for status in services_status.values()) else 'degraded'
@@ -191,7 +195,7 @@ async def database_diagnostic():
     
     # Check 3: Async init
     try:
-        db = init_database()
+        db = await init_database()
         diagnostic["checks"]["async_init"] = { "status": "ok" if db.client is not None else "failed", "client_is_none": db.client is None }
         if db.client is None:
             return diagnostic
@@ -201,7 +205,7 @@ async def database_diagnostic():
     
     # Check 4: Secrets table access
     try:
-        result = (await db._get_client()).table('secrets').select('id').limit(1).execute()
+        result = await (await db._get_client()).table('secrets').select('id').limit(1).execute()
         diagnostic["checks"]["secrets_table"] = { "status": "ok", "records_found": len(result.data) }
     except Exception as e:
         diagnostic["checks"]["secrets_table"] = { "status": "error", "error": str(e), "error_type": type(e).__name__ }
@@ -209,7 +213,7 @@ async def database_diagnostic():
     
     # Check 5: Reports table access
     try:
-        result = (await db._get_client()).table('reports').select('id').limit(1).execute()
+        result = await (await db._get_client()).table('reports').select('id').limit(1).execute()
         diagnostic["checks"]["reports_table"] = { "status": "ok", "records_found": len(result.data) }
     except Exception as e:
         diagnostic["checks"]["reports_table"] = { "status": "error", "error": str(e), "error_type": type(e).__name__ }
@@ -289,7 +293,7 @@ async def test_db_connection():
         try:
             import uuid
             test_id = str(uuid.uuid4())
-            (await db._get_client()).table('csv_upload_progress').insert({ 'job_id': f"test_{test_id}", 'filename': 'test_connectivity.csv', 'auction_site': 'test', 'status': 'test' }).execute()
+            await (await db._get_client()).table('csv_upload_progress').insert({ 'job_id': f"test_{test_id}", 'filename': 'test_connectivity.csv', 'auction_site': 'test', 'status': 'test' }).execute()
             
             # Cleanup
             await (await db._get_client()).table('csv_upload_progress').delete().eq('job_id', f"test_{test_id}").execute()

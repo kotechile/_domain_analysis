@@ -114,7 +114,7 @@ class AnalysisService:
             # Phase 3: Historical Data Collection
             progress_tracker.start_operation("historical_data")
             await self._update_progress_data(report, "Collecting historical ranking and traffic data", [], progress_tracker)
-            historical_data = self.get_or_fetch_historical_data(domain)
+            historical_data = await self.get_or_fetch_historical_data(domain)
             if historical_data:
                 report.historical_data = historical_data
                 # report is saved inside get_or_fetch_historical_data, but we keep it in memory
@@ -190,7 +190,7 @@ class AnalysisService:
             if use_n8n_summary:
                 # Use N8N for backlinks summary
                 logger.info("Using N8N for backlinks summary", domain=domain)
-                n8n_result = self.n8n_service.trigger_backlinks_summary_workflow(domain)
+                n8n_result = await self.n8n_service.trigger_backlinks_summary_workflow(domain)
                 if n8n_result:
                     logger.info("N8N summary workflow triggered, waiting for callback", domain=domain, request_id=n8n_result.get("request_id"))
                     
@@ -224,7 +224,7 @@ class AnalysisService:
             
             # ) Get domain analytics data (includes backlinks summary if not using N8N
             # Pass use_n8n_summary_override=use_n8n_summary to ensure it falls back if N8N failed or is disabled
-            domain_rank_data = self.dataforseo_service.get_domain_analytics(domain, user_id, use_n8n_summary_override=use_n8n_summary)
+            domain_rank_data = await self.dataforseo_service.get_domain_analytics(domain, user_id, use_n8n_summary_override=use_n8n_summary)
             
             # If we got summary from N8N, merge it into domain_rank_data
             if use_n8n_summary and backlinks_summary_data:
@@ -234,7 +234,7 @@ class AnalysisService:
                 logger.info("Merged N8N summary data into domain analytics", domain=domain)
             
             # Get wayback machine data
-            wayback_data = self.wayback_service.get_domain_history(domain)
+            wayback_data = await self.wayback_service.get_domain_history(domain)
             
             # ) Check for existing auction data to use as fallback for metrics (e.g. traffic
             auction_data = None
@@ -342,7 +342,7 @@ class AnalysisService:
                     detailed_status_messages.append("Triggering N8N workflow for backlinks...")
                     await self._update_progress_data(report, "Triggering N8N workflow for backlinks...", detailed_status_messages, progress_tracker)
                     
-                    n8n_result = self.n8n_service.trigger_backlinks_workflow(domain, 10000)
+                    n8n_result = await self.n8n_service.trigger_backlinks_workflow(domain, 10000)
                     if n8n_result:
                         logger.info("N8N workflow triggered, waiting for callback", domain=domain, request_id=n8n_result.get("request_id"))
                         detailed_status_messages.append("N8N workflow triggered, waiting for results...")
@@ -406,7 +406,7 @@ class AnalysisService:
                     detailed_status_messages.append("Collecting keywords data...")
                     await self._update_progress_data(report, "Collecting keywords data...", detailed_status_messages, progress_tracker)
                     
-                    keywords_data = self.dataforseo_async_service.get_detailed_keywords_async(domain, 10000, user_id)
+                    keywords_data = await self.dataforseo_async_service.get_detailed_keywords_async(domain, 10000, user_id)
                     if keywords_data and keywords_data.get("items"):
                         detailed_data_available["keywords"] = True
                         operation_logger.log_data_collection("keywords", record_count=len(keywords_data.get("items", [])), message="Keywords analysis completed")
@@ -436,7 +436,7 @@ class AnalysisService:
                     else:
                         logger.warning("Async keywords collection returned None, falling back to legacy", domain=domain)
                         # Fall back to legacy mode for keywords
-                        keywords_data = self.dataforseo_service.get_detailed_keywords(domain, 1000, user_id)
+                        keywords_data = await self.dataforseo_service.get_detailed_keywords(domain, 1000, user_id)
                         if keywords_data:
                             detailed_data_available["keywords"] = True
                             operation_logger.log_data_collection("keywords", record_count=len(keywords_data.get("items", [])), message="Keywords analysis completed (legacy)")
@@ -471,7 +471,7 @@ class AnalysisService:
                     detailed_status_messages.append("Collecting referring domains data...")
                     await self._update_progress_data(report, "Collecting referring domains data...", detailed_status_messages, progress_tracker)
                     
-                    referring_domains_data = self.dataforseo_async_service.get_referring_domains_async(domain, 10000, user_id)
+                    referring_domains_data = await self.dataforseo_async_service.get_referring_domains_async(domain, 10000, user_id)
                     if referring_domains_data and referring_domains_data.get("items"):
                         detailed_data_available["referring_domains"] = True
                         operation_logger.log_data_collection("referring_domains", record_count=len(referring_domains_data.get("items", [])), message="Referring domains analysis completed")
@@ -485,7 +485,7 @@ class AnalysisService:
                     else:
                         logger.warning("Async referring domains collection returned None, falling back to legacy", domain=domain)
                         # Fall back to legacy mode for referring domains
-                        referring_domains_data = self.dataforseo_service.get_referring_domains(domain, 800, user_id)
+                        referring_domains_data = await self.dataforseo_service.get_referring_domains(domain, 800, user_id)
                         if referring_domains_data:
                             detailed_data_available["referring_domains"] = True
                             operation_logger.log_data_collection("referring_domains", record_count=len(referring_domains_data.get("items", [])), message="Referring domains analysis completed (legacy)")
@@ -513,7 +513,7 @@ class AnalysisService:
                 if use_n8n_legacy:
                     # Use N8N even in legacy mode
                     logger.info("Using N8N for backlinks in legacy mode", domain=domain)
-                    n8n_result = self.n8n_service.trigger_backlinks_workflow(domain, 1000)
+                    n8n_result = await self.n8n_service.trigger_backlinks_workflow(domain, 1000)
                     if n8n_result:
                         max_wait_time = 120
                         wait_interval = 2
@@ -551,7 +551,7 @@ class AnalysisService:
                     detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.BACKLINKS, json_data=backlinks_data )
                     await self.db.save_detailed_data(detailed_data)
                 
-                keywords_data = self.dataforseo_service.get_detailed_keywords(domain, 1000, user_id)
+                keywords_data = await self.dataforseo_service.get_detailed_keywords(domain, 1000, user_id)
                 if keywords_data and keywords_data.get("items"):
                     detailed_data_available["keywords"] = True
                     operation_logger.log_data_collection("keywords", record_count=len(keywords_data.get("items", [])))
@@ -559,7 +559,7 @@ class AnalysisService:
                     detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.KEYWORDS, json_data=keywords_data )
                     await self.db.save_detailed_data(detailed_data)
                 
-                referring_domains_data = self.dataforseo_service.get_referring_domains(domain, 800, user_id)
+                referring_domains_data = await self.dataforseo_service.get_referring_domains(domain, 800, user_id)
                 if referring_domains_data and referring_domains_data.get("items"):
                     detailed_data_available["referring_domains"] = True
                     operation_logger.log_data_collection("referring_domains", record_count=len(referring_domains_data.get("items", [])))
@@ -610,7 +610,7 @@ class AnalysisService:
             
             # Generate enhanced AI analysis with quality assessment
             operation_logger.log_data_collection("ai_analysis", message="Starting AI analysis and quality assessment...")
-            llm_data = self.llm_service.generate_enhanced_analysis(domain, combined_data, user_id)
+            llm_data = await self.llm_service.generate_enhanced_analysis(domain, combined_data, user_id)
             if llm_data:
                 # Start analysis parsing sub-operation
                 if progress_tracker:
@@ -709,7 +709,8 @@ class AnalysisService:
             traffic_task = asyncio.create_task(self.dataforseo_service.get_traffic_analytics_history(domain))
             bulk_traffic_task = asyncio.create_task(self.dataforseo_service.get_historical_bulk_traffic_estimation(domain))
             
-            rank_data, traffic_data, bulk_traffic_data = asyncio.gather( rank_task, traffic_task, bulk_traffic_task, return_exceptions=True )
+            results = await asyncio.gather( rank_task, traffic_task, bulk_traffic_task, return_exceptions=True )
+            rank_data, traffic_data, bulk_traffic_data = results
             
             # Handle exceptions
             if isinstance(rank_data, Exception):
@@ -853,7 +854,7 @@ class AnalysisService:
             wayback_task = asyncio.create_task( self.wayback_service.get_domain_history(domain) )
             
             # Wait for data collection to complete
-            dataforseo_data, wayback_data = asyncio.gather( dataforseo_task, wayback_task, return_exceptions=True )
+            dataforseo_data, wayback_data = await asyncio.gather( dataforseo_task, wayback_task, return_exceptions=True )
             
             # Handle exceptions
             if isinstance(dataforseo_data, Exception):

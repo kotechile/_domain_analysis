@@ -34,7 +34,7 @@ async def _clear_staging_chunked(db, auction_site: str, job_id: str):
     total_cleared = 0
     while True:
         # Fetch domains for this job
-        clear_res = (await db._get_client()).table('auctions_staging').select('domain').eq('job_id', job_id).limit(5000).execute()
+        clear_res = await (await db._get_client()).table('auctions_staging').select('domain').eq('job_id', job_id).limit(5000).execute()
         if not clear_res.data:
             break
         
@@ -59,7 +59,7 @@ async def _mark_auctions_for_deletion(db, auction_site: str):
         # Update all records for this auction_site to set to_delete = true
         # We do this in chunks to avoid timeouts
         while True:
-            result = (await db._get_client()).table('auctions').select('domain').eq('auction_site', auction_site).eq('to_delete', False).limit(5000).execute()
+            result = await (await db._get_client()).table('auctions').select('domain').eq('auction_site', auction_site).eq('to_delete', False).limit(5000).execute()
 
             if not result.data:
                 break
@@ -69,7 +69,7 @@ async def _mark_auctions_for_deletion(db, auction_site: str):
             # Update in smaller batches
             for i in range(0, len(domains), 100):
                 batch = domains[i:i+100]
-                (await db._get_client()).table('auctions').update({'to_delete': True}).eq('auction_site', auction_site).in_('domain', batch).execute()
+                await (await db._get_client()).table('auctions').update({'to_delete': True}).eq('auction_site', auction_site).in_('domain', batch).execute()
 
             await asyncio.sleep(0.01)
 
@@ -89,7 +89,7 @@ async def _delete_flagged_auctions(db, auction_site: str):
         # Delete in chunks to avoid timeouts
         while True:
             # Get batch of records to delete
-            result = (await db._get_client()).table('auctions').select('domain').eq('auction_site', auction_site).eq('to_delete', True).limit(1000).execute()
+            result = await (await db._get_client()).table('auctions').select('domain').eq('auction_site', auction_site).eq('to_delete', True).limit(1000).execute()
 
             if not result.data:
                 break
@@ -99,7 +99,7 @@ async def _delete_flagged_auctions(db, auction_site: str):
             # Delete in smaller batches
             for i in range(0, len(domains), 100):
                 batch = domains[i:i+100]
-                (await db._get_client()).table('auctions').delete().eq('auction_site', auction_site).eq('to_delete', True).in_('domain', batch).execute()
+                await (await db._get_client()).table('auctions').delete().eq('auction_site', auction_site).eq('to_delete', True).in_('domain', batch).execute()
                 total_deleted += len(batch)
 
             await asyncio.sleep(0.01)
@@ -122,7 +122,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
     while True:
         # 1. Fetch a batch of records from staging
         # We also need to fetch columns that we want to keep if they are in the staging record, # but the staging record usually only has basic auction info.
-        result = (await db._get_client()).table('auctions_staging').select('*').eq('job_id', job_id).limit(2000).execute()
+        result = await (await db._get_client()).table('auctions_staging').select('*').eq('job_id', job_id).limit(2000).execute()
         records = result.data
 
         if not records:
@@ -1312,7 +1312,7 @@ async def trigger_bulk_traffic_data_analysis( limit: int = Query(1000, descripti
         auctions_service = AuctionsService()
         
         # Get scored auctions closest to expire without traffic_data
-        auctions = auctions_service.get_scored_auctions_closest_to_expire_without_traffic_data(limit=limit)
+        auctions = await auctions_service.get_scored_auctions_closest_to_expire_without_traffic_data(limit=limit)
         
         if not auctions:
             return { "success": True, "message": "No scored domains without traffic_data found", "triggered_count": 0, "skipped_count": 0, "triggered_domains": [] }
@@ -1361,7 +1361,7 @@ async def trigger_bulk_spam_score_analysis( limit: int = Query(1000, description
         auctions_service = AuctionsService()
         
         # Get scored auctions closest to expire that don't have spam score data
-        auctions = auctions_service.get_auctions_without_spam_score_closest_to_expire(limit=limit)
+        auctions = await auctions_service.get_auctions_without_spam_score_closest_to_expire(limit=limit)
         
         if not auctions:
             return { "success": True, "message": "No scored domains without spam score found", "triggered_count": 0, "skipped_count": 0, "triggered_domains": [] }
@@ -1410,7 +1410,7 @@ async def trigger_bulk_backlinks_analysis( limit: int = Query(1000, description=
         auctions_service = AuctionsService()
         
         # Get scored auctions closest to expire that don't have backlinks data
-        auctions = auctions_service.get_auctions_without_backlinks_closest_to_expire(limit=limit)
+        auctions = await auctions_service.get_auctions_without_backlinks_closest_to_expire(limit=limit)
         
         if not auctions:
             return { "success": True, "message": "No scored domains without backlinks found", "triggered_count": 0, "skipped_count": 0, "triggered_domains": [] }
@@ -1574,7 +1574,7 @@ async def trigger_bulk_all_metrics_analysis( preferred: Optional[bool] = Query(N
         auctions_service = AuctionsService()
         
         # ) Get auctions matching filters (missing any metric OR force refresh
-        auctions = await service.get_auctions_missing_any_metric_with_filters( filters=filters, sort_by=sort_by, sort_order=sort_order, limit=limit, force_refresh=force_refresh )
+        auctions = await auctions_service.get_auctions_missing_any_metric_with_filters( filters=filters, sort_by=sort_by, sort_order=sort_order, limit=limit, force_refresh=force_refresh )
         
         if not auctions:
             return { "success": True, "message": "No domains matching filters and missing any DataForSEO metric found", "triggered_count": 0, "skipped_count": 0, "triggered_domains": [], "results": { "traffic_data": {"triggered": 0, "success": False}, "rank": {"triggered": 0, "success": False}, "backlinks": {"triggered": 0, "success": False}, "spam_score": {"triggered": 0, "success": False} } }
@@ -1587,12 +1587,12 @@ async def trigger_bulk_all_metrics_analysis( preferred: Optional[bool] = Query(N
         credits_service = CreditsService(db)
         
         # Calculate cost for syncing these domains
-        total_cost = pricing_service.calculate_action_cost('stats_sync', len(domain_names))
+        total_cost = await pricing_service.calculate_action_cost('stats_sync', len(domain_names))
         
         logger.info("Deducting credits for bulk analysis", user_id=str(current_user.id), domain_count=len(domain_names), cost=total_cost)
         
         # Deduct credits
-        success = credits_service.deduct_credits( user_id=current_user.id, amount=total_cost, description=f"Bulk DataForSEO extraction for {len(domain_names)} domains", reference_id=f"bulk_sync_{int(datetime.now(timezone.utc).timestamp())}" )
+        success = await credits_service.deduct_credits( user_id=current_user.id, amount=total_cost, description=f"Bulk DataForSEO extraction for {len(domain_names)} domains", reference_id=f"bulk_sync_{int(datetime.now(timezone.utc).timestamp())}" )
         
         if not success:
             logger.warning("Insufficient credits for bulk analysis", user_id=str(current_user.id), cost=total_cost)
@@ -1681,7 +1681,7 @@ async def get_auctions_report( search: Optional[str] = Query(None, description="
         logger.info("Fetching auctions report", filters=filters, limit=limit, offset=offset)
 
         auctions_service = AuctionsService()
-        result = auctions_service.get_auctions_report( filters=filters, sort_by=sort_by, order=order, limit=limit, offset=offset )
+        result = await auctions_service.get_auctions_report( filters=filters, sort_by=sort_by, order=order, limit=limit, offset=offset )
         
         count = result.get("count", 0)
         total_count = result.get("total_count", 0)
@@ -1729,7 +1729,7 @@ async def process_scoring_batch( batch_size: int = Query(10000, ge=1, le=50000, 
     Returns processing statistics. """
     try:
         scoring_service = AuctionScoringService()
-        result = scoring_service.process_batch( batch_size=batch_size, config_id=config_id, recalculate_rankings_after=recalculate_rankings )
+        result = await scoring_service.process_batch( batch_size=batch_size, config_id=config_id, recalculate_rankings_after=recalculate_rankings )
         return result
     except Exception as e:
         logger.error("Failed to process scoring batch", error=str(e))
@@ -1742,7 +1742,7 @@ async def get_scoring_stats():
     Get statistics about auction scoring progress. Returns counts of processed, unprocessed, and scored records. """
     try:
         scoring_service = AuctionScoringService()
-        stats = scoring_service.get_processing_stats()
+        stats = await scoring_service.get_processing_stats()
         return stats
     except Exception as e:
         logger.error("Failed to get scoring stats", error=str(e))
@@ -1755,7 +1755,7 @@ async def recalculate_rankings():
     Recalculate global rankings and preferred flags for all scored auctions. This should be called periodically or after processing large batches. """
     try:
         scoring_service = AuctionScoringService()
-        result = scoring_service.recalculate_rankings()
+        result = await scoring_service.recalculate_rankings()
         return result
     except Exception as e:
         logger.error("Failed to recalculate rankings", error=str(e))
@@ -1878,8 +1878,8 @@ async def process_dataforseo_queue():
             logger.error("Database connection not available for queue processing")
             return
         
-        # ) Get 100 pending domains ordered by expiration_date ASC (closest to NOW first
-        queue_result = (await db._get_client()).table('dataforseo_queue').select( 'id,domain,expiration_date' ).eq('status', 'pending').order('expiration_date', desc= False).limit(100).execute()
+        # Get 100 pending domains ordered by expiration_date ASC (closest to NOW first)
+        queue_result = await (await db._get_client()).table('dataforseo_queue').select( 'id,domain,expiration_date' ).eq('status', 'pending').order('expiration_date', desc= False).limit(100).execute()
         
         if not queue_result.data or len(queue_result.data) < 100:
             logger.info("Queue does not have 100 domains yet", count=len(queue_result.data) if queue_result.data else 0)
@@ -1889,13 +1889,13 @@ async def process_dataforseo_queue():
         queue_ids = [item['id'] for item in queue_result.data]
         
         # Update queue items to 'processing'
-        (await db._get_client()).table('dataforseo_queue').update({ 'status': 'processing', 'updated_at': datetime.now(timezone.utc).isoformat() }).in_('id', queue_ids).execute()
+        await (await db._get_client()).table('dataforseo_queue').update({ 'status': 'processing', 'updated_at': datetime.now(timezone.utc).isoformat() }).in_('id', queue_ids).execute()
         
         logger.info("Processing DataForSEO queue", domain_count=len(domains))
         
         # Trigger DataForSEO analysis via N8N
         n8n_service = N8NService()
-        n8n_result = n8n_service.trigger_bulk_page_summary_workflow(domains)
+        n8n_result = await n8n_service.trigger_bulk_page_summary_workflow(domains)
         
         if n8n_result:
             logger.info("Triggered N8N workflow for queued domains", domain_count=len(domains), request_id=n8n_result.get('request_id'))
@@ -1903,7 +1903,7 @@ async def process_dataforseo_queue():
             # when page_statistics are updated in the auctions table
         else:
             # Mark as failed if N8N trigger failed
-            (await db._get_client()).table('dataforseo_queue').update({ 'status': 'failed', 'error_message': 'Failed to trigger N8N workflow', 'updated_at': datetime.now(timezone.utc).isoformat() }).in_('id', queue_ids).execute()
+            await (await db._get_client()).table('dataforseo_queue').update({ 'status': 'failed', 'error_message': 'Failed to trigger N8N workflow', 'updated_at': datetime.now(timezone.utc).isoformat() }).in_('id', queue_ids).execute()
             logger.error("Failed to trigger N8N workflow for queue", queue_ids=queue_ids)
             
     except Exception as e:
@@ -1929,7 +1929,7 @@ async def queue_domain_for_dataforseo(domain: str):
             raise HTTPException(status_code=503, detail="Database connection not available")
         
         # Check if domain exists in auctions table and meets criteria
-        auction_result = (await db._get_client()).table('auctions').select( 'id,domain,score,expiration_date,page_statistics' ).eq('domain', domain).limit(1).execute()
+        auction_result = await (await db._get_client()).table('auctions').select( 'id,domain,score,expiration_date,page_statistics' ).eq('domain', domain).limit(1).execute()
         
         if not auction_result.data or len(auction_result.data) == 0:
             return { "success": False, "message": "Domain not found in auctions table", "queued": False }
@@ -1945,12 +1945,12 @@ async def queue_domain_for_dataforseo(domain: str):
             return { "success": False, "message": "Domain already has DataForSEO data", "queued": False }
         
         # Check if domain is already in queue
-        queue_check = (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
+        queue_check = await (await db._get_client()).table('dataforseo_queue').select('id,status').eq('domain', domain).limit(1).execute()
         if queue_check.data and len(queue_check.data) > 0:
             queue_item = queue_check.data[0]
             if queue_item['status'] == 'pending':
                 # Get position in queue
-                position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
+                position_result = await (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
                 position = None
                 if position_result.data:
                     for idx, item in enumerate(position_result.data, 1):
@@ -1958,16 +1958,16 @@ async def queue_domain_for_dataforseo(domain: str):
                             position = idx
                             break
                 
-                queue_count = get_queue_count()
+                queue_count = await get_queue_count()
                 return { "success": True, "message": "Domain already in queue", "queued": True, "position": position, "queue_count": queue_count }
         
         # Add to queue
         queue_data = { 'domain': domain, 'status': 'pending', 'expiration_date': auction.get('expiration_date'), 'score': auction.get('score'), 'auction_id': auction.get('id') }
         
-        result = (await db._get_client()).table('dataforseo_queue').insert(queue_data).execute()
+        result = await (await db._get_client()).table('dataforseo_queue').insert(queue_data).execute()
         
         # Get queue count
-        queue_count = get_queue_count()
+        queue_count = await get_queue_count()
         
         # Check if we've reached 100 and trigger processing
         if queue_count >= 100:
@@ -1975,7 +1975,7 @@ async def queue_domain_for_dataforseo(domain: str):
             asyncio.create_task(process_dataforseo_queue())
         
         # ) Get position in queue (ordered by expiration_date ASC
-        position_result = (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
+        position_result = await (await db._get_client()).table('dataforseo_queue').select('id').eq('status', 'pending').order('expiration_date', desc=False).execute()
         position = None
         if position_result.data:
             for idx, item in enumerate(position_result.data, 1):

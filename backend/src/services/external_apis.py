@@ -31,7 +31,7 @@ class DataForSEOService:
     async def _get_credentials(self) -> Optional[Dict[str, str]]:
         """Get DataForSEO credentials from secrets service"""
         if self._credentials is None:
-            self._credentials = self.secrets_service.get_dataforseo_credentials()
+            self._credentials = await self.secrets_service.get_dataforseo_credentials()
             
             # Fix API URL if it points to marketing site instead of API
             if self._credentials and 'api_url' in self._credentials:
@@ -45,7 +45,7 @@ class DataForSEOService:
     async def health_check(self) -> bool:
         """Check if DataForSEO API is accessible"""
         try:
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 logger.warning("DataForSEO credentials not available")
                 return False
@@ -53,7 +53,7 @@ class DataForSEOService:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 # Use a simple endpoint that should return a valid response
                 # DataForSEO doesn't have a /ping endpoint, so we'll test with a basic call
-                response = client.get( f"{credentials['api_url']}/ping", auth=(credentials['login'], credentials['password']) )
+                response = await client.get( f"{credentials['api_url']}/ping", auth=(credentials['login'], credentials['password']) )
                 # DataForSEO returns 404 for /ping but with proper API response structure
                 # This indicates the API is accessible and credentials are valid
                 if response.status_code == 404 and 'version' in response.text:
@@ -72,7 +72,7 @@ class DataForSEOService:
         """Get domain analytics data from DataForSEO"""
         try:
             # Get credentials
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -99,7 +99,7 @@ class DataForSEOService:
                     
                     url = f"{credentials['api_url']}/backlinks/summary/live"
                     logger.info("Making DataForSEO backlinks summary request", url=url, domain=domain)
-                    backlinks_summary_response = client.post( url, auth=(credentials['login'], credentials['password']), json=post_data )
+                    backlinks_summary_response = await client.post( url, auth=(credentials['login'], credentials['password']), json=post_data )
                     
                     # Handle backlinks summary response
                     if backlinks_summary_response.status_code == 200:
@@ -123,7 +123,7 @@ class DataForSEOService:
                 
                 domain_rank_url = f"{credentials['api_url']}/dataforseo_labs/google/domain_rank_overview/live"
                 logger.info("Making DataForSEO domain rank overview request", url=domain_rank_url, domain=domain)
-                domain_rank_response = client.post( domain_rank_url, auth=(credentials['login'], credentials['password']), json=domain_rank_post_data )
+                domain_rank_response = await client.post( domain_rank_url, auth=(credentials['login'], credentials['password']), json=domain_rank_post_data )
                 
                 # Handle domain rank response
                 domain_rank_data = None
@@ -163,7 +163,7 @@ class DataForSEOService:
     async def get_historical_rank_overview(self, domain: str) -> Optional[Dict[str, Any]]:
         """Get historical rank overview from DataForSEO"""
         try:
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -179,7 +179,7 @@ class DataForSEOService:
                 post_data = [{ "target": domain, "language_name": "English", "location_code": 2840, "date_from": start_date.strftime("%Y-%m-%d"), "date_to": end_date.strftime("%Y-%m-%d"), "include_clickstream_data": True }]
 
                 logger.info("Making DataForSEO historical rank overview request", url=url, domain=domain, date_from=start_date.strftime("%Y-%m-%d"), date_to=end_date.strftime("%Y-%m-%d"))
-                response = client.post( url, auth=(credentials['login'], credentials['password']), json=post_data )
+                response = await client.post( url, auth=(credentials['login'], credentials['password']), json=post_data )
 
                 if response.status_code == 200:
                     data = response.json()
@@ -200,7 +200,7 @@ class DataForSEOService:
     async def get_traffic_analytics_history(self, domain: str) -> Optional[Dict[str, Any]]:
         """Get traffic analytics history from DataForSEO"""
         try:
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -215,7 +215,7 @@ class DataForSEOService:
                 post_data = [{ "target": domain, "language_name": "English", "location_code": 2840, "date_from": start_date.strftime("%Y-%m-%d"), "date_to": end_date.strftime("%Y-%m-%d") }]
 
                 logger.info("Making DataForSEO traffic analytics history request", url=url, domain=domain, date_from=start_date.strftime("%Y-%m-%d"), date_to=end_date.strftime("%Y-%m-%d"))
-                response = client.post( url, auth=(credentials['login'], credentials['password']), json=post_data )
+                response = await client.post( url, auth=(credentials['login'], credentials['password']), json=post_data )
 
                 if response.status_code == 200:
                     data = response.json()
@@ -237,7 +237,7 @@ class DataForSEOService:
         """
         Fetch bulk traffic estimation using the Live endpoint (DataForSEO Labs). Blocks until results are returned (usually < 1s). """
         try:
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -250,7 +250,7 @@ class DataForSEOService:
                     
                 logger.info("Fetching DataForSEO bulk traffic estimation (Live)", url=url, domain_count=len(domains))
                 
-                response = client.post( url, auth=(credentials['login'], credentials['password']), json=payload )
+                response = await client.post( url, auth=(credentials['login'], credentials['password']), json=payload )
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -283,7 +283,7 @@ class DataForSEOService:
     async def get_historical_bulk_traffic_estimation(self, domain: str) -> Optional[Dict[str, Any]]:
         """Get historical bulk traffic estimation from DataForSEO Labs"""
         try:
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -298,7 +298,7 @@ class DataForSEOService:
                 payload = [{ "targets": [domain], "location_code": 2840, "language_code": "en", "date_from": start_date.strftime("%Y-%m-%d"), "date_to": end_date.strftime("%Y-%m-%d"), "item_types": ["organic", "paid"] }]
                 
                 logger.info("Making DataForSEO historical bulk traffic estimation request", url=url, domain=domain)
-                response = client.post( url, auth=(credentials['login'], credentials['password']), json=payload )
+                response = await client.post( url, auth=(credentials['login'], credentials['password']), json=payload )
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -456,7 +456,7 @@ class DataForSEOService:
         """Get backlinks summary data from DataForSEO v3 API"""
         try:
             # Get credentials
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -473,7 +473,7 @@ class DataForSEOService:
                 post_data = {}
                 post_data[len(post_data)] = { "target": domain, "internal_list_limit": 10, "include_subdomains": True, "backlinks_filters": ["dofollow", "=", True], "backlinks_status_type": "all" }
                 
-                response = client.post( f"{credentials['api_url']}/backlinks/summary/live", auth=(credentials['login'], credentials['password']), json=post_data )
+                response = await client.post( f"{credentials['api_url']}/backlinks/summary/live", auth=(credentials['login'], credentials['password']), json=post_data )
                 
                 if response.status_code != 200:
                     logger.error("DataForSEO backlinks summary request failed", domain=domain, status=response.status_code)
@@ -499,7 +499,7 @@ class DataForSEOService:
     async def get_detailed_backlinks(self, domain: str, limit: int = 100, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get detailed backlinks data from DataForSEO v3 API (on-demand)"""
         try:
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -509,7 +509,7 @@ class DataForSEOService:
                 post_data = {}
                 post_data[len(post_data)] = { "target": domain, "limit": limit, "mode": "as_is", "filters": ["dofollow", "=", True] }
                 
-                response = client.post( f"{credentials['api_url']}/backlinks/backlinks/live", auth=(credentials['login'], credentials['password']), json=post_data )
+                response = await client.post( f"{credentials['api_url']}/backlinks/backlinks/live", auth=(credentials['login'], credentials['password']), json=post_data )
                 
                 if response.status_code != 200:
                     logger.error("DataForSEO detailed backlinks request failed", domain=domain, status=response.status_code)
@@ -537,7 +537,7 @@ class DataForSEOService:
     async def get_detailed_keywords(self, domain: str, limit: int = 1000, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get detailed keywords data from DataForSEO v3 API (on-demand)"""
         try:
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -547,7 +547,7 @@ class DataForSEOService:
                 post_data = {}
                 post_data[len(post_data)] = { "target": domain, "language_name": "English", "location_name": "United States", "load_rank_absolute": True, "limit": limit }
                 
-                response = client.post( f"{credentials['api_url']}/dataforseo_labs/google/ranked_keywords/live", auth=(credentials['login'], credentials['password']), json=post_data )
+                response = await client.post( f"{credentials['api_url']}/dataforseo_labs/google/ranked_keywords/live", auth=(credentials['login'], credentials['password']), json=post_data )
                 
                 if response.status_code != 200:
                     logger.error("DataForSEO detailed keywords request failed", domain=domain, status=response.status_code)
@@ -575,7 +575,7 @@ class DataForSEOService:
     async def get_referring_domains(self, domain: str, limit: int = 800, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get referring domains data from DataForSEO v3 API (on-demand)"""
         try:
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
@@ -585,7 +585,7 @@ class DataForSEOService:
                 post_data = {}
                 post_data[len(post_data)] = { "target": domain, "limit": limit, "mode": "as_is", "filters": ["dofollow", "=", True], "order_by": ["domain_from_rank,desc"] }
                 
-                response = client.post( f"{credentials['api_url']}/backlinks/backlinks/live", auth=(credentials['login'], credentials['password']), json=post_data )
+                response = await client.post( f"{credentials['api_url']}/backlinks/backlinks/live", auth=(credentials['login'], credentials['password']), json=post_data )
                 
                 if response.status_code != 200:
                     logger.error("DataForSEO referring domains request failed", domain=domain, status=response.status_code)
@@ -637,7 +637,7 @@ class WaybackMachineService:
         """Check if Wayback Machine API is accessible"""
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = client.get( self.base_url, params={"url": "example.com", "limit": 1} )
+                response = await client.get( self.base_url, params={"url": "example.com", "limit": 1} )
                 return response.status_code == 200
         except Exception as e:
             logger.warning("Wayback Machine health check failed", error=str(e))
@@ -657,7 +657,7 @@ class WaybackMachineService:
             wayback_url = domain.replace("https://", "").replace("http://", "").replace("www.", "")
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = client.get( self.base_url, params={ "url": wayback_url, "output": "json", "limit": 1000, "collapse": "timestamp:8",  # Group by day
+                response = await client.get( self.base_url, params={ "url": wayback_url, "output": "json", "limit": 1000, "collapse": "timestamp:8",  # Group by day
                         "matchType": "domain" } )
                 
                 if response.status_code != 200:
@@ -773,7 +773,7 @@ class LLMService:
     async def health_check(self) -> bool:
         """Check if LLM service is accessible"""
         try:
-            provider, api_key, _ = self._get_provider_and_key()
+            provider, api_key, _ = await self._get_provider_and_key()
             return provider is not None and api_key is not None
         except Exception as e:
             logger.warning("LLM service health check failed", error=str(e))
@@ -782,7 +782,7 @@ class LLMService:
     async def generate_analysis(self, domain: str, data: Dict[str, Any], user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Generate domain analysis using LLM"""
         try:
-            provider, api_key, model_name = self._get_provider_and_key()
+            provider, api_key, model_name = await self._get_provider_and_key()
             if not provider or not api_key:
                 logger.error("No LLM provider credentials available")
                 return None
@@ -810,7 +810,7 @@ class LLMService:
     async def generate_enhanced_analysis(self, domain: str, data: Dict[str, Any], user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Generate enhanced domain analysis with backlink quality assessment"""
         logger.info("=== ENHANCED ANALYSIS CALLED ===", domain=domain)
-        provider, api_key, model_name = self._get_provider_and_key()
+        provider, api_key, model_name = await self._get_provider_and_key()
         if not provider or not api_key:
             logger.error("No LLM provider credentials available")
             raise ValueError("No LLM provider credentials available. Please configure LLM credentials in Supabase.")
@@ -820,9 +820,9 @@ class LLMService:
         logger.info("Enhanced prompt generated", domain=domain, prompt_length=len(prompt), prompt_preview=prompt[:500])
         
         if provider == "gemini":
-            result = self._generate_with_gemini(prompt, domain, model_name)
+            result = await self._generate_with_gemini(prompt, domain, model_name)
         elif provider == "openai":
-            result = self._generate_with_openai(prompt, domain, api_key, model_name)
+            result = await self._generate_with_openai(prompt, domain, api_key, model_name)
         else:
             logger.error(f"Unknown LLM provider: {provider}")
             raise ValueError(f"Unknown LLM provider: {provider}")
@@ -844,7 +844,8 @@ class LLMService:
         genai.configure(api_key=self._gemini_key)
         model = genai.GenerativeModel(model_name)
         
-        response = asyncio.to_thread( model.generate_content, prompt )
+        # Use asyncio.to_thread because the google-generativeai SDK is currently synchronous
+        response = await asyncio.to_thread( model.generate_content, prompt )
         
         analysis_text = response.text
         return self._parse_llm_response(analysis_text, domain)
@@ -858,7 +859,7 @@ class LLMService:
         
         client = openai.AsyncOpenAI(api_key=api_key)
         
-        response = client.chat.completions.create( model=model_name, messages=[ {"role": "system", "content": "You are an SEO expert analyzing domain data for domain buyers. You must respond with valid JSON matching the exact structure specified in the prompt."}, {"role": "user", "content": prompt}
+        response = await client.chat.completions.create( model=model_name, messages=[ {"role": "system", "content": "You are an SEO expert analyzing domain data for domain buyers. You must respond with valid JSON matching the exact structure specified in the prompt."}, {"role": "user", "content": prompt}
             ], response_format={"type": "json_object"}, temperature=0.7 )
         
         analysis_text = response.choices[0].message.content
@@ -1240,33 +1241,37 @@ class LLMService:
                 return self._get_default_development_plan()
             
             # Build development plan prompt
-            prompt = self._build_development_plan_prompt(report)
+            prompt = await self._build_development_plan_prompt(report)
             
+            domain = report.domain_name
             if provider == "gemini":
-                return await self._generate_with_gemini(prompt, api_key, model_name)
+                return await self._generate_with_gemini(prompt, domain, model_name)
             else:
-                return await self._generate_with_openai(prompt, api_key, api_key, model_name)
+                return await self._generate_with_openai(prompt, domain, api_key, model_name)
                 
         except Exception as e:
             logger.error("Failed to generate development plan", error=str(e))
             return self._get_default_development_plan()
     
-    def _build_development_plan_prompt(self, report) -> str:
+    async def _build_development_plan_prompt(self, report) -> str:
         """Build prompt for development plan generation"""
         domain = report.domain_name
         metrics = report.data_for_seo_metrics
         
         # Get detailed data from database
         try:
-            from services.database import DatabaseService
-            import asyncio
+            from services.database import get_database
+            db = get_database()
             
-            db = DatabaseService()
+            # Get actual keyword and backlink data (await the async calls)
+            keywords_data = await db.get_detailed_data(domain, 'keywords') or {'items': []}
+            backlinks_data = await db.get_detailed_data(domain, 'backlinks') or {'items': []}
+            referring_domains_data = await db.get_detailed_data(domain, 'referring_domains') or {'items': []}
             
-            # ) Get actual keyword and backlink data (await the async calls
-            keywords_data = asyncio.run(db.get_detailed_data(domain, 'keywords')) or {'items': []}
-            backlinks_data = asyncio.run(db.get_detailed_data(domain, 'backlinks')) or {'items': []}
-            referring_domains_data = asyncio.run(db.get_detailed_data(domain, 'referring_domains')) or {'items': []}
+            # Extract items from DetailedAnalysisData models if necessary
+            if hasattr(keywords_data, 'json_data'): keywords_data = keywords_data.json_data
+            if hasattr(backlinks_data, 'json_data'): backlinks_data = backlinks_data.json_data
+            if hasattr(referring_domains_data, 'json_data'): referring_domains_data = referring_domains_data.json_data
             
             logger.info(f"Retrieved data for development plan", keywords_count=len(keywords_data.get('items', [])), backlinks_count=len(backlinks_data.get('items', [])), referring_domains_count=len(referring_domains_data.get('items', [])))
         except Exception as e:

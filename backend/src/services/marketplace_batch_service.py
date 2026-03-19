@@ -45,7 +45,7 @@ class MarketplaceBatchService:
         """
         Background task: "Find and Fill" — trigger a DataForSEO refresh for up to 1,000 domains. This runs in the background and doesn't block the API response. force=True: Bypasses the missing-metrics and staleness checks (premium call). force=False: Fill-the-gaps behaviour — cheaper and idempotent. """
         try:
-            costs = self.get_refresh_costs()
+            costs = await self.get_refresh_costs()
             cost_key = "force_refresh_1k" if force else "bulk_refresh_1k"
             cost = costs[cost_key]
 
@@ -75,7 +75,7 @@ class MarketplaceBatchService:
 
             # 2. Deduct credits only once we know there is work to do
             logger.info(f"[Background] Deducting {cost} credits", user_id=str(user_id))
-            success = self.credits_service.deduct_credits( user_id=user_id, amount=cost, description=description, reference_id=ref_id )
+            success = await self.credits_service.deduct_credits( user_id=user_id, amount=cost, description=description, reference_id=ref_id )
 
             if not success:
                 logger.error(f"[Background] Insufficient credits", user_id=str(user_id), required=cost)
@@ -151,7 +151,7 @@ class MarketplaceBatchService:
         Cost: 5 credits (fixed or from settings)
         """
         # 1. Get cost
-        costs = self.get_refresh_costs()
+        costs = await self.get_refresh_costs()
         # Use individual_deep_dive cost or fallback to 5
         cost = costs.get("individual_deep_dive", 5)
         
@@ -160,7 +160,7 @@ class MarketplaceBatchService:
         # ) Estimate dollar amount (simple ratio
         dollar_amount = float(cost) * 0.001
         
-        success = self.credits_service.deduct_credits( user_id=user_id, amount=float(cost), description=description, dollar_amount=dollar_amount )
+        success = await self.credits_service.deduct_credits( user_id=user_id, amount=float(cost), description=description, dollar_amount=dollar_amount )
         
         if not success:
             return {"success": False, "error": "Insufficient credits"}

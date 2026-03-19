@@ -43,7 +43,7 @@ class DatabaseService:
             # Check for SSL verification override
             verify_ssl = getattr(self.settings, 'SUPABASE_VERIFY_SSL', True)
             
-            self.client = create_client( self.settings.SUPABASE_URL, key, options=options )
+            self.client = await create_client( self.settings.SUPABASE_URL, key, options=options )
             
             # Monkey-patch the httpx client if needed for SSL verification
             if not verify_ssl:
@@ -1035,7 +1035,7 @@ class DatabaseService:
                     logger.warning("Batch upsert failed, using individual upserts", batch_num=batch_num, error=str(e))
                     for auction_data in batch:
                         try:
-                            client.table('auctions').upsert( auction_data, on_conflict='domain,auction_site,expiration_date' ).execute()
+                            await client.table('auctions').upsert( auction_data, on_conflict='domain,auction_site,expiration_date' ).execute()
                             inserted_count += 1
                         except Exception as e2:
                             if 'duplicate' in str(e2).lower() or 'unique' in str(e2).lower():
@@ -1660,9 +1660,8 @@ class DatabaseService:
         client = await self._get_client()
         try:
             # Fetch domains and extract TLDs
-            # ) Note: With 1.6M+ rows, fetching all domains is a performance disaster (OOM risk
-            # We'll limit to a large enough sample of recent auctions to get the current TLDs
-            result = await (client.table('auctions').select('domain').limit(10000) ) # Moderate sample for performance.execute(
+            # Limit to a large enough sample of recent auctions to get the current TLDs
+            result = await client.table('auctions').select('domain').limit(10000).execute()
             
             tlds = set()
             for auction in result.data if result.data else []:

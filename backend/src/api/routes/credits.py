@@ -49,7 +49,7 @@ async def get_balance(current_user = Depends(get_current_user)):
         # Check and handle monthly reset
         await credits_service.check_and_reset_monthly_credits(current_user.id)
         
-        balance = credits_service.get_balance(current_user.id)
+        balance = await credits_service.get_balance(current_user.id)
         
         return BalanceResponse( user_id=str(current_user.id), balance=balance )
     except Exception as e:
@@ -63,7 +63,7 @@ async def get_transactions( limit: int = 20, offset: int = 0, current_user = Dep
         db = get_database()
         credits_service = CreditsService(db)
         
-        transactions = credits_service.get_transactions(current_user.id, limit, offset)
+        transactions = await credits_service.get_transactions(current_user.id, limit, offset)
         
         # Format response
         result = []
@@ -84,7 +84,7 @@ async def get_payments( limit: int = 20, offset: int = 0, current_user = Depends
         
         # We can reuse get_transactions but filter for 'purchase' or 'admin_add' type
         # Or just get all and filter in python if the table is small
-        transactions = credits_service.get_transactions(current_user.id, limit=100, offset=0)
+        transactions = await credits_service.get_transactions(current_user.id, limit=100, offset=0)
         
         # ) Filter for top-ups/purchases (amount > 0
         payments = [t for t in transactions if t.get('transaction_type') in ['purchase', 'admin_add'] or t.get('amount', 0) > 0]
@@ -118,7 +118,7 @@ async def purchase_credits( request: PurchaseRequest, current_user = Depends(get
         # Generate a reference ID if not provided
         ref_id = request.reference_id or f"purchase_{int(datetime.utcnow().timestamp())}"
         
-        new_balance = credits_service.add_credits( user_id=current_user.id, amount=request.amount, description=request.description, reference_id=ref_id )
+        new_balance = await credits_service.add_credits( user_id=current_user.id, amount=request.amount, description=request.description, reference_id=ref_id )
         
         return PurchaseResponse( success=True, new_balance=new_balance, message="Credits added successfully" )
     except Exception as e:

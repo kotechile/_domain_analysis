@@ -37,7 +37,7 @@ async def get_current_user(credentials: Optional[HTTPAuthorizationCredentials] =
         db_service = get_database()
         # Verify token with Supabase
         client = await db_service._get_client()
-        user_response = client.auth.get_user(token)
+        user_response = await client.auth.get_user(token)
         
         if not user_response or not user_response.user:
             raise HTTPException(
