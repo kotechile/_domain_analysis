@@ -1012,7 +1012,8 @@ class DatabaseService:
             
             # Process in batches - upsert handles both inserts and updates
             # Note: We can't easily distinguish inserts from updates without pre-checking, # which is expensive for large files. We'll approximate by assuming all are inserts
-            # and let the database handle the upsert logic. for batch_num, i in enumerate(range(0, len(auctions), batch_size), 1):
+            # and let the database handle the upsert logic.
+            for batch_num, i in enumerate(range(0, len(auctions), batch_size), 1):
                 batch = auctions[i:i + batch_size]
                 
                 try:

@@ -121,7 +121,8 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
 
     while True:
         # 1. Fetch a batch of records from staging
-        # We also need to fetch columns that we want to keep if they are in the staging record, # but the staging record usually only has basic auction info. result = (await db._get_client()).table('auctions_staging').select('*').eq('job_id', job_id).limit(2000).execute()
+        # We also need to fetch columns that we want to keep if they are in the staging record, # but the staging record usually only has basic auction info.
+        result = (await db._get_client()).table('auctions_staging').select('*').eq('job_id', job_id).limit(2000).execute()
         records = result.data
 
         if not records:
@@ -1048,7 +1049,8 @@ async def process_file_from_storage_async( job_id: str, bucket: str, path: str, 
         
         try:
             db = get_database()
-            # If job exists, update it. If create_job failed, this might also fail or update non-existent job. # But mostly create_job succeeds, and error happens later. await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=f"Storage processing failed: {error_msg}" )
+            # If job exists, update it. If create_job failed, this might also fail or update non-existent job. # But mostly create_job succeeds, and error happens later.
+            await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=f"Storage processing failed: {error_msg}" )
         except:
             pass
             
@@ -2255,7 +2257,8 @@ async def toggle_preferred_auction( auction_id: str, payload: Dict[str, Any] = B
         
         # We don't check for ownership here since auctions are shared across users in the base table. # But this flag affects how they are filtered/shown. # In this system, 'preferred' is usually global or we'd need a sub-table per user. # Given the current schema, we update the auctions table. # DO NOT update `updated_at` here, because `updated_at` is used by the frontend
         # to determine if SEO metrics are "fresh" or "stale". Toggling a favorite 
-        # is just a UI metadata change and should not trigger a "fresh" state. result = (await db._get_client()).table('auctions').update({ 'preferred': preferred }).eq('id', auction_id).execute()
+        # is just a UI metadata change and should not trigger a "fresh" state.
+        result = (await db._get_client()).table('auctions').update({ 'preferred': preferred }).eq('id', auction_id).execute()
         
         if not result.data:
             # If no auction with that ID, it might be a UUID mismatch or domain-based update needed. # But normally auctions have a UUID ID. logger.warning("No auction found to toggle preferred", auction_id=auction_id)

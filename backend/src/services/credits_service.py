@@ -129,7 +129,8 @@ class CreditsService:
 
             if should_reset:
                 logger.info("Performing monthly credit reset/update", user_id=str(user_id))
-                # For now, we just update the timestamp. # Actual credit allocation logic would go here if we had monthly subscriptions. await (await self.await db._get_client()).table('user_credits').update({ 'last_reset_at': now.isoformat(), 'updated_at': now.isoformat() }).eq('user_id', str(user_id)).execute()
+                # For now, we just update the timestamp. # Actual credit allocation logic would go here if we had monthly subscriptions.
+                await (await self.await db._get_client()).table('user_credits').update({ 'last_reset_at': now.isoformat(), 'updated_at': now.isoformat() }).eq('user_id', str(user_id)).execute()
                 
         except Exception as e:
             logger.error("Failed to check/reset monthly credits", user_id=str(user_id), error=str(e))

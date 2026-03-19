@@ -287,7 +287,8 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
                         target = target.replace("http://", "").replace("https://", "")
                         # Remove path if present (e.g., "example.com/path" -> "example.com")
                         target = target.split("/")[0]
-                        # Remove www. if present
+                        # Remove www.
+                        if present
                         target = target.replace("www.", "")
 
                     # Update page_statistics in auctions table
@@ -454,7 +455,8 @@ async def receive_bulk_rank_webhook(request: N8NBulkRankWebhookRequest):
                     target = target.replace("http://", "").replace("https://", "")
                     # Remove path if present (e.g., "example.com/path" -> "example.com")
                     target = target.split("/")[0]
-                    # Remove www. if present
+                    # Remove www.
+                    if present
                     target = target.replace("www.", "")
                 
                 # Update page_statistics in auctions table with rank data
@@ -576,7 +578,8 @@ async def receive_bulk_backlinks_webhook(request: N8NBulkRankWebhookRequest):
                     target = target.replace("http://", "").replace("https://", "")
                     # Remove path if present (e.g., "example.com/path" -> "example.com")
                     target = target.split("/")[0]
-                    # Remove www. if present
+                    # Remove www.
+                    if present
                     target = target.replace("www.", "")
                 
                 # Update page_statistics in auctions table with backlinks data
@@ -698,7 +701,8 @@ async def receive_bulk_spam_score_webhook(request: N8NBulkRankWebhookRequest):
                     target = target.replace("http://", "").replace("https://", "")
                     # Remove path if present (e.g., "example.com/path" -> "example.com")
                     target = target.split("/")[0]
-                    # Remove www. if present
+                    # Remove www.
+                    if present
                     target = target.replace("www.", "")
                 
                 # Normalize DataForSEO field names to our internal format

@@ -114,7 +114,8 @@ class CSVParserService:
                 logger.info("Parsed NameCheap Buy Now CSV", total_rows=len(auctions))
                 return auctions
             else:
-                # Parse Market Sales format: url, name, startDate, endDate, price, ... for row_num, row in enumerate(reader, start=2):
+                # Parse Market Sales format: url, name, startDate, endDate, price, ...
+                for row_num, row in enumerate(reader, start=2):
                     try:
                         domain_name = row.get('name', '').strip()
                         if not domain_name:

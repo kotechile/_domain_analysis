@@ -157,7 +157,8 @@ class N8NService:
         # Remove protocol
         domain = domain.replace("http://", "").replace("https://", "")
         
-        # Remove www. if domain.startswith("www."):
+        # Remove www.
+        if domain.startswith("www."):
             domain = domain[4:]
         
         # Remove trailing slash and any path
@@ -338,7 +339,8 @@ class N8NService:
                 domain = domain.replace("http://", "").replace("https://", "")
                 # Remove path if present
                 domain = domain.split("/")[0]
-                # Remove www. if present
+                # Remove www.
+                if present
                 domain = domain.replace("www.", "").strip().lower()
                 if domain and domain not in normalized_domains:
                     normalized_domains.append(domain)
@@ -487,7 +489,8 @@ class N8NService:
                 domain = domain.replace("http://", "").replace("https://", "")
                 # Remove path if present
                 domain = domain.split("/")[0]
-                # Remove www. if present
+                # Remove www.
+                if present
                 domain = domain.replace("www.", "").strip().lower()
                 if domain and domain not in normalized_domains:
                     normalized_domains.append(domain)
