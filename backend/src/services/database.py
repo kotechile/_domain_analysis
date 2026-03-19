@@ -1521,8 +1521,6 @@ class DatabaseService:
         """
         client = await self._get_client()
         try:
-            client = await self._get_client()
-                
             # Try exact match first (case-insensitive)
             response = await client.table('auctions').select('domain', 'page_statistics').ilike('domain', domain).eq('to_delete', False).execute()
             
@@ -1536,10 +1534,12 @@ class DatabaseService:
                     response = await client.table('auctions').select('domain', 'page_statistics').ilike('domain', f"www.{domain}").eq('to_delete', False).execute()
             
             if not response.data or len(response.data) == 0:
+                logger.warning("Domain not found in auctions table", domain=domain)
                 return False
                 
             # Use the actual domain as stored in DB for the subsequent update
             actual_domain = response.data[0].get('domain')
+            logger.debug("Found domain in database", search_domain=domain, actual_domain=actual_domain)
             current_stats = response.data[0].get('page_statistics') or {}
             
             # Merge new stats into existing
@@ -1641,7 +1641,10 @@ class DatabaseService:
                     return False
             
             if update_response and update_response.data and len(update_response.data) > 0:
+                logger.info("Successfully updated auction statistics", domain=actual_domain, updated_columns=list(update_data.keys()))
                 return True
+            
+            logger.warning("Update request completed but no rows were affected", domain=actual_domain)
             return False
             
         except Exception as e:

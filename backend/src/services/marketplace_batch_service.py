@@ -101,13 +101,25 @@ class MarketplaceBatchService:
                 batch_num = i // batch_size + 1
                 batch = domain_names[i:i + batch_size]
                 try:
+                    # 1. Trigger summary (up to 1000 domains)
+                    logger.info(f"[Background] Triggering Summary for batch {batch_num}", domain_count=len(batch))
                     await self.n8n_service.trigger_bulk_page_summary_workflow(batch)
+                    
+                    # 2. Trigger traffic in smaller sub-batches (max 100 per DataForSEO)
+                    logger.info(f"[Background] Triggering Traffic for batch {batch_num}", domain_count=len(batch))
+                    for j in range(0, len(batch), 100):
+                        sub_batch = batch[j:j+100]
+                        await self.n8n_service.trigger_bulk_traffic_batch_workflow(sub_batch)
+                        if j + 100 < len(batch):
+                            await asyncio.sleep(0.5) # Small delay between sub-batches
+
                     processed_count += len(batch)
-                    logger.info(f"[Background] Triggered N8N batch {batch_num}/{total_batches}", user_id=str(user_id), batch_size=len(batch), batch_num=batch_num)
+                    logger.info(f"[Background] Triggered N8N workflows for batch {batch_num}/{total_batches}", user_id=str(user_id), batch_size=len(batch), batch_num=batch_num)
 
                     # Update progress
                     if job_id:
                         await ProgressTracker.update_progress( job_id, processed_items=processed_count, failed_items=failed_count, current_batch=batch_num, total_batches=total_batches, message=f"Batch {batch_num}/{total_batches} sent to N8N ({processed_count}/{len(domain_names)} domains)" )
+
 
                     # Send next batch if any after a small delay
                     if i + batch_size < len(domain_names):
