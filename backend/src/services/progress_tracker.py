@@ -49,7 +49,7 @@ class ProgressTracker:
         if not cache:
             return
 
-        job_data = cache.get(f"job:{job_id}")
+        job_data = await cache.get(f"job:{job_id}")
         if not job_data:
             return
 
@@ -69,7 +69,7 @@ class ProgressTracker:
         if not cache:
             return
 
-        job_data = cache.get(f"job:{job_id}")
+        job_data = await cache.get(f"job:{job_id}")
         if not job_data:
             return
 
@@ -92,7 +92,7 @@ class ProgressTracker:
             return { "job_id": job_id, "status": "running", "total_items": 1000, "processed_items": 0, "failed_items": 0, "progress_percent": 0, "message": "Processing... (cache unavailable)" }
 
         try:
-            job_data = cache.get(f"job:{job_id}")
+            job_data = await cache.get(f"job:{job_id}")
             if not job_data:
                 return None
 

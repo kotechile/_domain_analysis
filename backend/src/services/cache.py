@@ -41,7 +41,7 @@ class CacheService:
             return None
         
         try:
-            value = self.redis_client.get(key)
+            value = await self.redis_client.get(key)
             if value:
                 return json.loads(value)
             return None
@@ -87,7 +87,7 @@ class CacheService:
     
     async def get_or_set(self, key: str, factory_func, ttl: Optional[int] = None) -> Any:
         """Get value from cache or set it using factory function"""
-        value = self.get(key)
+        value = await self.get(key)
         if value is not None:
             return value
         
@@ -107,7 +107,7 @@ class CacheService:
             return 0
         
         try:
-            keys = self.redis_client.keys(pattern)
+            keys = await self.redis_client.keys(pattern)
             if keys:
                 return await self.redis_client.delete(*keys)
             return 0

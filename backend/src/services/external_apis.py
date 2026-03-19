@@ -727,7 +727,7 @@ class LLMService:
     
     async def _get_provider_and_key(self) -> tuple[Optional[str], Optional[str], Optional[str]]:
         """Get available LLM provider, API key, and model name"""
-        config = self.secrets_service.get_active_llm_config()
+        config = await self.secrets_service.get_active_llm_config()
         
         if config:
             raw_provider = config.get('provider', '').lower()

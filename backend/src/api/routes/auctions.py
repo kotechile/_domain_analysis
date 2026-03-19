@@ -2151,7 +2151,7 @@ async def trigger_bulk_refresh( payload: Dict[str, Any] = Body(...), background_
         user_id = current_user.id
 
         # ) Create a progress job (will be updated once domains are found
-        job_id = ProgressTracker.create_job( user_id=str(user_id), job_type="bulk_refresh", total_items=1000,  # Will be updated when actual count is known
+        job_id = await ProgressTracker.create_job( user_id=str(user_id), job_type="bulk_refresh", total_items=1000,  # Will be updated when actual count is known
             metadata={"filters": filters, "force": False} )
 
         # Start processing in background and return immediately
@@ -2180,7 +2180,7 @@ async def trigger_force_refresh( payload: Dict[str, Any] = Body(...), background
         user_id = current_user.id
 
         # ) Create a progress job (will be updated once domains are found
-        job_id = ProgressTracker.create_job( user_id=str(user_id), job_type="force_refresh", total_items=1000,  # Will be updated when actual count is known
+        job_id = await ProgressTracker.create_job( user_id=str(user_id), job_type="force_refresh", total_items=1000,  # Will be updated when actual count is known
             metadata={"filters": filters, "force": True} )
 
         # Start processing in background and return immediately
@@ -2199,7 +2199,7 @@ async def get_refresh_status( job_id: str, current_user = Depends(get_current_us
     try:
         from services.progress_tracker import ProgressTracker
 
-        status = ProgressTracker.get_job_status(job_id)
+        status = await ProgressTracker.get_job_status(job_id)
 
         if not status:
             raise HTTPException(status_code=404, detail="Job not found or expired")
