@@ -50,7 +50,7 @@ class AuctionScoringService:
                     'p_batch_limit': batch_size,
                     'p_config_id': config_id
                 }
-            await ).execute()
+            ).execute()
             
             if result.data:
                 logger.info("Fetched unprocessed batch", count=len(result.data), batch_size=batch_size)
@@ -260,7 +260,7 @@ class AuctionScoringService:
             result = (await self.db_service._get_client()).rpc(
                 'bulk_update_auction_scores',
                 {'p_scores': scores_jsonb}
-            await ).execute()
+            ).execute()
             
             if result.data and 'updated_count' in result.data:
                 updated_count = result.data['updated_count']
@@ -295,7 +295,7 @@ class AuctionScoringService:
                     result = (await self.db_service._get_client()).rpc(
                         'recalculate_auction_rankings_chunked',
                         {'p_batch_size': 50000}
-                    await ).execute()
+                    ).execute()
                     
                     if result.data and result.data.get('success'):
                         logger.info("Chunked ranking recalculation successful", result=result.data)

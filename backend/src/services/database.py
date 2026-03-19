@@ -756,10 +756,10 @@ class DatabaseService:
             if not client:
                 raise Exception("Supabase client not available")
             
-            result = client.table('bulk_domain_analysis').update({
+            result = await client.table('bulk_domain_analysis').update({
                 'backlinks_bulk_page_summary': summary_data,
                 'updated_at': datetime.utcnow().isoformat()
-            await }).eq('domain_name', domain).execute()
+            }).eq('domain_name', domain).execute()
             
             record_id = result.data[0]['id'] if result.data else None
             logger.info("Saved bulk page summary", domain=domain, record_id=record_id)
@@ -1305,10 +1305,10 @@ class DatabaseService:
                     # The unique constraint is on (domain, auction_site, expiration_date)
                     # Note: backlinks_bulk_page_summary is in bulk_domain_analysis table, not auctions
                     # So it's automatically preserved when we update auctions
-                    result = client.table('auctions').upsert(
+                    result = await client.table('auctions').upsert(
                         batch,
                         on_conflict='domain,auction_site,expiration_date'
-                    await ).execute()
+                    ).execute()
                     
                     # Approximate: assume all are inserts (upsert will update if exists)
                     # For accurate counts, we'd need to check each record first, which is expensive
@@ -1327,8 +1327,8 @@ class DatabaseService:
                         try:
                             client.table('auctions').upsert(
                                 auction_data,
-                                on_conflict='domain,auction_site,expiration_date'
-                            await ).execute()
+                                on_conflict=await 'domain,auction_site,expiration_date'
+                            ).execute()
                             inserted_count += 1
                         except Exception as e2:
                             if 'duplicate' in str(e2).lower() or 'unique' in str(e2).lower():
@@ -1445,10 +1445,10 @@ class DatabaseService:
                 
                 for domain_name in batch:
                     try:
-                        client.table('auctions').update({
+                        await client.table('auctions').update({
                             'has_statistics': True,
                             'updated_at': datetime.utcnow().isoformat()
-                        await }).eq('domain', domain_name).execute()
+                        }).eq('domain', domain_name).execute()
                         updated_count += 1
                     except Exception as e:
                         logger.warning("Failed to mark has_statistics", domain=domain_name, error=str(e))

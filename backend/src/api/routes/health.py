@@ -363,7 +363,7 @@ async def test_db_connection():
                 'filename': 'test_connectivity.csv',
                 'auction_site': 'test',
                 'status': 'test'
-            await }).execute()
+            }).execute()
             
             # Cleanup
             await (await db._get_client()).table('csv_upload_progress').delete().eq('job_id', f"test_{test_id}").execute()

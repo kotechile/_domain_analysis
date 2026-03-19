@@ -14,7 +14,7 @@ async def debug_schema():
             'expiration_date': '2099-01-01',
             'auction_site': 'test',
             'job_id': test_job_id
-        await }).execute()
+        }).execute()
         print("✅ Successfully inserted test record with job_id")
         
         # Verify it has the job_id

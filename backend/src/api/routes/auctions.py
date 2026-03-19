@@ -198,7 +198,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
             (await db._get_client()).table('auctions').upsert(
                 main_records,
                 on_conflict='domain,auction_site,expiration_date'
-            await ).execute()
+            ).execute()
 
             # 4. Delete merged records from staging in small sub-batches
             # Use smaller batches for the IN filter to avoid "URL component 'query' too long" (max ~2000 chars)
@@ -2738,7 +2738,7 @@ async def fetch_wayback_first_seen(domain: str):
         try:
             result = (await db._get_client()).table('auctions').update({
                 'first_seen': first_seen_dt.isoformat()
-            await }).eq('domain', domain).execute()
+            }).eq('domain', domain).execute()
             
             updated_count = len(result.data) if result.data else 0
             
@@ -2813,7 +2813,7 @@ async def process_dataforseo_queue():
         (await db._get_client()).table('dataforseo_queue').update({
             'status': 'processing',
             'updated_at': datetime.now(timezone.utc).isoformat()
-        await }).in_('id', queue_ids).execute()
+        }).in_('id', queue_ids).execute()
         
         logger.info("Processing DataForSEO queue", domain_count=len(domains))
         
@@ -2833,7 +2833,7 @@ async def process_dataforseo_queue():
                 'status': 'failed',
                 'error_message': 'Failed to trigger N8N workflow',
                 'updated_at': datetime.now(timezone.utc).isoformat()
-            await }).in_('id', queue_ids).execute()
+            }).in_('id', queue_ids).execute()
             logger.error("Failed to trigger N8N workflow for queue", queue_ids=queue_ids)
             
     except Exception as e:
@@ -2861,7 +2861,7 @@ async def queue_domain_for_dataforseo(domain: str):
         # Check if domain exists in auctions table and meets criteria
         auction_result = (await db._get_client()).table('auctions').select(
             'id,domain,score,expiration_date,page_statistics'
-        await ).eq('domain', domain).limit(1).execute()
+        ).eq('domain', domain).limit(1).execute()
         
         if not auction_result.data or len(auction_result.data) == 0:
             return {
@@ -3340,7 +3340,7 @@ async def toggle_preferred_auction(
         # is just a UI metadata change and should not trigger a "fresh" state.
         result = (await db._get_client()).table('auctions').update({
             'preferred': preferred
-        await }).eq('id', auction_id).execute()
+        }).eq('id', auction_id).execute()
         
         if not result.data:
             # If no auction with that ID, it might be a UUID mismatch or domain-based update needed.

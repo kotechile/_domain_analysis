@@ -27,7 +27,7 @@ class CreditsService:
                 await (await self.db._get_client()).table('user_credits').insert({
                     'user_id': str(user_id), 
                     'balance': 0.0
-                await }).execute()
+                }).execute()
                 return 0.0
             except Exception as e:
                 logger.error("Failed to initialize user credits", user_id=str(user_id), error=str(e))
@@ -97,7 +97,7 @@ class CreditsService:
             'reference_id': reference_id,
             'description': description,
             'balance_after': float(new_balance)
-        await }).execute()
+        }).execute()
         
         return True
 
@@ -115,7 +115,7 @@ class CreditsService:
             'reference_id': reference_id,
             'description': description,
             'balance_after': new_balance
-        await }).execute()
+        }).execute()
         
         return new_balance
 
@@ -145,7 +145,7 @@ class CreditsService:
                     'user_id': str(user_id),
                     'balance': 0.0,
                     'last_reset_at': datetime.utcnow().isoformat()
-                await }).execute()
+                }).execute()
                 return
 
             user_data = response.data[0]
@@ -172,7 +172,7 @@ class CreditsService:
                 await (await self.db._get_client()).table('user_credits').update({
                     'last_reset_at': now.isoformat(),
                     'updated_at': now.isoformat()
-                await }).eq('user_id', str(user_id)).execute()
+                }).eq('user_id', str(user_id)).execute()
                 
         except Exception as e:
             logger.error("Failed to check/reset monthly credits", user_id=str(user_id), error=str(e))

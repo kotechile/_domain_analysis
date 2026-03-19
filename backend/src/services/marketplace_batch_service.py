@@ -198,7 +198,7 @@ class MarketplaceBatchService:
                     'batch_size': len(domain_names),
                     'credits_spent': cost,
                     'filters_used': filters
-                await }).execute()
+                }).execute()
                 logger.info(f"[Background] Refresh history recorded", user_id=str(user_id))
             except Exception as hist_err:
                 logger.warning("[Background] Failed to write refresh history", error=str(hist_err))
@@ -273,7 +273,7 @@ class MarketplaceBatchService:
                 'batch_size': 1,
                 'credits_spent': int(cost),
                 'filters_used': {'domain': domain, 'type': 'single_refresh'}
-            await }).execute()
+            }).execute()
         except Exception as e:
             logger.error("Failed to record single refresh history", error=str(e))
             

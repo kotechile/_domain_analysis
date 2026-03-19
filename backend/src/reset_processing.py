@@ -31,7 +31,7 @@ async def reset_processing():
                 (await db._get_client()).table('csv_upload_progress').update({
                     'status': 'failed',
                     'error_message': 'Reset manually by admin to resolve interference.'
-                await }).eq('job_id', job['job_id']).execute()
+                }).eq('job_id', job['job_id']).execute()
                 print(f"Marked Job {job['job_id']} as failed.")
         else:
             print("No stuck jobs found.")

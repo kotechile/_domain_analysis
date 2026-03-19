@@ -233,7 +233,7 @@ class SecretsService:
                 'credentials': credentials,
                 'is_active': True,
                 'updated_at': datetime.utcnow().isoformat()
-            await }).execute()
+            }).execute()
             
             if result.data:
                 # Clear cache for this service
