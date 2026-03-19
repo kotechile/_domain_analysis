@@ -218,7 +218,8 @@ class N8NService:
             async def _fire():
                 import asyncio
                 try:
-                    # Short timeout: 10s just to get the connection accepted. async with httpx.AsyncClient( timeout=httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=5.0) ) as client:
+                    # Short timeout: 10s just to get the connection accepted.
+                    async with httpx.AsyncClient( timeout=httpx.Timeout(connect=10.0, read=15.0, write=10.0, pool=5.0) ) as client:
                         for chunk_idx, chunk in enumerate(domain_chunks):
                             payload = { "domains": chunk, "callback_url": bulk_callback_url, "request_id": request_id, "type": "bulk_summary", "chunk_index": chunk_idx + 1, "total_chunks": len(domain_chunks) }
                             
