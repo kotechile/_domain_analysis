@@ -24,7 +24,7 @@ class MarketplaceBatchService:
     async def get_refresh_costs(self) -> Dict[str, int]:
         """Get calculated costs from global settings"""
         try:
-            settings = self.credits_service.get_global_settings()
+            settings = await self.credits_service.get_global_settings()
             
             # Default fallback costs if settings not in DB
             bulk_cost = settings.get('bulk_refresh_1k_cost', {}).get('credits', 50)
@@ -120,7 +120,7 @@ class MarketplaceBatchService:
 
             # 4. Record in refresh_history
             try:
-                (await self.db._get_client()).table('refresh_history').insert({ 'user_id': str(user_id), 'batch_size': len(domain_names), 'credits_spent': cost, 'filters_used': filters }).execute()
+                await (await self.db._get_client()).table('refresh_history').insert({ 'user_id': str(user_id), 'batch_size': len(domain_names), 'credits_spent': cost, 'filters_used': filters }).execute()
                 logger.info(f"[Background] Refresh history recorded", user_id=str(user_id))
             except Exception as hist_err:
                 logger.warning("[Background] Failed to write refresh history", error=str(hist_err))

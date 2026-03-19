@@ -206,7 +206,10 @@ class N8NService:
                 logger.error("N8N bulk webhook URL not configured")
                 return None
 
-            # The DataForSEO Bulk Pages Summary API maxes out at 100 unique domains per request. # We chunk the domains into batches of 100 and fire a webhook for each batch. # The backend stores them individually by domain, so sharing request_id is perfectly fine. chunk_size = 100
+            # The DataForSEO Bulk Pages Summary API maxes out at 100 unique domains per request.
+            # We chunk the domains into batches of 100 and fire a webhook for each batch.
+            # The backend stores them individually by domain, so sharing request_id is perfectly fine.
+            chunk_size = 100
             domain_chunks = [normalized_domains[i:i + chunk_size] for i in range(0, len(normalized_domains), chunk_size)]
 
             logger.info( "Firing N8N bulk page summary webhooks (fire-and-forget)", total_domains=len(normalized_domains), chunks=len(domain_chunks), request_id=request_id, webhook_url=webhook_url )
