@@ -157,10 +157,6 @@ class N8NService:
         # Remove protocol
         domain = domain.replace("http://", "").replace("https://", "")
         
-        # Remove www.
-        if domain.startswith("www."):
-            domain = domain[4:]
-        
         # Remove trailing slash and any path
         domain = domain.split("/")[0]
         

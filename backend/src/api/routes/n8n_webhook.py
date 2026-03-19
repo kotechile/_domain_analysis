@@ -257,10 +257,7 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
         logger.info("Final result_data structure", is_list=isinstance(result_data, list), item_count=len(result_data) if isinstance(result_data, list) else 0, first_item_keys=list(result_data[0].keys()) if isinstance(result_data, list) and len(result_data) > 0 and isinstance(result_data[0], dict) else None)
         
         # Process each result asynchronously to avoid N8N HTTP timeouts
-        # Use a semaphore to limit concurrent processing and prevent memory issues
-        import asyncio
-        _webhook_semaphore = asyncio.Semaphore(3)   # ) Max 3 concurrent webhook processes (reduced from 5
-
+        # Use the global module-level semaphore
         async def process_data():
             db = get_database()
             processed_count = 0
@@ -287,8 +284,6 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
                         target = target.replace("http://", "").replace("https://", "")
                         # ) Remove path if present (e.g., "example.com/path" -> "example.com"
                         target = target.split("/")[0]
-                        # Remove www.
-                        target = target.replace("www.", "")
 
                     # Update page_statistics in auctions table
                     success = False
@@ -454,8 +449,6 @@ async def receive_bulk_rank_webhook(request: N8NBulkRankWebhookRequest):
                     target = target.replace("http://", "").replace("https://", "")
                     # ) Remove path if present (e.g., "example.com/path" -> "example.com"
                     target = target.split("/")[0]
-                    # Remove www.
-                    target = target.replace("www.", "")
                 
                 # Update page_statistics in auctions table with rank data
                 # The update_auction_page_statistics method will merge with existing data
@@ -576,8 +569,6 @@ async def receive_bulk_backlinks_webhook(request: N8NBulkRankWebhookRequest):
                     target = target.replace("http://", "").replace("https://", "")
                     # ) Remove path if present (e.g., "example.com/path" -> "example.com"
                     target = target.split("/")[0]
-                    # Remove www.
-                    target = target.replace("www.", "")
                 
                 # Update page_statistics in auctions table with backlinks data
                 # The update_auction_page_statistics method will merge with existing data
@@ -698,8 +689,6 @@ async def receive_bulk_spam_score_webhook(request: N8NBulkRankWebhookRequest):
                     target = target.replace("http://", "").replace("https://", "")
                     # ) Remove path if present (e.g., "example.com/path" -> "example.com"
                     target = target.split("/")[0]
-                    # Remove www.
-                    target = target.replace("www.", "")
                 
                 # Normalize DataForSEO field names to our internal format
                 # DataForSEO returns "spam_score" but we store it as "backlinks_spam_score"
@@ -821,7 +810,6 @@ async def receive_bulk_traffic_batch_webhook(request: N8NBulkRankWebhookRequest)
                     if target:
                         target = target.replace("http://", "").replace("https://", "")
                         target = target.split("/")[0]
-                        target = target.replace("www.", "").strip().lower()
                 
                 if not target:
                     logger.warning("No target domain found in result item", item_keys=list(result_item.keys()) if isinstance(result_item, dict) else "not a dict")

@@ -1523,13 +1523,19 @@ class DatabaseService:
         try:
             client = await self._get_client()
                 
-            # First fetch existing statistics to merge
-            # Using ilike for case-insensitivity to find the domain
-            # Filter out records marked for deletion
+            # Try exact match first (case-insensitive)
             response = await client.table('auctions').select('domain', 'page_statistics').ilike('domain', domain).eq('to_delete', False).execute()
             
+            # Fallback for www. mismatch
             if not response.data or len(response.data) == 0:
-                # ) logger.warning("Domain not found for statistics update", domain=domain
+                if domain.startswith("www."):
+                    # Table might have it without www.
+                    response = await client.table('auctions').select('domain', 'page_statistics').ilike('domain', domain[4:]).eq('to_delete', False).execute()
+                else:
+                    # Table might have it with www.
+                    response = await client.table('auctions').select('domain', 'page_statistics').ilike('domain', f"www.{domain}").eq('to_delete', False).execute()
+            
+            if not response.data or len(response.data) == 0:
                 return False
                 
             # Use the actual domain as stored in DB for the subsequent update
