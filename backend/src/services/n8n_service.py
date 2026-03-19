@@ -429,8 +429,8 @@ class N8NService:
             return None
         
         try:
-            # Normalize all domains to ensure they're in the correct format
-            normalized_domains = [self._normalize_domain(d) for d in domains if d]
+            # Normalize all domains and limit to 100 for bulk traffic (DataForSEO limitation)
+            normalized_domains = [self._normalize_domain(d) for d in domains if d][:100]
             
             if not normalized_domains:
                 logger.warning("No valid domains after normalization")

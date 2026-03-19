@@ -1321,7 +1321,7 @@ async def trigger_bulk_traffic_data_analysis( limit: int = Query(1000, descripti
         
         # Trigger DataForSEO Labs API traffic data collection via N8N webhook
         n8n_service = N8NService()
-        n8n_result = n8n_service.trigger_bulk_traffic_batch_workflow(domain_names)
+        n8n_result = await n8n_service.trigger_bulk_traffic_batch_workflow(domain_names)
         
         if n8n_result:
             triggered_count = len(domain_names)
