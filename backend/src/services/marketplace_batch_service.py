@@ -141,7 +141,7 @@ class MarketplaceBatchService:
 
     async def get_refresh_history(self, user_id: UUID, limit: int = 50) -> List[Dict[str, Any]]:
         """Get the refresh history for a user"""
-        response = (await self.db._get_client()).table('refresh_history').select('*').eq('user_id', str(user_id)).order('refreshed_at', desc=True).limit(limit).execute()
+        response = await (await self.db._get_client()).table('refresh_history').select('*').eq('user_id', str(user_id)).order('refreshed_at', desc=True).limit(limit).execute()
         return response.data
 
     async def refresh_single_domain(self, user_id: UUID, domain: str) -> Dict:
@@ -169,7 +169,7 @@ class MarketplaceBatchService:
         
         # 4. Record History
         try:
-            (await self.db._get_client()).table('refresh_history').insert({ 'user_id': str(user_id), 'batch_size': 1, 'credits_spent': int(cost), 'filters_used': {'domain': domain, 'type': 'single_refresh'} }).execute()
+            await (await self.db._get_client()).table('refresh_history').insert({ 'user_id': str(user_id), 'batch_size': 1, 'credits_spent': int(cost), 'filters_used': {'domain': domain, 'type': 'single_refresh'} }).execute()
         except Exception as e:
             logger.error("Failed to record single refresh history", error=str(e))
             
