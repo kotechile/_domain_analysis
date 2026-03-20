@@ -309,6 +309,46 @@
                     </th>
                     <th tabindex="0"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                        (click)="toggleSort('backlinks')" (keydown.enter)="toggleSort('backlinks')">
+                        <div class="flex items-center justify-center space-x-2">
+                            <span>BL</span>
+                            <i-lucide [name]="getSortIcon('backlinks')"
+                                class="w-3.5 h-3.5 opacity-0 group-hover:opacity-50 group-focus-visible:opacity-50"
+                                [class.sort-active]="sortBy() === 'backlinks'"></i-lucide>
+                        </div>
+                    </th>
+                    <th tabindex="0"
+                        class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                        (click)="toggleSort('referring_domains')" (keydown.enter)="toggleSort('referring_domains')">
+                        <div class="flex items-center justify-center space-x-2">
+                            <span>RD</span>
+                            <i-lucide [name]="getSortIcon('referring_domains')"
+                                class="w-3.5 h-3.5 opacity-0 group-hover:opacity-50 group-focus-visible:opacity-50"
+                                [class.sort-active]="sortBy() === 'referring_domains'"></i-lucide>
+                        </div>
+                    </th>
+                    <th tabindex="0"
+                        class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                        (click)="toggleSort('backlinks_spam_score')" (keydown.enter)="toggleSort('backlinks_spam_score')">
+                        <div class="flex items-center justify-center space-x-2">
+                            <span>Spam</span>
+                            <i-lucide [name]="getSortIcon('backlinks_spam_score')"
+                                class="w-3.5 h-3.5 opacity-0 group-hover:opacity-50 group-focus-visible:opacity-50"
+                                [class.sort-active]="sortBy() === 'backlinks_spam_score'"></i-lucide>
+                        </div>
+                    </th>
+                    <th tabindex="0"
+                        class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
+                        (click)="toggleSort('first_seen')" (keydown.enter)="toggleSort('first_seen')">
+                        <div class="flex items-center justify-center space-x-2">
+                            <span>Age</span>
+                            <i-lucide [name]="getSortIcon('first_seen')"
+                                class="w-3.5 h-3.5 opacity-0 group-hover:opacity-50 group-focus-visible:opacity-50"
+                                [class.sort-active]="sortBy() === 'first_seen'"></i-lucide>
+                        </div>
+                    </th>
+                    <th tabindex="0"
+                        class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('expiration_date')" (keydown.enter)="toggleSort('expiration_date')">
                         <div class="flex items-center justify-center space-x-2">
                             <span>Expiry</span>
@@ -334,7 +374,7 @@
                 @if (loading()) {
                 @for (item of [1,2,3,4,5,6,7,8]; track item) {
                 <tr class="animate-pulse">
-                    <td colspan="9" class="p-8">
+                    <td colspan="14" class="p-8">
                         <div class="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/4 mb-2"></div>
                         <div class="h-4 bg-gray-200 dark:bg-gray-800 rounded w-full opacity-20"></div>
                     </td>
@@ -425,6 +465,51 @@
                             <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">Keywords</span>
                         </div>
                     </td>
+                    <!-- Backlinks -->
+                    <td class="text-center">
+                        <div class="flex flex-col items-center gap-0.5">
+                            <span class="text-lg font-bold tabular-nums"
+                                [class.opacity-20]="!(item.backlinks || 0)">
+                                {{ fmtNum(item.backlinks) }}
+                            </span>
+                            <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">BL</span>
+                        </div>
+                    </td>
+                    <!-- Ref Domains -->
+                    <td class="text-center">
+                        <div class="flex flex-col items-center gap-0.5">
+                            <span class="text-lg font-bold tabular-nums"
+                                [class.opacity-20]="!(item.referring_domains || 0)">
+                                {{ fmtNum(item.referring_domains) }}
+                            </span>
+                            <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">RD</span>
+                        </div>
+                    </td>
+                    <!-- Spam Score -->
+                    <td class="text-center">
+                        <div class="flex flex-col items-center gap-0.5">
+                            <span class="text-lg font-bold tabular-nums"
+                                [class.text-red-500]="(item.backlinks_spam_score || 0) > 30"
+                                [class.text-amber-500]="(item.backlinks_spam_score || 0) > 10 && (item.backlinks_spam_score || 0) <= 30"
+                                [class.opacity-20]="!(item.backlinks_spam_score || 0)">
+                                {{ item.backlinks_spam_score || 0 }}
+                            </span>
+                            <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">Spam</span>
+                        </div>
+                    </td>
+                    <!-- First Seen -->
+                    <td class="text-center">
+                        <div class="flex flex-col items-center">
+                            @if (item.first_seen) {
+                                <span class="text-xs font-bold" style="color: var(--text-color)">
+                                    {{ item.first_seen | date:'y' }}
+                                </span>
+                            } @else {
+                                <span class="text-xs font-bold opacity-20" style="color: var(--text-color)">-</span>
+                            }
+                            <span class="text-[9px] font-bold opacity-30 uppercase tracking-tighter">Age</span>
+                        </div>
+                    </td>
                     <td class="text-center">
                         <div class="flex flex-col items-center">
                             <span class="text-xs font-bold" style="color: var(--text-color)">
@@ -466,7 +551,7 @@
                 }
                 @} @else if (!loading()) {
                 <tr>
-                    <td colspan="10" class="p-20 text-center opacity-30 font-semibold tracking-widest uppercase">
+                    <td colspan="14" class="p-20 text-center opacity-30 font-semibold tracking-widest uppercase">
                         No domains found matching your criteria.
                     </td>
                 </tr>
