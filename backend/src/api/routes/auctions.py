@@ -2257,7 +2257,8 @@ async def toggle_preferred_auction( auction_id: str, payload: Dict[str, Any] = B
         # We don't check for ownership here since auctions are shared across users in the base table. # But this flag affects how they are filtered/shown. # In this system, 'preferred' is usually global or we'd need a sub-table per user. # Given the current schema, we update the auctions table. # DO NOT update `updated_at` here, because `updated_at` is used by the frontend
         # to determine if SEO metrics are "fresh" or "stale". Toggling a favorite 
         # is just a UI metadata change and should not trigger a "fresh" state.
-        result = (await db._get_client()).table('auctions').update({ 'preferred': preferred }).eq('id', auction_id).execute()
+        client = await db._get_client()
+        result = await client.table('auctions').update({ 'preferred': preferred }).eq('id', auction_id).execute()
         
         if not result.data:
             # ) If no auction with that ID, it might be a UUID mismatch or domain-based update needed. # But normally auctions have a UUID ID. logger.warning("No auction found to toggle preferred", auction_id=auction_id
