@@ -643,4 +643,19 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
       this.snackBar.open('Error updating favorite status', 'Close', { duration: 3000 });
     }
   }
+
+  nextPage() {
+    if (this.offset() + this.limit() < this.totalCount()) {
+      this.offset.set(this.offset() + this.limit());
+    }
+  }
+
+  prevPage() {
+    this.offset.set(Math.max(0, this.offset() - this.limit()));
+  }
+
+  onLimitChange(newLimit: number) {
+    this.limit.set(newLimit);
+    this.offset.set(0);
+  }
 }

@@ -174,7 +174,7 @@
     @if (showFilters()) {
     <div class="p-8 rounded-3xl border border-opacity-5 animate-in slide-in-from-top-4 duration-500 overflow-hidden relative shadow-2xl"
         style="background: var(--card-bg); border-color: var(--border-color)">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-10">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-10">
             <!-- Platforms -->
             <div class="space-y-4">
                 <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">Core Platforms</span>
@@ -206,8 +206,7 @@
 
             <!-- Score Range -->
             <div class="space-y-4">
-                <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">AI Score
-                    Gravity</span>
+                <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">AI Score Gravity</span>
                 <div class="flex items-center space-x-3">
                     <input type="number" placeholder="Min" [ngModel]="minScore()"
                         (ngModelChange)="minScore.set($event); offset.set(0)"
@@ -217,6 +216,22 @@
                     <input type="number" placeholder="Max" [ngModel]="maxScore()"
                         (ngModelChange)="maxScore.set($event); offset.set(0)"
                         class="w-full h-11 px-4 rounded-xl bg-black/5 dark:bg-white/5 border-none text-xs font-semibold outline-none ring-1 ring-black/5 dark:ring-white/10"
+                        style="color: var(--text-color)">
+                </div>
+            </div>
+
+            <!-- Expiration Date Filters -->
+            <div class="space-y-4">
+                <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">Expiration</span>
+                <div class="flex items-center space-x-3">
+                    <input type="date" placeholder="From" [ngModel]="expirationFromDate()"
+                        (ngModelChange)="expirationFromDate.set($event); offset.set(0)"
+                        class="w-full h-11 px-2 rounded-xl bg-black/5 dark:bg-white/5 border-none text-[10px] font-semibold outline-none ring-1 ring-black/5 dark:ring-white/10"
+                        style="color: var(--text-color)">
+                    <span class="opacity-20 font-semibold">TO</span>
+                    <input type="date" placeholder="To" [ngModel]="expirationToDate()"
+                        (ngModelChange)="expirationToDate.set($event); offset.set(0)"
+                        class="w-full h-11 px-2 rounded-xl bg-black/5 dark:bg-white/5 border-none text-[10px] font-semibold outline-none ring-1 ring-black/5 dark:ring-white/10"
                         style="color: var(--text-color)">
                 </div>
             </div>
@@ -234,8 +249,8 @@
 
     <!-- Main Table Container -->
     <div class="table-container shadow-xl">
-        <table class="w-full">
-            <thead>
+        <table class="w-full relative">
+            <thead class="sticky top-0 z-40 shadow-sm" style="background: var(--card-bg);">
                 <tr>
                     <th tabindex="0" title="Domain Name"
                         class="cursor-pointer group hover:opacity-100 outline-none focus-visible:ring-2 focus-visible:ring-inset"
@@ -562,9 +577,35 @@
     </div>
 
     <!-- Pagination Summary (Footer) -->
-    <div class="flex items-center justify-between px-4 py-2 opacity-50 text-[10px] font-semibold uppercase tracking-widest"
+    <div class="flex flex-col sm:flex-row items-center justify-between text-[10px] font-bold tracking-widest uppercase opacity-40"
         style="color: var(--text-color)">
-        <span>Total Count: {{ totalCount() }} Domains</span>
-        <span>Page Size: {{ limit() }} • Sorted by: {{ sortBy() | titlecase }}</span>
+        <div class="flex items-center space-x-4 mb-2 sm:mb-0">
+            <span>Total Count: {{ totalCount() }} Domains</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div class="flex items-center space-x-2">
+                <span>Page Size:</span>
+                <select [ngModel]="limit()" (ngModelChange)="onLimitChange($event)" class="bg-transparent font-bold outline-none cursor-pointer p-1">
+                    <option [ngValue]="50">50</option>
+                    <option [ngValue]="150">150</option>
+                    <option [ngValue]="500">500</option>
+                    <option [ngValue]="1000">1000</option>
+                </select>
+            </div>
+            
+            <span>Offset: {{ offset() }}</span>
+            <div class="flex items-center space-x-2 border shadow-sm rounded-lg p-1 ml-4"
+                style="border-color: var(--border-color); background: rgba(0,0,0,0.02)">
+                <button (click)="prevPage()" [disabled]="offset() === 0" 
+                    class="px-3 py-1.5 rounded disabled:opacity-30 transition-all hover:bg-black/5 dark:hover:bg-white/5 font-bold">
+                    PREV
+                </button>
+                <div class="w-px h-4 bg-black/10 dark:bg-white/10"></div>
+                <button (click)="nextPage()" [disabled]="offset() + limit() >= totalCount()" 
+                    class="px-3 py-1.5 rounded disabled:opacity-30 transition-all hover:bg-black/5 dark:hover:bg-white/5 font-bold">
+                    NEXT
+                </button>
+            </div>
+        </div>
     </div>
 </div>
