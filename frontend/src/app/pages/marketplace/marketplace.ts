@@ -17,7 +17,7 @@ import { Auction } from '../../models/domain.model';
   templateUrl: './marketplace.html',
   styles: [`
     .table-container {
-      @apply overflow-x-auto rounded-2xl border border-opacity-10;
+      @apply rounded-2xl border border-opacity-10 w-full overflow-auto max-h-[75vh];
       border-color: var(--border-color);
       background: var(--card-bg);
     }
