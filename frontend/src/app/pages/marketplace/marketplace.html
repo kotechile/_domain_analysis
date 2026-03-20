@@ -1,4 +1,4 @@
-<div class="max-w-7xl mx-auto px-4 py-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+<div class="w-full mx-auto px-4 py-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
 
     <!-- Page Header & Filter Toolbar -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -237,7 +237,7 @@
         <table class="w-full">
             <thead>
                 <tr>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Domain Name"
                         class="cursor-pointer group hover:opacity-100 outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('domain')" (keydown.enter)="toggleSort('domain')">
                         <div class="flex items-center space-x-2">
@@ -247,7 +247,7 @@
                                 [class.sort-active]="sortBy() === 'domain'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="AI Score"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('score')" (keydown.enter)="toggleSort('score')">
                         <div class="flex items-center justify-center space-x-2">
@@ -257,7 +257,7 @@
                                 [class.sort-active]="sortBy() === 'score'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Current Bid/Price"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('current_bid')" (keydown.enter)="toggleSort('current_bid')">
                         <div class="flex items-center justify-center space-x-2">
@@ -267,7 +267,7 @@
                                 [class.sort-active]="sortBy() === 'current_bid'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Offer Type"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('offer_type')" (keydown.enter)="toggleSort('offer_type')">
                         <div class="flex items-center justify-center space-x-2">
@@ -277,7 +277,7 @@
                                 [class.sort-active]="sortBy() === 'offer_type'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Domain Rating by Ahrefs"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('domain_rating')" (keydown.enter)="toggleSort('domain_rating')">
                         <div class="flex items-center justify-center space-x-2">
@@ -287,7 +287,7 @@
                                 [class.sort-active]="sortBy() === 'domain_rating'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Organic Traffic"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('organic_traffic')" (keydown.enter)="toggleSort('organic_traffic')">
                         <div class="flex items-center justify-center space-x-2">
@@ -297,7 +297,7 @@
                                 [class.sort-active]="sortBy() === 'organic_traffic'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Keywords Count"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('keywords_count')" (keydown.enter)="toggleSort('keywords_count')">
                         <div class="flex items-center justify-center space-x-2">
@@ -307,7 +307,7 @@
                                 [class.sort-active]="sortBy() === 'keywords_count'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Total Backlinks"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('backlinks')" (keydown.enter)="toggleSort('backlinks')">
                         <div class="flex items-center justify-center space-x-2">
@@ -317,7 +317,7 @@
                                 [class.sort-active]="sortBy() === 'backlinks'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Referring Domains"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('referring_domains')" (keydown.enter)="toggleSort('referring_domains')">
                         <div class="flex items-center justify-center space-x-2">
@@ -327,7 +327,7 @@
                                 [class.sort-active]="sortBy() === 'referring_domains'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Backlinks Spam Score (0 - 100)"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('backlinks_spam_score')" (keydown.enter)="toggleSort('backlinks_spam_score')">
                         <div class="flex items-center justify-center space-x-2">
@@ -337,7 +337,7 @@
                                 [class.sort-active]="sortBy() === 'backlinks_spam_score'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Year First Seen (Age)"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('first_seen')" (keydown.enter)="toggleSort('first_seen')">
                         <div class="flex items-center justify-center space-x-2">
@@ -347,7 +347,7 @@
                                 [class.sort-active]="sortBy() === 'first_seen'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Auction Expiration Date"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('expiration_date')" (keydown.enter)="toggleSort('expiration_date')">
                         <div class="flex items-center justify-center space-x-2">
@@ -357,7 +357,7 @@
                                 [class.sort-active]="sortBy() === 'expiration_date'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0"
+                    <th tabindex="0" title="Marketplace Platform"
                         class="cursor-pointer group hover:opacity-100 text-right pr-8 outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('auction_site')" (keydown.enter)="toggleSort('auction_site')">
                         <div class="flex items-center justify-end space-x-2">
@@ -437,8 +437,9 @@
                     <!-- Domain Rating (color-coded) -->
                     <td class="text-center">
                         <div class="flex flex-col items-center gap-0.5">
-                            <span class="text-lg font-bold tabular-nums" [ngClass]="getDrClass(item.domain_rating)">
-                                {{ item.domain_rating || 0 }}
+                            <span class="text-lg font-bold tabular-nums" [ngClass]="getDrClass(item.domain_rating)"
+                                [class.opacity-20]="!item.has_statistics || !(item.domain_rating || 0)">
+                                {{ item.has_statistics ? (item.domain_rating || 0) : '–' }}
                             </span>
                             <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">DR</span>
                         </div>
@@ -448,8 +449,8 @@
                         <div class="flex flex-col items-center gap-0.5">
                             <span class="text-lg font-bold tabular-nums"
                                 [class.text-emerald-500]="(item.organic_traffic || 0) > 0"
-                                [class.opacity-20]="!(item.organic_traffic || 0)">
-                                {{ fmtNum(item.organic_traffic) }}
+                                [class.opacity-20]="!item.has_statistics || !(item.organic_traffic || 0)">
+                                {{ fmtMetric(item.organic_traffic, item.has_statistics) }}
                             </span>
                             <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">Traffic</span>
                         </div>
@@ -459,8 +460,8 @@
                         <div class="flex flex-col items-center gap-0.5">
                             <span class="text-lg font-bold tabular-nums"
                                 [class.text-sky-500]="(item.keywords_count || 0) > 0"
-                                [class.opacity-20]="!(item.keywords_count || 0)">
-                                {{ fmtNum(item.keywords_count) }}
+                                [class.opacity-20]="!item.has_statistics || !(item.keywords_count || 0)">
+                                {{ fmtMetric(item.keywords_count, item.has_statistics) }}
                             </span>
                             <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">Keywords</span>
                         </div>
@@ -469,8 +470,8 @@
                     <td class="text-center">
                         <div class="flex flex-col items-center gap-0.5">
                             <span class="text-lg font-bold tabular-nums"
-                                [class.opacity-20]="!(item.backlinks || 0)">
-                                {{ fmtNum(item.backlinks) }}
+                                [class.opacity-20]="!item.has_statistics || !(item.backlinks || 0)">
+                                {{ fmtMetric(item.backlinks, item.has_statistics) }}
                             </span>
                             <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">BL</span>
                         </div>
@@ -479,8 +480,8 @@
                     <td class="text-center">
                         <div class="flex flex-col items-center gap-0.5">
                             <span class="text-lg font-bold tabular-nums"
-                                [class.opacity-20]="!(item.referring_domains || 0)">
-                                {{ fmtNum(item.referring_domains) }}
+                                [class.opacity-20]="!item.has_statistics || !(item.referring_domains || 0)">
+                                {{ fmtMetric(item.referring_domains, item.has_statistics) }}
                             </span>
                             <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">RD</span>
                         </div>
@@ -491,8 +492,8 @@
                             <span class="text-lg font-bold tabular-nums"
                                 [class.text-red-500]="(item.backlinks_spam_score || 0) > 30"
                                 [class.text-amber-500]="(item.backlinks_spam_score || 0) > 10 && (item.backlinks_spam_score || 0) <= 30"
-                                [class.opacity-20]="!(item.backlinks_spam_score || 0)">
-                                {{ item.backlinks_spam_score || 0 }}
+                                [class.opacity-20]="!item.has_statistics || !(item.backlinks_spam_score || 0)">
+                                {{ item.has_statistics ? (item.backlinks_spam_score || 0) : '–' }}
                             </span>
                             <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">Spam</span>
                         </div>
