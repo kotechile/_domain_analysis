@@ -9,6 +9,7 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from services.database import get_database
+from services.credits_service import CreditsService
 from models.domain_analysis import DetailedAnalysisData, DetailedDataType
 
 logger = structlog.get_logger()
@@ -26,6 +27,8 @@ class N8NBacklinksWebhookRequest(BaseModel):
     success: bool = Field(..., description="Whether the workflow succeeded")
     data: Optional[Dict[str, Any]] = Field(None, description="Backlink data if successful")
     error: Optional[str] = Field(None, description="Error message if failed")
+    cost: Optional[float] = Field(None, description="API cost")
+    credits_count: Optional[float] = Field(None, description="Credits count used")
 
 
 @router.post("/n8n/webhook/backlinks")
@@ -79,6 +82,8 @@ async def receive_backlinks_webhook(request: N8NBacklinksWebhookRequest):
         detailed_data = DetailedAnalysisData( domain_name=request.domain, data_type=DetailedDataType.BACKLINKS, json_data=request.data )
         
         await db.save_detailed_data(detailed_data)
+        if request.cost is not None or request.credits_count is not None:
+            await db.log_api_usage(user_action='DEEP ANALYSIS', api_service='Backlinks (Detailed)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=request.domain)
         
         logger.info("N8N backlinks data saved successfully", request_id=request.request_id, domain=request.domain, items_count=len(request.data.get("items", [])))
         
@@ -96,6 +101,8 @@ class N8NBacklinksSummaryWebhookRequest(BaseModel):
     success: bool = Field(..., description="Whether the workflow succeeded")
     data: Optional[Dict[str, Any]] = Field(None, description="Backlinks summary data if successful")
     error: Optional[str] = Field(None, description="Error message if failed")
+    cost: Optional[float] = Field(None, description="API cost")
+    credits_count: Optional[float] = Field(None, description="Credits count used")
 
 
 @router.post("/n8n/webhook/backlinks-summary")
@@ -152,6 +159,8 @@ async def receive_backlinks_summary_webhook(request: N8NBacklinksSummaryWebhookR
         raw_data = { "backlinks_summary": summary_data }
         
         await db.save_raw_data(domain_name=request.domain, api_source=DataSource.DATAFORSEO, data=raw_data)
+        if request.cost is not None or request.credits_count is not None:
+            await db.log_api_usage(user_action='SUMMARY ANALYSIS', api_service='Backlinks (Summary)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=request.domain)
         
         logger.info("N8N backlinks summary data saved successfully", request_id=request.request_id, domain=request.domain, backlinks=summary_data.get("backlinks", 0), referring_domains=summary_data.get("referring_domains", 0), rank=summary_data.get("rank", 0))
         
@@ -168,6 +177,8 @@ class N8NBulkPageSummaryWebhookRequest(BaseModel):
     success: bool = Field(..., description="Whether the workflow succeeded")
     data: Optional[Dict[str, Any]] = Field(None, description="Bulk page summary data if successful")
     error: Optional[str] = Field(None, description="Error message if failed")
+    cost: Optional[float] = Field(None, description="API cost")
+    credits_count: Optional[float] = Field(None, description="Credits count used")
 
 
 @router.post("/n8n/webhook/backlinks-bulk-page-summary")
@@ -327,6 +338,8 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
 
         # Start processing in background and return immediately
         asyncio.create_task(process_with_semaphore())
+        if request.cost is not None or request.credits_count is not None:
+            await get_database().log_api_usage(user_action='BULK REFRESH', api_service='Backlinks (Bulk Summary)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=None)
 
         return { "success": True, "message": "Bulk page summary data queued for processing", "request_id": request.request_id, "items_queued": len(result_data) }
         
@@ -341,6 +354,8 @@ class N8NBulkRankWebhookRequest(BaseModel):
     success: bool = Field(..., description="Whether the workflow succeeded")
     data: Optional[Dict[str, Any]] = Field(None, description="Bulk rank data if successful")
     error: Optional[str] = Field(None, description="Error message if failed")
+    cost: Optional[float] = Field(None, description="API cost")
+    credits_count: Optional[float] = Field(None, description="Credits count used")
 
 
 @router.post("/n8n/webhook/backlinks-bulk-rank")
@@ -425,6 +440,8 @@ async def receive_bulk_rank_webhook(request: N8NBulkRankWebhookRequest):
         
         # Process each result
         db = get_database()
+        if request.cost is not None or request.credits_count is not None:
+            await db.log_api_usage(user_action='BULK REFRESH', api_service='Rank (Bulk)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=None)
         processed_count = 0
         failed_count = 0
         failed_domains = []
@@ -545,6 +562,8 @@ async def receive_bulk_backlinks_webhook(request: N8NBulkRankWebhookRequest):
             result_data = [result_data] if result_data else []
         
         db = get_database()
+        if request.cost is not None or request.credits_count is not None:
+            await db.log_api_usage(user_action='BULK REFRESH', api_service='Backlinks (Bulk)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=None)
         processed_count = 0
         failed_count = 0
         failed_domains = []
@@ -650,6 +669,8 @@ async def receive_bulk_spam_score_webhook(request: N8NBulkRankWebhookRequest):
             result_data = [result_data] if result_data else []
         
         db = get_database()
+        if request.cost is not None or request.credits_count is not None:
+            await db.log_api_usage(user_action='BULK REFRESH', api_service='Spam Score (Bulk)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=None)
         processed_count = 0
         failed_count = 0
         failed_domains = []
@@ -780,6 +801,8 @@ async def receive_bulk_traffic_batch_webhook(request: N8NBulkRankWebhookRequest)
         logger.info("Processing bulk traffic data", request_id=request.request_id, item_count=len(items))
         
         db = get_database()
+        if request.cost is not None or request.credits_count is not None:
+            await db.log_api_usage(user_action='BULK REFRESH', api_service='Traffic (Bulk)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=None)
         processed_count = 0
         failed_count = 0
         failed_domains = []

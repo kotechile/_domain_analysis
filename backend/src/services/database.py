@@ -2237,3 +2237,19 @@ def get_database() -> DatabaseService:
     if _db_service is None:
         raise RuntimeError("Database service not initialized")
     return _db_service
+
+
+    async def log_api_usage(self, user_action: str, api_service: str, request_id: str, cost: float, credits_count: float, domain: str = None):
+        client = await self._get_client()
+        try:
+            await client.table('api_usage_logs').insert({
+                'user_action': user_action,
+                'api_service': api_service,
+                'request_id': request_id,
+                'cost': cost,
+                'credits_count': credits_count,
+                'domain': domain,
+                'created_at': __import__('datetime').datetime.utcnow().isoformat()
+            }).execute()
+        except Exception as e:
+            logger.error('Failed to log API usage', error=str(e))
