@@ -2124,8 +2124,10 @@ async def get_refresh_preview( payload: Dict[str, Any] = Body(...), current_user
 
         filters = payload.get("filters", payload)
         force = payload.get("force", False)
+        sort_by = payload.get("sort_by", "expiration_date")
+        sort_order = payload.get("sort_order", "asc")
 
-        domains_data = await service.get_auctions_missing_any_metric_with_filters( filters=filters, limit=1000, force_refresh=force )
+        domains_data = await service.get_auctions_missing_any_metric_with_filters( filters=filters, sort_by=sort_by, sort_order=sort_order, limit=1000, force_refresh=force )
 
         return { "success": True, "domain_count": len(domains_data), "would_refresh": len(domains_data) > 0, "filters": filters, "force": force, "message": f"Found {len(domains_data)} domains that would be refreshed" if domains_data else "No domains need refreshing - all have fresh metrics" }
     except Exception as e:
@@ -2146,6 +2148,8 @@ async def trigger_bulk_refresh( payload: Dict[str, Any] = Body(...), background_
  # }  The Angular client wraps filters in { filters: {..., force: bool
         filters = payload.get("filters", payload)  # Fallback: treat whole body as filters
         force = payload.get("force", False)
+        sort_by = payload.get("sort_by", "expiration_date")
+        sort_order = payload.get("sort_order", "asc")
 
         # Extract user ID before passing to background task
         user_id = current_user.id
@@ -2155,7 +2159,7 @@ async def trigger_bulk_refresh( payload: Dict[str, Any] = Body(...), background_
             metadata={"filters": filters, "force": False} )
 
         # Start processing in background and return immediately
-        background_tasks.add_task( service.process_marketplace_refresh, user_id=user_id, filters=filters, force=False, job_id=job_id )
+        background_tasks.add_task( service.process_marketplace_refresh, user_id=user_id, filters=filters, force=False, job_id=job_id, sort_by=sort_by, sort_order=sort_order )
 
         return { "success": True, "in_progress": True, "job_id": job_id, "message": "Fill Gaps refresh started — processing up to 1,000 domains in the background. Results will appear shortly." }
     except Exception as e:
@@ -2175,6 +2179,8 @@ async def trigger_force_refresh( payload: Dict[str, Any] = Body(...), background
 
         # Same payload format as bulk-refresh
         filters = payload.get("filters", payload)
+        sort_by = payload.get("sort_by", "expiration_date")
+        sort_order = payload.get("sort_order", "asc")
 
         # Extract user ID before passing to background task
         user_id = current_user.id
@@ -2184,7 +2190,7 @@ async def trigger_force_refresh( payload: Dict[str, Any] = Body(...), background
             metadata={"filters": filters, "force": True} )
 
         # Start processing in background and return immediately
-        background_tasks.add_task( service.process_marketplace_refresh, user_id=user_id, filters=filters, force=True, job_id=job_id )
+        background_tasks.add_task( service.process_marketplace_refresh, user_id=user_id, filters=filters, force=True, job_id=job_id, sort_by=sort_by, sort_order=sort_order )
 
         return { "success": True, "in_progress": True, "job_id": job_id, "message": "Force Refresh started — processing up to 1,000 domains in the background. Results will appear shortly." }
     except Exception as e:

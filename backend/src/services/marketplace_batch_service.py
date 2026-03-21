@@ -41,7 +41,7 @@ class MarketplaceBatchService:
         Legacy synchronous method — now returns immediately with in_progress status. Use process_marketplace_refresh() for background processing. """
         return { "success": True, "in_progress": True, "message": "Refresh started — processing in background." }
 
-    async def process_marketplace_refresh( self, user_id: UUID, filters: Dict[str, Any], force: bool = False, job_id: Optional[str] = None ):
+    async def process_marketplace_refresh( self, user_id: UUID, filters: Dict[str, Any], force: bool = False, job_id: Optional[str] = None, sort_by: str = 'expiration_date', sort_order: str = 'asc' ):
         """
         Background task: "Find and Fill" — trigger a DataForSEO refresh for up to 1,000 domains. This runs in the background and doesn't block the API response. force=True: Bypasses the missing-metrics and staleness checks (premium call). force=False: Fill-the-gaps behaviour — cheaper and idempotent. """
         try:
@@ -57,7 +57,7 @@ class MarketplaceBatchService:
             # 1. Find the domains BEFORE deducting credits
             logger.info(f"[Background] Finding domains with filters", filters=filters)
             domains_data = await self.auctions_service.get_auctions_missing_any_metric_with_filters(
-                filters=filters, limit=1000, force_refresh=force
+                filters=filters, sort_by=sort_by, sort_order=sort_order, limit=1000, force_refresh=force
             )
             domain_names = [d['domain'] for d in domains_data]
 

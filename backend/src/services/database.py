@@ -1364,8 +1364,8 @@ class DatabaseService:
                         query = query.is_('score', 'null')
 
             if force_refresh:
-                # Force mode: just return top N by expiry, no missing-metrics check
-                query = query.order('expiration_date', desc=False)
+                # Force mode: just return top N by requested sort, no missing-metrics check
+                query = query.order(sort_by, desc=(sort_order.lower() == 'desc'))
                 logger.info("Executing force refresh query", filters=filters, limit=limit)
                 result = await query.limit(limit).execute()
                 candidates = result.data if result.data else []
@@ -1409,6 +1409,12 @@ class DatabaseService:
 
                 where_clause = " AND ".join(where_conditions)
 
+                # Sanitize sort fields to prevent injection
+                valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score', 'domain_rating', 'organic_traffic', 'updated_at']
+                safe_sort_by = sort_by if sort_by in valid_sort_fields else 'updated_at'
+                safe_sort_order = 'DESC' if sort_order.lower() == 'desc' else 'ASC'
+                nulls_clause = 'NULLS LAST' if safe_sort_order == 'DESC' else 'NULLS FIRST'
+
                 # Use raw SQL via RPC for efficient filtering
                 # Logic: Include domain if missing ANY metric
                 # Only skip if updated recently AND has ALL metrics
@@ -1428,7 +1434,7 @@ class DatabaseService:
                       AND backlinks IS NOT NULL
                       AND backlinks_spam_score IS NOT NULL
                       AND (updated_at IS NULL OR updated_at < '{cutoff_7d}') ) )
-                ORDER BY updated_at ASC NULLS FIRST
+                ORDER BY {safe_sort_by} {safe_sort_order} {nulls_clause}
                 LIMIT {limit}
                 """
 
@@ -1442,7 +1448,7 @@ class DatabaseService:
                 except Exception as rpc_err:
                     logger.warning("RPC exec_sql not available, falling back to client-side filtering", error=str(rpc_err))
                     # Fall back to the original approach but with smaller limit
-                    query = query.order('expiration_date', desc=False)
+                    query = query.order(safe_sort_by, desc=(safe_sort_order == 'DESC'))
                     fetch_limit = min(limit * 2, 2000)  # Reduced from 4000
                     result = await query.limit(fetch_limit).execute()
                     candidates = result.data if result.data else []
