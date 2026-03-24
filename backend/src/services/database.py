@@ -143,7 +143,25 @@ class DatabaseService:
             "CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);",
             "CREATE INDEX IF NOT EXISTS idx_raw_data_cache_domain_source ON raw_data_cache(domain_name, api_source);",
             "CREATE INDEX IF NOT EXISTS idx_csv_upload_progress_job_id ON csv_upload_progress(job_id);",
-            "CREATE INDEX IF NOT EXISTS idx_csv_upload_progress_status ON csv_upload_progress(status);"
+            "CREATE INDEX IF NOT EXISTS idx_csv_upload_progress_status ON csv_upload_progress(status);",
+            
+            # Ensure auctions table has newer columns
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS link VARCHAR(1000);",
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS score DECIMAL(10,2);",
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS offer_type VARCHAR(50);",
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS first_seen TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS deletion_flag BOOLEAN DEFAULT false;",
+            
+            # Ensure auctions_staging table has ALL necessary columns (critical for bulk uploads)
+            "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS job_id VARCHAR(255);",
+            "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS link VARCHAR(1000);",
+            "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS score DECIMAL(10,2);",
+            "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS offer_type VARCHAR(50);",
+            "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS first_seen TIMESTAMP WITH TIME ZONE;",
+            "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS deletion_flag BOOLEAN DEFAULT false;",
+            "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS processed BOOLEAN DEFAULT false;",
+            "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS preferred BOOLEAN DEFAULT false;",
+            "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS has_statistics BOOLEAN DEFAULT false;"
         ]
         
         for sql in statements:

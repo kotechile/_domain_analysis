@@ -273,6 +273,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
         
         # For NameSilo type stats
         namesilo_type_counts = {}
+        error_message = None
         
         async def process_batch(batch, is_last=False):
             nonlocal processed_count, scored_count, passed_count, failed_count, skipped_count
@@ -416,21 +417,40 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     # Log progress to stdout for observability
                     logger.info("Processed batch", job_id=job_id, count=processed_count, total_estimated=total_records)
 
-                # Yield control to event loop inside this heavy CPU-bound loop to prevent Uvicorn blocking
-                if scored_count % 100 == 0:
-                    await asyncio.sleep(0)
+                # yield control
+                if (scored_count + skipped_count) % 100 == 0:
+                    await asyncio.sleep(0.01)
+                    # Update progress in DB more frequently for better feedback
+                    try:
+                        await db.update_csv_upload_progress( 
+                            job_id=job_id, 
+                            status='processing', 
+                            processed_records=scored_count + skipped_count, 
+                            current_stage='streaming',
+                            total_records=total_records if total_records > 0 else scored_count + skipped_count + 100 # Estimated total
+                        )
+                    except Exception:
+                        pass
                     
             except Exception as e:
-                logger.warning("Failed to process auction record", domain=auction_input.domain if auction_input else '?', error=str(e))
+                logger.warning("Failed to process auction record", domain=auction_input.domain if auction_input else '?', error=str(e), exc_info=True)
                 skipped_count += 1
+                
+                # Keep track of last error for reporting
+                if not error_message:
+                    error_message = f"Example record failure ({getattr(auction_input, 'domain', '?')}): {str(e)}"
         
         # Process remaining
         if batch_list:
+            logger.info("Processing final batch", job_id=job_id, count=len(batch_list))
             await process_batch(batch_list, is_last=True)
             
         logger.info("Streaming complete", job_id=job_id, processed=processed_count, passed=passed_count, failed=failed_count, skipped=skipped_count, namesilo_counts=namesilo_type_counts)
-                   
-        if processed_count == 0 and skipped_count == 0:
+        
+        # Use final stats for the report
+        final_processed = max(processed_count, scored_count + skipped_count)
+        
+        if final_processed == 0 and skipped_count == 0:
              # Empty file case
              error_msg = f"CSV file is empty or contains no valid auction records. Auction site: {auction_site}"
              logger.error(error_msg, job_id=job_id)
@@ -438,7 +458,14 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
              return
 
         # 4. Merge Staging to Main
-        await db.update_csv_upload_progress( job_id=job_id, status='processing', current_stage='merging', processed_records=processed_count )
+        await db.update_csv_upload_progress( 
+            job_id=job_id, 
+            status='processing', 
+            current_stage='merging', 
+            processed_records=final_processed, 
+            skipped_count=skipped_count,
+            error_message=error_message if skipped_count > 0 else None
+        )
         
         logger.info("Merging staging to main table (using python chunked merge)", job_id=job_id)
         
