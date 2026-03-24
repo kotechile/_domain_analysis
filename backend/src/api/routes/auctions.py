@@ -657,7 +657,7 @@ async def upload_auctions_csv( background_tasks: BackgroundTasks, file: UploadFi
         fd, temp_path = tempfile.mkstemp(suffix=f"_{safe_filename}")
         
         # Read and write content
-        content = file.read()
+        content = await file.read()
         with os.fdopen(fd, 'wb') as tmp:
             tmp.write(content)
             
