@@ -435,7 +435,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     logger.info("Processed batch", job_id=job_id, count=processed_count, total_estimated=total_records)
 
                 # yield control
-                if (scored_count + skipped_count) % 100 == 0:
+                if (scored_count + skipped_count) % 1000 == 0:
                     await asyncio.sleep(0.01)
                     # Update progress in DB more frequently for better feedback
                     try:
