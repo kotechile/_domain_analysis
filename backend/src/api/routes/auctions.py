@@ -427,32 +427,33 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                             status='processing', 
                             processed_records=scored_count + skipped_count, 
                             current_stage='streaming',
-                            total_records=total_records if total_records > 0 else scored_count + skipped_count + 100 # Estimated total
+                            total_records=total_records if total_records > 0 else scored_count + skipped_count + 100 
                         )
                     except Exception:
                         pass
                     
             except Exception as e:
-                logger.warning("Failed to process auction record", domain=auction_input.domain if auction_input else '?', error=str(e), exc_info=True)
+                logger.warning("Failed to process auction record", domain=getattr(auction_input, 'domain', '?'), error=str(e))
                 skipped_count += 1
-                
-                # Keep track of last error for reporting
                 if not error_message:
-                    error_message = f"Example record failure ({getattr(auction_input, 'domain', '?')}): {str(e)}"
+                    error_message = f"Record failure ({getattr(auction_input, 'domain', '?')}): {str(e)}"
+        
+        # FINAL: Sync processed_count to what we actually looped through
+        processed_count = scored_count
         
         # Process remaining
         if batch_list:
             logger.info("Processing final batch", job_id=job_id, count=len(batch_list))
             await process_batch(batch_list, is_last=True)
             
-        logger.info("Streaming complete", job_id=job_id, processed=processed_count, passed=passed_count, failed=failed_count, skipped=skipped_count, namesilo_counts=namesilo_type_counts)
+        logger.info("Streaming complete", job_id=job_id, processed=processed_count, passed=passed_count, failed=failed_count, skipped=skipped_count)
         
         # Use final stats for the report
-        final_processed = max(processed_count, scored_count + skipped_count)
+        final_processed_for_report = scored_count + skipped_count
         
-        if final_processed == 0 and skipped_count == 0:
+        if final_processed_for_report == 0:
              # Empty file case
-             error_msg = f"CSV file is empty or contains no valid auction records. Auction site: {auction_site}"
+             error_msg = f"CSV file is empty or contains no valid records. Site: {auction_site}"
              logger.error(error_msg, job_id=job_id)
              await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg )
              return
@@ -462,7 +463,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
             job_id=job_id, 
             status='processing', 
             current_stage='merging', 
-            processed_records=final_processed, 
+            processed_records=final_processed_for_report, 
             skipped_count=skipped_count,
             error_message=error_message if skipped_count > 0 else None
         )
