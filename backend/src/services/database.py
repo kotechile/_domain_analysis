@@ -1927,10 +1927,12 @@ class DatabaseService:
         path_clean = path.lstrip('/')
         
         # Method 1: Try using signed URL (Most robust across different Supabase setups)
+        is_signed_url = False
         try:
             signed_url_res = await client.storage.from_(bucket_clean).create_signed_url(path_clean, 3600)
             if isinstance(signed_url_res, dict) and 'signedURL' in signed_url_res:
                 storage_url = signed_url_res['signedURL']
+                is_signed_url = True
                 logger.debug("Using signed URL for download", bucket=bucket, path=path)
             else:
                 # Fallback to manual URL construction if signing fails
@@ -1948,7 +1950,7 @@ class DatabaseService:
             try:
                 start_byte = 0
                 file_mode = 'wb'
-                request_headers = headers.copy()
+                request_headers = {} if is_signed_url else headers.copy()
                 
                 # Check for existing file to resume
                 if attempt > 0 and os.path.exists(target_path):
