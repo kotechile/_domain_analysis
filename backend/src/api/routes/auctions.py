@@ -334,14 +334,15 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
 
                 # Filter: Skip auctions that expire more than 2 weeks in the future
                 # This helps manage large files like Namecheap_Market_Sales.csv with 1M+ records
-                if expiration_date:
+                # ONLY apply for namecheap to avoid skipping manual NameSilo/GoDaddy uploads
+                if expiration_date and auction_site.lower() == 'namecheap':
                     if expiration_date.tzinfo is None:
                         expiration_date = expiration_date.replace(tzinfo=timezone.utc)
                     two_weeks_from_now = datetime.now(timezone.utc) + timedelta(days=14)
                     if expiration_date > two_weeks_from_now:
                         skipped_count += 1
                         continue
-                elif auction_site.lower() == 'namecheap':
+                elif not expiration_date and auction_site.lower() == 'namecheap':
                     # Namecheap records should have expiration dates - skip if missing
                     logger.debug("Skipping Namecheap record without expiration date", domain=auction.domain)
                     skipped_count += 1

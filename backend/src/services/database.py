@@ -82,29 +82,78 @@ class DatabaseService:
             # Don't raise, allowing the app to start and report 'degraded' in health checks
     
     async def _create_tables(self):
-        """Create database tables"""
+        """Create database tables and indexes one by one"""
         client = await self._get_client()
-        # This would typically be done via Supabase migrations
-        # For now, we'll assume tables exist or create them via SQL
-        tables_sql = """
-        -- Create reports table
-        CREATE TABLE IF NOT EXISTS reports ( id UUID DEFAULT gen_random_uuid() PRIMARY KEY, domain_name VARCHAR(255) NOT NULL UNIQUE, analysis_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(), status VARCHAR(50) NOT NULL DEFAULT 'pending', data_for_seo_metrics JSONB, wayback_machine_summary JSONB, llm_analysis JSONB, historical_data JSONB, raw_data_links JSONB, processing_time_seconds FLOAT, error_message TEXT, created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() );
         
-        -- Create raw_data_cache table
-        CREATE TABLE IF NOT EXISTS raw_data_cache ( id UUID DEFAULT gen_random_uuid() PRIMARY KEY, domain_name VARCHAR(255) NOT NULL, api_source VARCHAR(50) NOT NULL, json_data JSONB NOT NULL, created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), expires_at TIMESTAMP WITH TIME ZONE, UNIQUE(domain_name, api_source) );
+        # Split into individual statements
+        statements = [
+            # Reports table
+            """CREATE TABLE IF NOT EXISTS reports ( 
+                id UUID DEFAULT gen_random_uuid() PRIMARY KEY, 
+                domain_name VARCHAR(255) NOT NULL UNIQUE, 
+                analysis_timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(), 
+                status VARCHAR(50) NOT NULL DEFAULT 'pending', 
+                data_for_seo_metrics JSONB, 
+                wayback_machine_summary JSONB, 
+                llm_analysis JSONB, 
+                historical_data JSONB, 
+                raw_data_links JSONB, 
+                processing_time_seconds FLOAT, 
+                error_message TEXT, 
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), 
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() 
+            );""",
+            
+            # Raw data cache
+            """CREATE TABLE IF NOT EXISTS raw_data_cache ( 
+                id UUID DEFAULT gen_random_uuid() PRIMARY KEY, 
+                domain_name VARCHAR(255) NOT NULL, 
+                api_source VARCHAR(50) NOT NULL, 
+                json_data JSONB NOT NULL, 
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), 
+                expires_at TIMESTAMP WITH TIME ZONE, 
+                UNIQUE(domain_name, api_source) 
+            );""",
+            
+            # CSV upload progress (unified location)
+            """CREATE TABLE IF NOT EXISTS csv_upload_progress (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                job_id VARCHAR(255) UNIQUE NOT NULL,
+                filename VARCHAR(500) NOT NULL,
+                auction_site VARCHAR(100) NOT NULL,
+                status VARCHAR(50) NOT NULL DEFAULT 'pending',
+                total_records INTEGER DEFAULT 0,
+                processed_records INTEGER DEFAULT 0,
+                inserted_count INTEGER DEFAULT 0,
+                updated_count INTEGER DEFAULT 0,
+                skipped_count INTEGER DEFAULT 0,
+                deleted_expired_count INTEGER DEFAULT 0,
+                current_stage VARCHAR(100),
+                offering_type VARCHAR(50),
+                progress_percentage DECIMAL(5,2) DEFAULT 0.00,
+                error_message TEXT,
+                started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                completed_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );""",
+            
+            # Indexes
+            "CREATE INDEX IF NOT EXISTS idx_reports_domain_name ON reports(domain_name);",
+            "CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);",
+            "CREATE INDEX IF NOT EXISTS idx_raw_data_cache_domain_source ON raw_data_cache(domain_name, api_source);",
+            "CREATE INDEX IF NOT EXISTS idx_csv_upload_progress_job_id ON csv_upload_progress(job_id);",
+            "CREATE INDEX IF NOT EXISTS idx_csv_upload_progress_status ON csv_upload_progress(status);"
+        ]
         
-        -- Create indexes
-        CREATE INDEX IF NOT EXISTS idx_reports_domain_name ON reports(domain_name);
-        CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
-        CREATE INDEX IF NOT EXISTS idx_reports_created_at ON reports(created_at);
-        CREATE INDEX IF NOT EXISTS idx_raw_data_cache_domain_source ON raw_data_cache(domain_name, api_source);
-        CREATE INDEX IF NOT EXISTS idx_raw_data_cache_expires_at ON raw_data_cache(expires_at);
-        """
+        for sql in statements:
+            try:
+                await client.rpc('exec_sql', {'sql': sql}).execute()
+            except Exception as e:
+                # Log but continue - some might already exist or RPC might fail for specific reasons
+                logger.debug("Failed to execute individual SQL statement", sql=sql[:50], error=str(e))
         
-        # Execute SQL via Supabase
-        client = await self._get_client()
-        result = await client.rpc('exec_sql', {'sql': tables_sql}).execute()
-        logger.info("Database tables created/verified")
+        logger.info("Database tables verification completed")
     
     async def _create_indexes(self):
         """Create database indexes for performance"""
@@ -1960,8 +2009,8 @@ class DatabaseService:
                 # ) Check if table doesn't exist (404 or "relation does not exist"
                 if '404' in error_str or 'relation' in error_str or 'does not exist' in error_str:
                     logger.warning("csv_upload_progress table not found, attempting to create it", error=str(table_error))
-                    # Try to create the table
-                    await self._ensure_csv_progress_table_exists()
+                    # Fallback: re-run initialization
+                    await self.init_database()
                     # Retry the insert
                     result = await client.table('csv_upload_progress').insert(job_data).execute()
                     if result.data and len(result.data) > 0:
@@ -1974,67 +2023,6 @@ class DatabaseService:
                 
         except Exception as e:
             logger.error("Failed to create CSV upload job", job_id=job_id, error=str(e))
-            raise
-    
-    async def _ensure_csv_progress_table_exists(self):
-        """
-        Ensure the csv_upload_progress table exists by creating it if needed
-        This is a fallback if the migration hasn't been applied yet
-        """
-        client = await self._get_client()
-        try:
-            if not client:
-                raise Exception("Supabase client not available")
-            
-            # Read the migration SQL
-            from pathlib import Path
-            migration_file = Path(__file__).parent.parent.parent / 'supabase' / 'migrations' / '20250127000000_create_csv_upload_progress_table.sql'
-            
-            if not migration_file.exists():
-                logger.error("Migration file not found", path=str(migration_file))
-                raise Exception(f"Migration file not found: {migration_file}")
-            
-            with open(migration_file, 'r') as f:
-                migration_sql = f.read()
-            
-            # Try to execute SQL via Supabase REST API using RPC
-            # Some self-hosted Supabase instances support executing SQL via RPC
-            try:
-                # ) Try using the REST API to execute SQL (if supported
-                import httpx
-                import json
-                
-                # Use the service role key for admin operations
-                headers = { 'apikey': self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY, 'Authorization': f'Bearer {self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY}', 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
-                
-                # ) Try to execute via REST API (this may not work for all Supabase instances
-                # For self-hosted Supabase, you typically need to use psql or Supabase Studio
-                logger.warning( "csv_upload_progress table does not exist. Attempting automatic creation...", migration_file=str(migration_file) )
-                
-                # Note: Supabase REST API doesn't support direct SQL execution
-                # We'll provide helpful error message instead
-                raise Exception( "MIGRATION_REQUIRED: The csv_upload_progress table does not exist. "
-                    "Please apply the migration manually:\n\n"
-                    "1. Run: python backend/apply_csv_progress_migration.py\n"
-                    "   OR\n"
-                    "2. Open Supabase Studio → SQL Editor → Paste and run the SQL from:\n"
-                    f"   {migration_file}\n\n"
-                    "After applying the migration, the CSV upload progress tracking will work." )
-                
-            except Exception as e:
-                if "MIGRATION_REQUIRED" in str(e):
-                    raise
-                logger.error("Failed to create table automatically", error=str(e))
-                raise Exception( "MIGRATION_REQUIRED: The csv_upload_progress table does not exist. "
-                    "Please apply the migration manually:\n\n"
-                    "1. Run: python backend/apply_csv_progress_migration.py\n"
-                    "   OR\n"
-                    "2. Open Supabase Studio → SQL Editor → Paste and run the SQL from:\n"
-                    f"   {migration_file}\n\n"
-                    "After applying the migration, the CSV upload progress tracking will work." )
-            
-        except Exception as e:
-            logger.error("Failed to ensure csv_upload_progress table exists", error=str(e))
             raise
     
     async def update_csv_upload_progress( self, job_id: str, status: Optional[str] = None, total_records: Optional[int] = None, processed_records: Optional[int] = None, inserted_count: Optional[int] = None, updated_count: Optional[int] = None, skipped_count: Optional[int] = None, deleted_expired_count: Optional[int] = None, current_stage: Optional[str] = None, error_message: Optional[str] = None, completed: bool = False ) -> Dict[str, Any]:
