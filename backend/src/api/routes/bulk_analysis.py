@@ -58,7 +58,7 @@ async def upload_namecheap_csv( file: UploadFile = File(...), load_to_db: bool =
     If load_to_db=False (default), the file is parsed and cached in memory for viewing. If load_to_db=True, the table will be truncated before loading new data. Expected CSV format with header row containing all Namecheap fields. """
     try:
         # Read file content
-        content = file.read()
+        content = await file.read()
         file_content = content.decode('utf-8')
         
         logger.info("Received Namecheap CSV upload", filename=file.filename, size=len(file_content), load_to_db=load_to_db)
