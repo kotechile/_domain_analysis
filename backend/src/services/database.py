@@ -1729,7 +1729,7 @@ class DatabaseService:
             # Upload to storage with timeout handling
             # Supabase storage upload accepts bytes directly, not BytesIO
             try:
-                storage_response = client.storage.from_(bucket).upload( path=filename, file=file_content,  # Pass bytes directly, not BytesIO
+                storage_response = await client.storage.from_(bucket).upload( path=filename, file=file_content,  # Pass bytes directly, not BytesIO
                     file_options={ "content-type": "text/csv", "upsert": "true", "cache-control": "3600" } )
                 
                 logger.info("Uploaded CSV to storage successfully", bucket=bucket, filename=filename, size_mb=round(file_size_mb, 2))

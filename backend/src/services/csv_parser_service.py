@@ -529,10 +529,13 @@ class CSVParserService:
         if not date_str or date_str.strip() == '':
             return None
         
+        from datetime import timezone
         try:
             # Try ISO format first
             parsed = parse_iso_datetime(date_str)
             if parsed:
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
                 return parsed
             
             # Try common date formats
@@ -540,7 +543,10 @@ class CSVParserService:
             
             for fmt in formats:
                 try:
-                    return datetime.strptime(date_str.strip(), fmt)
+                    dt = datetime.strptime(date_str.strip(), fmt)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    return dt
                 except ValueError:
                     continue
             
