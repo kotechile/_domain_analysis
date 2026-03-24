@@ -758,6 +758,23 @@ async def trigger_processing_async( request: StorageProcessingRequest ):
     return { "success": True, "message": "Processing started in background.", "job_id": job_id, "filename": request.filename, "status": "accepted" }
 
 
+@router.get("/auctions/debug/list-storage")
+async def debug_list_storage( bucket: str = "auction-csvs", prefix: str = "" ):
+    """
+    Debug endpoint to list files in a bucket to verify exact paths. Use this when you get 404/400 errors despite the file appearing to exist. """
+    try:
+        db = get_database()
+        client = await db._get_client()
+        
+        # List files in bucket
+        res = client.storage.from_(bucket).list(prefix)
+        
+        return { "success": True, "bucket": bucket, "prefix": prefix, "files_count": len(res) if res else 0, "files": res }
+    except Exception as e:
+        logger.error("Failed to list storage files", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 async def _process_file_detached( job_id: str, bucket: str, path: str, filename: str, auction_site: str, offering_type: Optional[str] = None ):
     """
     Wrapper to run process_file_from_storage_async in a detached task
