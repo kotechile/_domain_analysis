@@ -1925,10 +1925,22 @@ class DatabaseService:
         base_url = self.settings.SUPABASE_URL.rstrip('/')
         bucket_clean = bucket.strip('/')
         path_clean = path.lstrip('/')
-        storage_url = f"{base_url}/storage/v1/object/{bucket_clean}/{path_clean}"
+        
+        # Method 1: Try using signed URL (Most robust across different Supabase setups)
+        try:
+            signed_url_res = await client.storage.from_(bucket_clean).create_signed_url(path_clean, 3600)
+            if isinstance(signed_url_res, dict) and 'signedURL' in signed_url_res:
+                storage_url = signed_url_res['signedURL']
+                logger.debug("Using signed URL for download", bucket=bucket, path=path)
+            else:
+                # Fallback to manual URL construction if signing fails
+                storage_url = f"{base_url}/storage/v1/object/authenticated/{bucket_clean}/{path_clean}"
+                logger.warning("Failed to create signed URL, falling back to authenticated path", bucket=bucket, path=path)
+        except Exception as sign_err:
+            logger.warning("Error creating signed URL, falling back to manual URL", error=str(sign_err))
+            storage_url = f"{base_url}/storage/v1/object/authenticated/{bucket_clean}/{path_clean}"
         
         service_role_key = self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY
-        
         headers = { "Authorization": f"Bearer {service_role_key}", "apikey": service_role_key }
         
         last_error = None
@@ -1952,8 +1964,8 @@ class DatabaseService:
                     logger.info("Retrying storage download", attempt=attempt, wait_time=wait_time, bucket=bucket, path=path)
                     await asyncio.sleep(wait_time)
                 
-                async with httpx.AsyncClient(timeout=600.0, verify=bool(getattr(self.settings, 'SUPABASE_VERIFY_SSL', True))) as client:
-                    async with client.stream("GET", storage_url, headers=request_headers) as response:
+                async with httpx.AsyncClient(timeout=600.0, verify=bool(getattr(self.settings, 'SUPABASE_VERIFY_SSL', True))) as httpx_client:
+                    async with httpx_client.stream("GET", storage_url, headers=request_headers) as response:
                         if response.status_code == 404:
                             raise Exception(f"File not found in storage: bucket={bucket}, path={path}")
                         
@@ -1964,10 +1976,12 @@ class DatabaseService:
                                 logger.info("File already fully downloaded (Range Not Satisfiable)", bucket=bucket, path=path, size=total_size)
                                 return total_size
                             else:
-                                # Should not happen if we sent Range, but handling just in case
                                 logger.warning("416 Range Not Satisfiable but local file missing", bucket=bucket, path=path)
                         
-                        response.raise_for_status()
+                        if response.status_code >= 400:
+                            error_text = await response.aread()
+                            logger.error("Storage download failed", status_code=response.status_code, response=error_text.decode('utf-8', errors='replace'))
+                            response.raise_for_status()
                         
                         total_bytes = start_byte
                         with open(target_path, file_mode) as f:
