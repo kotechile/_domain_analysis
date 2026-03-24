@@ -153,7 +153,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
 
         # 3. Upsert to main table
         try:
-            (await db._get_client()).table('auctions').upsert( main_records, on_conflict='domain,auction_site,expiration_date' ).execute()
+            await (await db._get_client()).table('auctions').upsert( main_records, on_conflict='domain,auction_site,expiration_date' ).execute()
 
             # 4. Delete merged records from staging in small sub-batches
             # ) Use smaller batches for the IN filter to avoid "URL component 'query' too long" (max ~2000 chars
@@ -178,7 +178,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
     # Post-merge: Delete auctions that still have to_delete=true
     # These are records that were not present in the new file upload
     try:
-        deleted_count = _delete_flagged_auctions(db, auction_site)
+        deleted_count = await _delete_flagged_auctions(db, auction_site)
         logger.info("Post-merge cleanup completed", job_id=job_id, site=auction_site, deleted_count=deleted_count)
     except Exception as e:
         logger.warning("Failed to delete flagged auctions after merge", job_id=job_id, site=auction_site, error=str(e))
@@ -413,6 +413,9 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     # Log progress to stdout for observability
                     logger.info("Processed batch", job_id=job_id, count=processed_count, total_estimated=total_records)
 
+                # Yield control to event loop inside this heavy CPU-bound loop to prevent Uvicorn blocking
+                if scored_count % 100 == 0:
+                    await asyncio.sleep(0)
                     
             except Exception as e:
                 logger.warning("Failed to process auction record", domain=auction_input.domain if auction_input else '?', error=str(e))
@@ -439,7 +442,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
         try:
              # Use the Python-based chunked merge helper instead of RPC
              # This aligns with the JSON upload logic which is working correctly
-             merged_count = _perform_python_chunked_merge(db, auction_site, job_id)
+             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id)
              
              merge_stats = {'inserted': merged_count, 'updated': 0}
              logger.info("Merge complete", stats=merge_stats)
@@ -531,12 +534,17 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                 
                 auction_dict = { 'domain': auction.domain, 'start_date': auction.start_date.isoformat() if auction.start_date else None, 'expiration_date': auction.expiration_date.isoformat() if auction.expiration_date else None, 'auction_site': auction.auction_site, 'current_bid': auction.current_bid, 'source_data': auction.source_data, 'link': auction.link, 'processed': True, 'preferred': False, 'has_statistics': False, 'score': score_value, 'ranking': None, 'offer_type': record_offer_type, 'job_id': job_id }
                 
+                
                 if scored.filter_status == 'PASS':
                     passed_count += 1
                 else:
                     failed_count += 1
                 
                 auction_dicts.append(auction_dict)
+
+                # Yield control to the event loop frequently to prevent blocking UVicorn and causing 502 timeouts
+                if idx % 100 == 0:
+                    await asyncio.sleep(0)
             except Exception as e:
                 skipped_count += 1
                 continue
@@ -586,7 +594,7 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                  await asyncio.sleep(0.01)
              
              # Merge using robust Python-based chunked merge
-             merged_count = _perform_python_chunked_merge(db, auction_site, job_id)
+             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id)
              inserted_count = merged_count
 
              # Cleanup (Sweep phase) - DISABLED
