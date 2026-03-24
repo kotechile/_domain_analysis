@@ -758,7 +758,7 @@ async def trigger_processing_async( request: StorageProcessingRequest ):
     return { "success": True, "message": "Processing started in background.", "job_id": job_id, "filename": request.filename, "status": "accepted" }
 
 
-@router.get("/auctions/debug/list-storage")
+@router.get("/debug/list-storage")
 async def debug_list_storage( bucket: str = "auction-csvs", prefix: str = "" ):
     """
     Debug endpoint to list files in a bucket to verify exact paths. Use this when you get 404/400 errors despite the file appearing to exist. """
