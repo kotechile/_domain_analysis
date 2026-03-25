@@ -1926,82 +1926,104 @@ class DatabaseService:
         bucket_clean = bucket.strip('/')
         path_clean = path.lstrip('/')
         
-        # Method 1: Try using signed URL (Most robust across different Supabase setups)
-        is_signed_url = False
+        # URL Candidates to try (Most reliable to least)
+        url_candidates = []
+        is_signed = [] # Track which indices are signed URLs
+        
+        # 1. Try Signed URL (Best for all privacy settings)
         try:
             signed_url_res = await client.storage.from_(bucket_clean).create_signed_url(path_clean, 3600)
             if isinstance(signed_url_res, dict) and 'signedURL' in signed_url_res:
-                storage_url = signed_url_res['signedURL']
-                is_signed_url = True
-                logger.debug("Using signed URL for download", bucket=bucket, path=path)
-            else:
-                # Fallback to manual URL construction if signing fails
-                storage_url = f"{base_url}/storage/v1/object/authenticated/{bucket_clean}/{path_clean}"
-                logger.warning("Failed to create signed URL, falling back to authenticated path", bucket=bucket, path=path)
+                url_candidates.append(signed_url_res['signedURL'])
+                is_signed.append(True)
+                logger.debug("Added signed URL candidate", bucket=bucket, path=path)
         except Exception as sign_err:
-            logger.warning("Error creating signed URL, falling back to manual URL", error=str(sign_err))
-            storage_url = f"{base_url}/storage/v1/object/authenticated/{bucket_clean}/{path_clean}"
+            logger.warning("Failed to create signed URL", error=str(sign_err))
+            
+        # 2. Try Public URL (Best for public buckets)
+        public_url = f"{base_url}/storage/v1/object/public/{bucket_clean}/{path_clean}"
+        url_candidates.append(public_url)
+        is_signed.append(False)
+        
+        # 3. Try Authenticated URL (Internal Supabase path)
+        auth_url = f"{base_url}/storage/v1/object/authenticated/{bucket_clean}/{path_clean}"
+        url_candidates.append(auth_url)
+        is_signed.append(False)
+        
+        # 4. Old standard path (Legacy/Some versions)
+        legacy_url = f"{base_url}/storage/v1/object/{bucket_clean}/{path_clean}"
+        url_candidates.append(legacy_url)
+        is_signed.append(False)
         
         service_role_key = self.settings.SUPABASE_SERVICE_ROLE_KEY or self.settings.SUPABASE_KEY
         headers = { "Authorization": f"Bearer {service_role_key}", "apikey": service_role_key }
         
         last_error = None
-        for attempt in range(max_retries + 1):
-            try:
-                start_byte = 0
-                file_mode = 'wb'
-                request_headers = {} if is_signed_url else headers.copy()
-                
-                # Check for existing file to resume
-                if attempt > 0 and os.path.exists(target_path):
-                    current_size = os.path.getsize(target_path)
-                    if current_size > 0:
-                        start_byte = current_size
-                        file_mode = 'ab'
-                        request_headers['Range'] = f"bytes={start_byte}-"
-                        logger.info("Resuming download", bucket=bucket, path=path, start_byte=start_byte)
-
-                if attempt > 0:
-                    wait_time = 2 ** attempt
-                    logger.info("Retrying storage download", attempt=attempt, wait_time=wait_time, bucket=bucket, path=path)
-                    await asyncio.sleep(wait_time)
-                
-                async with httpx.AsyncClient(timeout=600.0, verify=bool(getattr(self.settings, 'SUPABASE_VERIFY_SSL', True))) as httpx_client:
-                    async with httpx_client.stream("GET", storage_url, headers=request_headers) as response:
-                        if response.status_code == 404:
-                            raise Exception(f"File not found in storage: bucket={bucket}, path={path}")
-                        
-                        # ) Handle case where file is already fully downloaded (Range Not Satisfiable
-                        if response.status_code == 416:
-                            if os.path.exists(target_path):
-                                total_size = os.path.getsize(target_path)
-                                logger.info("File already fully downloaded (Range Not Satisfiable)", bucket=bucket, path=path, size=total_size)
-                                return total_size
-                            else:
-                                logger.warning("416 Range Not Satisfiable but local file missing", bucket=bucket, path=path)
-                        
-                        if response.status_code >= 400:
-                            error_text = await response.aread()
-                            logger.error("Storage download failed", status_code=response.status_code, response=error_text.decode('utf-8', errors='replace'))
-                            response.raise_for_status()
-                        
-                        total_bytes = start_byte
-                        with open(target_path, file_mode) as f:
-                            async for chunk in response.aiter_bytes(chunk_size=65536):
-                                f.write(chunk)
-                                total_bytes += len(chunk)
-                        
-                        if total_bytes == 0:
-                            logger.warning("Downloaded 0 bytes from storage", bucket=bucket, path=path)
-                        
-                        logger.info("Downloaded file to disk successfully", bucket=bucket, path=path, local_path=target_path, size_mb=round(total_bytes / (1024 * 1024), 2))
-                        return total_bytes
+        # Try EACH candidate until one works
+        for i, storage_url in enumerate(url_candidates):
+            curr_is_signed = is_signed[i]
+            logger.info("Trying storage URL candidate", url=storage_url[:100] + "...", is_signed=curr_is_signed)
             
-            except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.StreamError, httpx.NetworkError) as e:
-                last_error = e
-                logger.warning("Transient error during storage download", attempt=attempt, error=str(e))
-                continue
-            except Exception as e:
+            for attempt in range(max_retries + 1):
+                try:
+                    start_byte = 0
+                    file_mode = 'wb'
+                    request_headers = {} if curr_is_signed else headers.copy()
+                    
+                    # Check for existing file to resume
+                    if attempt > 0 and os.path.exists(target_path):
+                        current_size = os.path.getsize(target_path)
+                        if current_size > 0:
+                            start_byte = current_size
+                            file_mode = 'ab'
+                            request_headers['Range'] = f"bytes={start_byte}-"
+                            logger.info("Resuming download", bucket=bucket, path=path, start_byte=start_byte)
+
+                    if attempt > 0:
+                        wait_time = 2 ** attempt
+                        logger.info("Retrying storage download candidate", attempt=attempt, wait_time=wait_time, bucket=bucket, path=path)
+                        await asyncio.sleep(wait_time)
+                    
+                    async with httpx.AsyncClient(timeout=600.0, verify=bool(getattr(self.settings, 'SUPABASE_VERIFY_SSL', True))) as httpx_client:
+                        async with httpx_client.stream("GET", storage_url, headers=request_headers) as response:
+                            if response.status_code == 404:
+                                logger.warning("File not found with this candidate", bucket=bucket, path=path, url_type=i)
+                                break # Breakthrough to next candidate
+                            
+                            # ) Handle case where file is already fully downloaded (Range Not Satisfiable
+                            if response.status_code == 416:
+                                if os.path.exists(target_path):
+                                    total_size = os.path.getsize(target_path)
+                                    logger.info("File already fully downloaded (Range Not Satisfiable)", bucket=bucket, path=path, size=total_size)
+                                    return total_size
+                                else:
+                                    logger.warning("416 Range Not Satisfiable but local file missing", bucket=bucket, path=path)
+                            
+                            if response.status_code >= 400:
+                                error_text = await response.aread()
+                                logger.error("Candidate download failed", status_code=response.status_code, response=error_text.decode('utf-8', errors='replace'), url_type=i)
+                                response.raise_for_status()
+                            
+                            total_bytes = start_byte
+                            with open(target_path, file_mode) as f:
+                                async for chunk in response.aiter_bytes(chunk_size=65536):
+                                    f.write(chunk)
+                                    total_bytes += len(chunk)
+                            
+                            if total_bytes == 0:
+                                logger.warning("Downloaded 0 bytes from storage candidate", bucket=bucket, path=path)
+                            
+                            logger.info("Downloaded file to disk successfully", bucket=bucket, path=path, local_path=target_path, size_mb=round(total_bytes / (1024 * 1024), 2))
+                            return total_bytes
+                
+                except (httpx.RemoteProtocolError, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.StreamError, httpx.NetworkError) as e:
+                    last_error = e
+                    logger.warning("Transient error during storage download candidate", attempt=attempt, error=str(e), url_type=i)
+                    continue
+                except Exception as e:
+                    last_error = e
+                    logger.error("Unexpected error with candidate", error=str(e), url_type=i)
+                    break # Try next candidate
                 logger.error("Terminal error during storage download", bucket=bucket, path=path, error=str(e))
                 raise
         
