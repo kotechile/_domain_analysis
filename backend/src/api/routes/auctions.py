@@ -27,7 +27,7 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
-@router.get("/troubleshoot-uploads")
+@router.get("/auctions/troubleshoot-uploads")
 async def troubleshoot_uploads( limit: int = 10 ):
     """
     Combined troubleshooting endpoint for debugging upload and processing issues. Lists recent jobs, staging counts, and storage state. """
