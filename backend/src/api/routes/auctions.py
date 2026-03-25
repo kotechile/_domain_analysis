@@ -27,6 +27,38 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
+@router.get("/troubleshoot-uploads")
+async def troubleshoot_uploads( limit: int = 10 ):
+    """
+    Combined troubleshooting endpoint for debugging upload and processing issues. Lists recent jobs, staging counts, and storage state. """
+    try:
+        db = get_database()
+        client = await db._get_client()
+        
+        # 1. Recent jobs
+        jobs_res = await client.table('csv_upload_progress').select('*').order('updated_at', desc=True).limit(limit).execute()
+        
+        # 2. Staging count
+        staging_count_res = await client.table('auctions_staging').select('count', count='exact').limit(1).execute()
+        
+        # 3. Storage buckets (to verify permissions/connection)
+        try:
+             storage_res = client.storage.list_buckets()
+             buckets = [b.name for b in storage_res] if storage_res else []
+        except:
+             buckets = "Error or unauthorized to list buckets"
+             
+        return { 
+            "success": True, 
+            "recent_jobs": jobs_res.data if jobs_res else [], 
+            "staging_total_exact": staging_count_res.count if staging_count_res else 0,
+            "storage_buckets": buckets 
+        }
+    except Exception as e:
+        logger.error("Troubleshooting failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/debug-storage-list")
 async def debug_list_storage( bucket: str = "auction-csvs", prefix: str = "" ):
     """
