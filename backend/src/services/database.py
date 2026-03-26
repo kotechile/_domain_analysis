@@ -1429,6 +1429,8 @@ class DatabaseService:
                         query = query.not_.is_('score', 'null')
                     else:
                         query = query.is_('score', 'null')
+                if filters.get('search'):
+                    query = query.ilike('domain', f"%{filters['search']}%")
 
             if force_refresh:
                 # Force mode: just return top N by requested sort, no missing-metrics check
@@ -1448,6 +1450,8 @@ class DatabaseService:
                         where_conditions.append(f"preferred = {str(filters['preferred']).lower()}")
                     if filters.get('auction_site'):
                         where_conditions.append(f"auction_site = '{filters['auction_site']}'")
+                    if filters.get('search'):
+                        where_conditions.append(f"domain ILIKE '%{filters['search']}%'")
                     if filters.get('tld'):
                         tld = filters['tld']
                         if not tld.startswith('.'):

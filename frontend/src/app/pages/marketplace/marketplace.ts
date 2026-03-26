@@ -341,6 +341,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     // Build the exact same filter set that the table currently uses
     const filters: Record<string, any> = {};
 
+    if (this.searchQuery()) filters['search'] = this.searchQuery();
     if (this.preferredOnly()) filters['preferred'] = true;
     if (this.scoredOnly()) filters['scored'] = true;
     if (this.expirationFromDate()) filters['expiration_from_date'] = this.expirationFromDate();
@@ -349,6 +350,13 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (this.offeringType()) filters['offering_type'] = this.offeringType();
     if (this.minScore() !== null) filters['min_score'] = this.minScore();
     if (this.maxScore() !== null) filters['max_score'] = this.maxScore();
+
+    // Include sort context so the top 1,000 domains refreshed match the top 1,000 domains in table
+    const payload = {
+      filters,
+      sort_by: this.sortBy(),
+      sort_order: this.sortOrder()
+    };
 
     // Set processing state
     this.fillGapsInProgress.set(true);
@@ -361,8 +369,8 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     );
 
     try {
-      console.log('[Fill Gaps] Sending request with filters:', filters);
-      const res = await firstValueFrom(this.api.triggerBulkRefresh(filters, false));
+      console.log('[Fill Gaps] Sending request with payload:', payload);
+      const res = await firstValueFrom(this.api.triggerBulkRefresh(payload.filters, false, payload.sort_by, payload.sort_order));
       console.log('[Fill Gaps] Response:', res);
 
       // API returns immediately with in_progress status and job_id
@@ -401,6 +409,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
     // Same filter set as the table, passed to force-refresh endpoint
     const filters: Record<string, any> = {};
+    if (this.searchQuery()) filters['search'] = this.searchQuery();
     if (this.preferredOnly()) filters['preferred'] = true;
     if (this.scoredOnly()) filters['scored'] = true;
     if (this.expirationFromDate()) filters['expiration_from_date'] = this.expirationFromDate();
@@ -409,6 +418,12 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (this.offeringType()) filters['offering_type'] = this.offeringType();
     if (this.minScore() !== null) filters['min_score'] = this.minScore();
     if (this.maxScore() !== null) filters['max_score'] = this.maxScore();
+
+    const payload = {
+      filters,
+      sort_by: this.sortBy(),
+      sort_order: this.sortOrder()
+    };
 
     // Set processing state
     this.forceRefreshInProgress.set(true);
@@ -421,8 +436,8 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     );
 
     try {
-      console.log('[Force Refresh] Sending request with filters:', filters);
-      const res = await firstValueFrom(this.api.triggerForceRefresh(filters));
+      console.log('[Force Refresh] Sending request with payload:', payload);
+      const res = await firstValueFrom(this.api.triggerForceRefresh(payload.filters, payload.sort_by, payload.sort_order));
       console.log('[Force Refresh] Response:', res);
 
       if (res.success && res.in_progress && res.job_id) {
