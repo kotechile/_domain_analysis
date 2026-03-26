@@ -33,7 +33,7 @@
                 }
             </button>
 
-            <!-- Fill Gaps Button (primary action) -->
+            <!-- Fill Metrics Button (primary action) -->
             <div class="relative group shrink-0">
                 <button (click)="triggerBulkRefresh()"
                     [disabled]="fillGapsInProgress()"
@@ -47,7 +47,7 @@
                         <span>Processing…</span>
                     } @else {
                         <i-lucide [name]="Sparkles" class="w-4 h-4"></i-lucide>
-                        <span>Fill Gaps</span>
+                        <span>Fill Metrics</span>
                     }
                 </button>
                 <!-- Tooltip -->
@@ -55,40 +55,10 @@
                     class="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block pointer-events-none w-72">
                     <div class="rounded-xl px-4 py-3 text-xs shadow-2xl border border-opacity-10 leading-relaxed"
                         style="background: var(--card-bg); color: var(--text-color); border-color: var(--border-color)">
-                        <p class="font-bold mb-1 opacity-90">✦ Fill Gaps (Cheaper)</p>
+                        <p class="font-bold mb-1 opacity-90">✦ Fill Metrics</p>
                         <p class="opacity-60">Finds up to 1,000 scored domains with <strong>missing SEO metrics</strong>
                             matching your current filters, ordered by closest expiry. Skips domains already refreshed in
                             the last 7 days.</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Force Refresh Button (secondary / premium action) -->
-            <div class="relative group shrink-0">
-                <button (click)="triggerForceRefresh()"
-                    [disabled]="forceRefreshInProgress()"
-                    class="h-11 px-4 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 hover:opacity-80 outline-none focus-visible:ring-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
-                    style="background: var(--card-bg); color: var(--text-color); border-color: var(--border-color);">
-                    @if (forceRefreshInProgress()) {
-                        <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span>Processing…</span>
-                    } @else {
-                        <i-lucide [name]="Zap" class="w-4 h-4 text-amber-500"></i-lucide>
-                        <span>Force Refresh</span>
-                    }
-                </button>
-                <!-- Tooltip -->
-                <div
-                    class="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block pointer-events-none w-72">
-                    <div class="rounded-xl px-4 py-3 text-xs shadow-2xl border border-opacity-10 leading-relaxed"
-                        style="background: var(--card-bg); color: var(--text-color); border-color: var(--border-color)">
-                        <p class="font-bold mb-1 opacity-90">⚡ Force Refresh (Premium)</p>
-                        <p class="opacity-60">Gets <strong>fresh SEO metrics</strong> for up to 1,000 scored domains
-                            matching your current filters, ordered by closest expiry. <strong>Overrides existing
-                                metrics</strong> regardless of when they were last refreshed.</p>
                     </div>
                 </div>
             </div>
@@ -113,6 +83,32 @@
                 <span>Pinned</span>
             </button>
         </div>
+    </div>
+
+    <!-- Refresh Options Row -->
+    <div class="flex items-center justify-end -mt-4 mb-2">
+        <label class="flex items-center space-x-2 cursor-pointer group" (click)="toggleOnlyDisplayed()">
+            <div class="relative">
+                <input type="checkbox" [checked]="onlyDisplayedDomains()" class="peer sr-only">
+                <div class="w-4 h-4 rounded border transition-all"
+                    [style.background]="onlyDisplayedDomains() ? 'var(--accent-color)' : 'transparent'"
+                    [style.border-color]="onlyDisplayedDomains() ? 'var(--accent-color)' : 'var(--border-color)'">
+                    @if (onlyDisplayedDomains()) {
+                        <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                    }
+                </div>
+            </div>
+            <span class="text-xs opacity-60 group-hover:opacity-100 transition-opacity" style="color: var(--text-color)">
+                Only refresh {{ auctions().length }} displayed domains
+            </span>
+            @if (onlyDisplayedDomains()) {
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 font-medium">
+                    Skip gap filling
+                </span>
+            }
+        </label>
     </div>
 
     <!-- Progress Bars -->

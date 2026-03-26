@@ -115,17 +115,17 @@ export class ApiService {
     );
   }
 
-  triggerBulkRefresh(filters: any, force: boolean = false, sort_by: string = 'expiration_date', sort_order: string = 'asc'): Observable<{ success: boolean; message: string; job_id: string; in_progress: boolean }> {
+  triggerBulkRefresh(filters: any, force: boolean = false, sort_by: string = 'expiration_date', sort_order: string = 'asc', prioritized_domains?: string[], only_displayed?: boolean): Observable<{ success: boolean; message: string; job_id: string; in_progress: boolean }> {
     return this.http.post<{ success: boolean; message: string; job_id: string; in_progress: boolean }>(
       `${this.baseUrl}/auctions/bulk-refresh`,
-      { filters, force, sort_by, sort_order }
+      { filters, force, sort_by, sort_order, prioritized_domains, only_displayed }
     );
   }
 
-  triggerForceRefresh(filters: any, sort_by: string = 'expiration_date', sort_order: string = 'asc'): Observable<{ success: boolean; message: string; job_id: string; in_progress: boolean }> {
+  triggerForceRefresh(filters: any, sort_by: string = 'expiration_date', sort_order: string = 'asc', prioritized_domains?: string[]): Observable<{ success: boolean; message: string; job_id: string; in_progress: boolean }> {
     return this.http.post<{ success: boolean; message: string; job_id: string; in_progress: boolean }>(
       `${this.baseUrl}/auctions/force-refresh`,
-      { filters, sort_by, sort_order }
+      { filters, sort_by, sort_order, prioritized_domains }
     );
   }
 

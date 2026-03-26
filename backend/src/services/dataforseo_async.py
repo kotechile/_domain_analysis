@@ -6,6 +6,7 @@ import asyncio
 import httpx
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
+from uuid import UUID
 import structlog
 
 from utils.config import get_settings
@@ -18,7 +19,7 @@ logger = structlog.get_logger()
 
 class DataForSEOAsyncService:
     """Service for DataForSEO async operations using standard POST → GET pattern"""
-    
+
     def __init__(self):
         self.settings = get_settings()
         self.secrets_service = get_secrets_service()
@@ -27,26 +28,26 @@ class DataForSEOAsyncService:
         self.max_poll_attempts = 30  # 1 minute max
         self._credentials = None
         self.cost_tracker = { "api_calls": 0, "estimated_cost": 0.0, "cost_per_call": 0.01 } # Estimated cost per API call
-    
+
     async def _get_credentials(self) -> Optional[Dict[str, str]]:
         """Get DataForSEO credentials"""
         if self._credentials is None:
             self._credentials = self.secrets_service.get_dataforseo_credentials()
         return self._credentials
-    
-    async def get_detailed_backlinks_async(self, domain: str, limit: int = 10000) -> Optional[Dict[str, Any]]:
+
+    async def get_detailed_backlinks_async(self, domain: str, limit: int = 10000, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get detailed backlinks using async pattern"""
-        return await self._execute_async_task( domain=domain, task_type=DetailedDataType.BACKLINKS, post_endpoint="/backlinks/backlinks/task_post", get_endpoint="/backlinks/backlinks/task_get", post_data={ "target": domain, "limit": limit, "mode": "as_is", "filters": ["dofollow", "=", True] } )
-    
-    async def get_detailed_keywords_async(self, domain: str, limit: int = 10000) -> Optional[Dict[str, Any]]:
+        return await self._execute_async_task( domain=domain, task_type=DetailedDataType.BACKLINKS, post_endpoint="/backlinks/backlinks/task_post", get_endpoint="/backlinks/backlinks/task_get", post_data={ "target": domain, "limit": limit, "mode": "as_is", "filters": ["dofollow", "=", True] }, user_id=user_id )
+
+    async def get_detailed_keywords_async(self, domain: str, limit: int = 10000, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get detailed keywords using async pattern"""
-        return await self._execute_async_task( domain=domain, task_type=DetailedDataType.KEYWORDS, post_endpoint="/dataforseo_labs/google/ranked_keywords/task_post", get_endpoint="/dataforseo_labs/google/ranked_keywords/task_get", post_data={ "target": domain, "language_name": "English", "location_name": "United States", "load_rank_absolute": True, "limit": limit } )
-    
-    async def get_referring_domains_async(self, domain: str, limit: int = 10000) -> Optional[Dict[str, Any]]:
+        return await self._execute_async_task( domain=domain, task_type=DetailedDataType.KEYWORDS, post_endpoint="/dataforseo_labs/google/ranked_keywords/task_post", get_endpoint="/dataforseo_labs/google/ranked_keywords/task_get", post_data={ "target": domain, "language_name": "English", "location_name": "United States", "load_rank_absolute": True, "limit": limit }, user_id=user_id )
+
+    async def get_referring_domains_async(self, domain: str, limit: int = 10000, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get referring domains using async pattern"""
-        return await self._execute_async_task( domain=domain, task_type=DetailedDataType.REFERRING_DOMAINS, post_endpoint="/backlinks/backlinks/task_post", get_endpoint="/backlinks/backlinks/task_get", post_data={ "target": domain, "limit": limit, "mode": "as_is", "filters": ["dofollow", "=", True], "order_by": ["domain_from_rank,desc"] } )
-    
-    async def _execute_async_task(self, domain: str, task_type: DetailedDataType, post_endpoint: str, get_endpoint: str, post_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        return await self._execute_async_task( domain=domain, task_type=DetailedDataType.REFERRING_DOMAINS, post_endpoint="/backlinks/backlinks/task_post", get_endpoint="/backlinks/backlinks/task_get", post_data={ "target": domain, "limit": limit, "mode": "as_is", "filters": ["dofollow", "=", True], "order_by": ["domain_from_rank,desc"] }, user_id=user_id )
+
+    async def _execute_async_task(self, domain: str, task_type: DetailedDataType, post_endpoint: str, get_endpoint: str, post_data: Dict[str, Any], user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Execute async task pattern: POST → poll → GET"""
         try:
             # Check if data already exists and is fresh
@@ -60,18 +61,18 @@ class DataForSEOAsyncService:
             existing_task = await db.get_pending_task(domain, task_type)
             if existing_task:
                 logger.info("Found existing pending task", domain=domain, task_type=task_type, task_id=existing_task.task_id)
-                return await self._wait_for_task_completion(domain, task_type, existing_task.task_id)
-            
+                return await self._wait_for_task_completion(domain, task_type, existing_task.task_id, user_id=user_id)
+
             # Step 1: POST task
-            task_id = self._post_task(post_endpoint, post_data)
+            task_id = await self._post_task(post_endpoint, post_data)
             if not task_id:
                 return None
-            
+
             # Save task to database
             await db.save_async_task(AsyncTask( domain_name=domain, task_id=task_id, task_type=task_type, status=AsyncTaskStatus.PROCESSING ))
-            
-            # ) Step 2: Poll for completion (pass get_endpoint for correct API call
-            return await self._wait_for_task_completion(domain, task_type, task_id, get_endpoint)
+
+            # Step 2: Poll for completion (pass get_endpoint for correct API call
+            return await self._wait_for_task_completion(domain, task_type, task_id, get_endpoint, user_id=user_id)
             
         except Exception as e:
             logger.error("Async task execution failed", domain=domain, task_type=task_type, error=str(e))
@@ -80,52 +81,52 @@ class DataForSEOAsyncService:
     async def _post_task(self, endpoint: str, post_data: Dict[str, Any]) -> Optional[str]:
         """POST task to DataForSEO"""
         try:
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 return None
-            
+
             # DataForSEO expects an array of tasks
             tasks_array = [post_data]
-            
+
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = client.post( f"{credentials['api_url']}{endpoint}", auth=(credentials['login'], credentials['password']), json=tasks_array )
-                
+                response = await client.post( f"{credentials['api_url']}{endpoint}", auth=(credentials['login'], credentials['password']), json=tasks_array )
+
                 if response.status_code == 200:
                     data = response.json()
                     if data.get("status_code") == 20000 and data.get("tasks"):
                         task_id = data["tasks"][0].get("id")
                         logger.info("Task posted successfully", task_id=task_id, endpoint=endpoint)
                         return task_id
-                
-                logger.error("Task post failed", status=response.status_code, response=data)
+
+                logger.error("Task post failed", status=response.status_code)
                 return None
-                
+
         except Exception as e:
             logger.error("Task post exception", endpoint=endpoint, error=str(e))
             return None
     
-    async def _wait_for_task_completion(self, domain: str, task_type: DetailedDataType, task_id: str, get_endpoint: str = None) -> Optional[Dict[str, Any]]:
+    async def _wait_for_task_completion(self, domain: str, task_type: DetailedDataType, task_id: str, get_endpoint: str = None, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Poll for task completion and retrieve results"""
         try:
-            credentials = self._get_credentials()
+            credentials = await self._get_credentials()
             if not credentials:
                 return None
-            
+
             db = get_database()
-            
+
             # Get human-readable task type for status messages
             task_type_messages = { DetailedDataType.BACKLINKS: "backlinks results", DetailedDataType.KEYWORDS: "keywords results", DetailedDataType.REFERRING_DOMAINS: "referring domains results" }
             task_message = task_type_messages.get(task_type, "results")
-            
+
             for attempt in range(self.max_poll_attempts):
                 logger.info(f"Polling for {task_message}", domain=domain, attempt=attempt + 1, max_attempts=self.max_poll_attempts)
                 await asyncio.sleep(self.poll_interval)
-                
+
                 # Check if task is ready
                 if await self._is_task_ready(credentials, task_id, task_type):
                     logger.info(f"Task completed, retrieving {task_message}", domain=domain, task_id=task_id)
-                    # Get results with correct endpoint
-                    results = self._get_task_results(credentials, task_id, task_type, get_endpoint)
+                    # Get results with correct endpoint (returns tuple of results and cost)
+                    results, api_cost = await self._get_task_results(credentials, task_id, task_type, get_endpoint)
                     if results:
                         # Validate and filter results before saving
                         validated_results = self._validate_and_filter_results(results, domain, task_type)
@@ -133,24 +134,40 @@ class DataForSEOAsyncService:
                             # Save results to database
                             detailed_data = DetailedAnalysisData( domain_name=domain, data_type=task_type, json_data=validated_results, task_id=task_id )
                             await db.save_detailed_data(detailed_data)
-                            
+
                             # Update task status
                             await db.update_async_task_status(task_id, AsyncTaskStatus.COMPLETED)
-                            
-                            logger.info("Task completed successfully", domain=domain, task_type=task_type, task_id=task_id)
+
+                            # Log to api_usage_logs with actual cost
+                            api_service_map = {
+                                DetailedDataType.BACKLINKS: "DataForSEO Async Backlinks",
+                                DetailedDataType.KEYWORDS: "DataForSEO Async Keywords",
+                                DetailedDataType.REFERRING_DOMAINS: "DataForSEO Async Referring Domains"
+                            }
+                            await db.log_api_usage(
+                                user_action='ASYNC ANALYSIS',
+                                api_service=api_service_map.get(task_type, 'DataForSEO Async'),
+                                request_id=task_id,
+                                cost=api_cost,
+                                credits_count=0.0,
+                                domain=domain,
+                                user_id=str(user_id) if user_id else None
+                            )
+
+                            logger.info("Task completed successfully", domain=domain, task_type=task_type, task_id=task_id, cost=api_cost)
                             return validated_results
                         else:
                             logger.warning("Task results failed validation - no valid data to save", domain=domain, task_type=task_type, task_id=task_id)
                             await db.update_async_task_status(task_id, AsyncTaskStatus.FAILED, "Results failed validation - no valid data")
                             return None
-                
+
                 logger.debug("Task still processing", domain=domain, task_type=task_type, attempt=attempt + 1)
-            
+
             # Task timed out
             await db.update_async_task_status(task_id, AsyncTaskStatus.FAILED, "Task timed out")
             logger.error("Task timed out", domain=domain, task_type=task_type, task_id=task_id)
             return None
-            
+
         except Exception as e:
             logger.error("Task completion wait failed", domain=domain, task_type=task_type, error=str(e))
             return None
@@ -167,8 +184,8 @@ class DataForSEOAsyncService:
                 ready_endpoint = "/backlinks/backlinks/tasks_ready"
             
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = client.get( f"{credentials['api_url']}{ready_endpoint}", auth=(credentials['login'], credentials['password']) )
-                
+                response = await client.get( f"{credentials['api_url']}{ready_endpoint}", auth=(credentials['login'], credentials['password']) )
+
                 if response.status_code == 200:
                     data = response.json()
                     ready_tasks = data.get("tasks", [])
@@ -180,8 +197,8 @@ class DataForSEOAsyncService:
             logger.error("Task ready check failed", task_id=task_id, error=str(e))
             return False
     
-    async def _get_task_results(self, credentials: Dict[str, str], task_id: str, task_type: DetailedDataType, get_endpoint: str = None) -> Optional[Dict[str, Any]]:
-        """Get task results using the correct endpoint"""
+    async def _get_task_results(self, credentials: Dict[str, str], task_id: str, task_type: DetailedDataType, get_endpoint: str = None) -> tuple[Optional[Dict[str, Any]], float]:
+        """Get task results using the correct endpoint, returns (results, cost)"""
         try:
             # Use provided endpoint or determine from task type
             if get_endpoint:
@@ -192,20 +209,23 @@ class DataForSEOAsyncService:
                 endpoint = "/backlinks/backlinks/task_get"
             else:  # BACKLINKS
                 endpoint = "/backlinks/backlinks/task_get"
-            
+
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = client.get( f"{credentials['api_url']}{endpoint}/{task_id}", auth=(credentials['login'], credentials['password']) )
-                
+                response = await client.get( f"{credentials['api_url']}{endpoint}/{task_id}", auth=(credentials['login'], credentials['password']) )
+
                 if response.status_code == 200:
                     data = response.json()
+                    # Extract cost from response
+                    api_cost = data.get("cost", 0) or 0
                     if data.get("status_code") == 20000 and data.get("tasks"):
-                        return data["tasks"][0].get("result", [{}])[0]
-                
-                return None
-                
+                        return data["tasks"][0].get("result", [{}])[0], api_cost
+                    return None, api_cost
+
+                return None, 0.0
+
         except Exception as e:
             logger.error("Get task results failed", task_id=task_id, task_type=task_type.value, error=str(e))
-            return None
+            return None, 0.0
     
     def _validate_and_filter_results(self, results: Dict[str, Any], domain: str, task_type: DetailedDataType) -> Optional[Dict[str, Any]]:
         """Validate and filter results to remove sample/test data"""

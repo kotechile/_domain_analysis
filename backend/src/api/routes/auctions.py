@@ -2227,7 +2227,11 @@ async def get_refresh_preview( payload: Dict[str, Any] = Body(...), current_user
 @router.post("/auctions/bulk-refresh")
 async def trigger_bulk_refresh( payload: Dict[str, Any] = Body(...), background_tasks: BackgroundTasks = BackgroundTasks(), current_user = Depends(get_current_user) ):
     """
-    'Find and Fill' — refresh up to 1,000 domains with missing metrics. Body: { filters: {...}, force: bool }
+    'Find and Fill' — refresh up to 1,000 domains with missing metrics.
+    Body: { filters: {...}, force: bool, prioritized_domains: [...] }
+
+    prioritized_domains: Optional list of domains to prioritize for refresh.
+    These will be processed first, then remaining slots filled with other domains matching filters.
 
     Returns immediately with 'in_progress' status; processing continues in background. """
     try:
@@ -2235,23 +2239,37 @@ async def trigger_bulk_refresh( payload: Dict[str, Any] = Body(...), background_
         from services.progress_tracker import ProgressTracker
         service = MarketplaceBatchService()
 
- # }  The Angular client wraps filters in { filters: {..., force: bool
+        # The Angular client wraps filters in { filters: {...}, force: bool, ... }
         filters = payload.get("filters", payload)  # Fallback: treat whole body as filters
         force = payload.get("force", False)
         sort_by = payload.get("sort_by", "expiration_date")
         sort_order = payload.get("sort_order", "asc")
+        prioritized_domains = payload.get("prioritized_domains", [])  # New parameter
 
         # Extract user ID before passing to background task
         user_id = current_user.id
 
-        # ) Create a progress job (will be updated once domains are found
-        job_id = await ProgressTracker.create_job( user_id=str(user_id), job_type="bulk_refresh", total_items=1000,  # Will be updated when actual count is known
-            metadata={"filters": filters, "force": False} )
+        # Determine if we should only refresh displayed domains (prioritized_domains only)
+        # If user sends only_displayed=true, we'll only refresh those domains
+        only_displayed = payload.get("only_displayed", False)
+
+        # Calculate estimated total - if only_displayed, use prioritized count, otherwise up to 1000
+        estimated_total = len(prioritized_domains) if only_displayed and prioritized_domains else 1000
+
+        # Create a progress job (will be updated once domains are found)
+        job_id = await ProgressTracker.create_job( user_id=str(user_id), job_type="bulk_refresh", total_items=estimated_total,
+            metadata={"filters": filters, "force": False, "prioritized_count": len(prioritized_domains) if prioritized_domains else 0, "only_displayed": only_displayed} )
 
         # Start processing in background and return immediately
-        background_tasks.add_task( service.process_marketplace_refresh, user_id=user_id, filters=filters, force=False, job_id=job_id, sort_by=sort_by, sort_order=sort_order )
+        background_tasks.add_task( service.process_marketplace_refresh, user_id=user_id, filters=filters, force=False,
+            job_id=job_id, sort_by=sort_by, sort_order=sort_order, prioritized_domains=prioritized_domains,
+            only_displayed=only_displayed )
 
-        return { "success": True, "in_progress": True, "job_id": job_id, "message": "Fill Gaps refresh started — processing up to 1,000 domains in the background. Results will appear shortly." }
+        if only_displayed and prioritized_domains:
+            return { "success": True, "in_progress": True, "job_id": job_id,
+                "message": f"Fill Gaps refresh started — processing {len(prioritized_domains)} displayed domains only." }
+        return { "success": True, "in_progress": True, "job_id": job_id,
+            "message": f"Fill Gaps refresh started — processing up to 1,000 domains in the background ({len(prioritized_domains) if prioritized_domains else 0} prioritized)." }
     except Exception as e:
         logger.error("Failed to trigger bulk refresh", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -2259,7 +2277,10 @@ async def trigger_bulk_refresh( payload: Dict[str, Any] = Body(...), background_
 @router.post("/auctions/force-refresh")
 async def trigger_force_refresh( payload: Dict[str, Any] = Body(...), background_tasks: BackgroundTasks = BackgroundTasks(), current_user = Depends(get_current_user) ):
     """
-    Force Refresh — get fresh SEO metrics for up to 1,000 domains matching filters, overriding any existing metrics regardless of when they were last refreshed. Body: { filters: {...}, force: bool }
+    Force Refresh — get fresh SEO metrics for up to 1,000 domains matching filters, overriding any existing metrics regardless of when they were last refreshed.
+    Body: { filters: {...}, force: bool, prioritized_domains: [...] }
+
+    prioritized_domains: Optional list of domains to prioritize for refresh.
 
     Returns immediately with 'in_progress' status; processing continues in background. """
     try:
@@ -2271,18 +2292,21 @@ async def trigger_force_refresh( payload: Dict[str, Any] = Body(...), background
         filters = payload.get("filters", payload)
         sort_by = payload.get("sort_by", "expiration_date")
         sort_order = payload.get("sort_order", "asc")
+        prioritized_domains = payload.get("prioritized_domains", [])  # New parameter
 
         # Extract user ID before passing to background task
         user_id = current_user.id
 
-        # ) Create a progress job (will be updated once domains are found
-        job_id = await ProgressTracker.create_job( user_id=str(user_id), job_type="force_refresh", total_items=1000,  # Will be updated when actual count is known
-            metadata={"filters": filters, "force": True} )
+        # Create a progress job (will be updated once domains are found)
+        job_id = await ProgressTracker.create_job( user_id=str(user_id), job_type="force_refresh", total_items=1000,
+            metadata={"filters": filters, "force": True, "prioritized_count": len(prioritized_domains)} )
 
         # Start processing in background and return immediately
-        background_tasks.add_task( service.process_marketplace_refresh, user_id=user_id, filters=filters, force=True, job_id=job_id, sort_by=sort_by, sort_order=sort_order )
+        background_tasks.add_task( service.process_marketplace_refresh, user_id=user_id, filters=filters, force=True,
+            job_id=job_id, sort_by=sort_by, sort_order=sort_order, prioritized_domains=prioritized_domains )
 
-        return { "success": True, "in_progress": True, "job_id": job_id, "message": "Force Refresh started — processing up to 1,000 domains in the background. Results will appear shortly." }
+        return { "success": True, "in_progress": True, "job_id": job_id,
+            "message": f"Force Refresh started — processing up to 1,000 domains in the background ({len(prioritized_domains)} prioritized)." }
     except Exception as e:
         logger.error("Failed to trigger force refresh", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))

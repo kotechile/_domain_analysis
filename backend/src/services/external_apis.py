@@ -89,18 +89,21 @@ class DataForSEOService:
                 from services.n8n_service import N8NService
                 n8n_service = N8NService()
                 use_n8n_summary = use_n8n_summary_override if use_n8n_summary_override is not None else n8n_service.is_enabled_for_summary()
-                
+
+                # Track costs from API responses
+                total_cost = 0.0
+
                 backlinks_summary_data = None
                 if not use_n8n_summary:
                     # ) Get backlinks summary data using v3 API (as per documentation
                     # Only if N8N is not enabled for summary
                     post_data = {}
                     post_data[len(post_data)] = { "target": domain, "internal_list_limit": 10, "include_subdomains": True, "backlinks_filters": ["dofollow", "=", True], "backlinks_status_type": "all" }
-                    
+
                     url = f"{credentials['api_url']}/backlinks/summary/live"
                     logger.info("Making DataForSEO backlinks summary request", url=url, domain=domain)
                     backlinks_summary_response = await client.post( url, auth=(credentials['login'], credentials['password']), json=post_data )
-                    
+
                     # Handle backlinks summary response
                     if backlinks_summary_response.status_code == 200:
                         response_data = backlinks_summary_response.json()
@@ -108,6 +111,8 @@ class DataForSEOService:
                             backlinks_summary_data = response_data["tasks"][0].get("result", [])
                             if backlinks_summary_data:
                                 backlinks_summary_data = backlinks_summary_data[0]
+                        # Capture cost from response
+                        total_cost += response_data.get("cost", 0) or 0
                     else:
                         logger.warning("DataForSEO backlinks summary request failed", domain=domain, status=backlinks_summary_response.status_code)
                 else:
@@ -116,15 +121,15 @@ class DataForSEOService:
                     if cached_data and cached_data.get("backlinks_summary"):
                         backlinks_summary_data = cached_data["backlinks_summary"]
                         logger.info("Using cached N8N backlinks summary data", domain=domain)
-                
+
                 # ) Get domain rank overview using v3 API (as per documentation
                 domain_rank_post_data = {}
                 domain_rank_post_data[len(domain_rank_post_data)] = { "target": domain, "language_name": "English", "location_code": 2840 }
-                
+
                 domain_rank_url = f"{credentials['api_url']}/dataforseo_labs/google/domain_rank_overview/live"
                 logger.info("Making DataForSEO domain rank overview request", url=domain_rank_url, domain=domain)
                 domain_rank_response = await client.post( domain_rank_url, auth=(credentials['login'], credentials['password']), json=domain_rank_post_data )
-                
+
                 # Handle domain rank response
                 domain_rank_data = None
                 if domain_rank_response.status_code == 200:
@@ -133,27 +138,41 @@ class DataForSEOService:
                         result = response_data["tasks"][0].get("result", [])
                         if result and result[0].get("items"):
                             domain_rank_data = result[0]["items"][0].get("metrics", {})
+                    # Capture cost from response
+                    total_cost += response_data.get("cost", 0) or 0
                 else:
                     logger.warning("DataForSEO domain rank overview request failed", domain=domain, status=domain_rank_response.status_code)
-                
+
                 # Skip detailed backlinks and keywords collection to save costs
                 # These will be loaded on-demand when users request them via the frontend
                 backlinks_data = None
                 keywords_data = None
-                
+
                 logger.info("Skipping detailed backlinks and keywords collection to save costs", domain=domain)
-                
+
                 # Combine all data
                 combined_data = { "domain_rank": domain_rank_data or {}, "backlinks_summary": backlinks_summary_data or {}, "backlinks": backlinks_data or {}, "keywords": keywords_data or {}, "timestamp": datetime.utcnow().isoformat() }
-                
+
                 # Cache the data
                 await db.save_raw_data(domain, DataSource.DATAFORSEO, combined_data)
-                
-                # Track usage
-                await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='domain_analytics', provider='dataforseo', model='v3', cost_estimated=0.0, # Add cost logic later if needed
+
+                # Track usage with actual cost
+                await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='domain_analytics', provider='dataforseo', model='v3', cost_estimated=total_cost,
                     details={'domain': domain} )
 
-                logger.info("DataForSEO data retrieved successfully", domain=domain)
+                # Log to api_usage_logs for cost tracking with actual cost
+                db_logs = get_database()
+                await db_logs.log_api_usage(
+                    user_action='ANALYSIS',
+                    api_service='DataForSEO Domain Analytics',
+                    request_id=str(__import__('uuid').uuid4()),
+                    cost=total_cost,
+                    credits_count=0.0,
+                    domain=domain,
+                    user_id=str(user_id) if user_id else None
+                )
+
+                logger.info("DataForSEO data retrieved successfully", domain=domain, cost=total_cost)
                 return combined_data
                 
         except Exception as e:
@@ -516,15 +535,31 @@ class DataForSEOService:
                     return None
                 
                 data = response.json()
-                
+
+                # Extract cost from response
+                api_cost = data.get("cost", 0) or 0
+
                 # Extract the result from the response
                 if data.get("status_code") == 20000 and data.get("tasks"):
                     result = data["tasks"][0].get("result", [])
                     if result:
                         backlinks_data = result[0]
-                        logger.info("DataForSEO detailed backlinks retrieved successfully", domain=domain, count=backlinks_data.get("total_count", 0))
-                        
-                        await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='detailed_backlinks', provider='dataforseo', model='v3', details={'domain': domain, 'limit': limit} )
+                        logger.info("DataForSEO detailed backlinks retrieved successfully", domain=domain, count=backlinks_data.get("total_count", 0), cost=api_cost)
+
+                        await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='detailed_backlinks', provider='dataforseo', model='v3', cost_estimated=api_cost, details={'domain': domain, 'limit': limit} )
+
+                        # Log to api_usage_logs with actual cost
+                        db_logs = get_database()
+                        await db_logs.log_api_usage(
+                            user_action='DEEP ANALYSIS',
+                            api_service='DataForSEO Detailed Backlinks',
+                            request_id=str(__import__('uuid').uuid4()),
+                            cost=api_cost,
+                            credits_count=0.0,
+                            domain=domain,
+                            user_id=str(user_id) if user_id else None
+                        )
+
                         return backlinks_data
                 
                 logger.warning("No detailed backlinks data found", domain=domain)
@@ -554,15 +589,31 @@ class DataForSEOService:
                     return None
                 
                 data = response.json()
-                
+
+                # Extract cost from response
+                api_cost = data.get("cost", 0) or 0
+
                 # Extract the result from the response
                 if data.get("status_code") == 20000 and data.get("tasks"):
                     result = data["tasks"][0].get("result", [])
                     if result:
                         keywords_data = result[0]
-                        logger.info("DataForSEO detailed keywords retrieved successfully", domain=domain, count=len(keywords_data.get("items", [])))
-                                  
-                        await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='detailed_keywords', provider='dataforseo', model='v3', details={'domain': domain, 'limit': limit} )
+                        logger.info("DataForSEO detailed keywords retrieved successfully", domain=domain, count=len(keywords_data.get("items", [])), cost=api_cost)
+
+                        await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='detailed_keywords', provider='dataforseo', model='v3', cost_estimated=api_cost, details={'domain': domain, 'limit': limit} )
+
+                        # Log to api_usage_logs with actual cost
+                        db_logs = get_database()
+                        await db_logs.log_api_usage(
+                            user_action='DEEP ANALYSIS',
+                            api_service='DataForSEO Detailed Keywords',
+                            request_id=str(__import__('uuid').uuid4()),
+                            cost=api_cost,
+                            credits_count=0.0,
+                            domain=domain,
+                            user_id=str(user_id) if user_id else None
+                        )
+
                         return keywords_data
                 
                 logger.warning("No detailed keywords data found", domain=domain)
@@ -592,13 +643,16 @@ class DataForSEOService:
                     return None
                 
                 data = response.json()
-                
+
+                # Extract cost from response
+                api_cost = data.get("cost", 0) or 0
+
                 # Extract the result from the response
                 if data.get("status_code") == 20000 and data.get("tasks"):
                     result = data["tasks"][0].get("result", [])
                     if result:
                         backlinks_data = result[0]
-                        
+
                         # Group by domain to get unique referring domains
                         referring_domains = {}
                         for item in backlinks_data.get("items", []):
@@ -606,16 +660,29 @@ class DataForSEOService:
                             if domain_from not in referring_domains:
                                 referring_domains[domain_from] = { "domain": domain_from, "domain_rank": item.get("domain_from_rank", 0), "backlinks_count": 0, "first_seen": item.get("first_seen", ""), "last_seen": item.get("last_seen", "") }
                             referring_domains[domain_from]["backlinks_count"] += 1
-                        
+
                         # Convert to list and sort by domain rank
                         referring_domains_list = list(referring_domains.values())
                         referring_domains_list.sort(key=lambda x: x.get("domain_rank", 0), reverse=True)
-                        
+
                         referring_domains_data = { "total_count": len(referring_domains_list), "items": referring_domains_list[:limit] }
-                        
-                        logger.info("DataForSEO referring domains retrieved successfully", domain=domain, count=len(referring_domains_data.get("items", [])))
-                                  
-                        await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='referring_domains', provider='dataforseo', model='v3', details={'domain': domain, 'limit': limit} )
+
+                        logger.info("DataForSEO referring domains retrieved successfully", domain=domain, count=len(referring_domains_data.get("items", [])), cost=api_cost)
+
+                        await self.usage_tracking.track_usage( user_id=user_id, resource_type='dataforseo', operation='referring_domains', provider='dataforseo', model='v3', cost_estimated=api_cost, details={'domain': domain, 'limit': limit} )
+
+                        # Log to api_usage_logs with actual cost
+                        db_logs = get_database()
+                        await db_logs.log_api_usage(
+                            user_action='DEEP ANALYSIS',
+                            api_service='DataForSEO Referring Domains',
+                            request_id=str(__import__('uuid').uuid4()),
+                            cost=api_cost,
+                            credits_count=0.0,
+                            domain=domain,
+                            user_id=str(user_id) if user_id else None
+                        )
+
                         return referring_domains_data
                 
                 logger.warning("No referring domains data found", domain=domain)

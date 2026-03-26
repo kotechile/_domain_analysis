@@ -2,7 +2,11 @@
 Database service for Supabase integration
 """
 
-from supabase import create_async_client as create_client, AsyncClient, ClientOptions
+try:
+    from supabase import create_async_client as create_client, AsyncClient, ClientOptions
+except ImportError:
+    from supabase import create_client, AsyncClient, ClientOptions
+
 from typing import Optional, Dict, Any, List
 import structlog
 import re
@@ -1586,11 +1590,57 @@ class DatabaseService:
             logger.error("Failed to get auctions missing metrics", error=str(e))
             raise
 
-        except Exception as e:
-            logger.error("Failed to get auctions missing metrics", error=str(e))
-            raise
+    async def get_auctions_by_domains(self, domains: List[str], filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """
+        Get auctions by specific domain names, optionally applying filters.
+        Used for prioritizing domains that may not match the current filter criteria.
 
-    
+        Args:
+            domains: List of domain names to fetch
+            filters: Optional additional filters to apply
+
+        Returns:
+            List of auction records for the specified domains
+        """
+        client = await self._get_client()
+
+        try:
+            if not client or not domains:
+                return []
+
+            # Normalize domain names
+            domain_list = [d.strip().lower() for d in domains if d and d.strip()]
+
+            # Build query
+            query = client.table('auctions').select('*').in_('domain', domain_list).eq('to_delete', False)
+
+            # Apply additional filters if provided
+            if filters:
+                if filters.get('preferred') is not None:
+                    query = query.eq('preferred', filters['preferred'])
+                if filters.get('auction_site'):
+                    query = query.eq('auction_site', filters['auction_site'])
+                if filters.get('min_score') is not None:
+                    query = query.gte('score', filters['min_score'])
+                if filters.get('max_score') is not None:
+                    query = query.lte('score', filters['max_score'])
+                if filters.get('auction_sites') and isinstance(filters['auction_sites'], list):
+                    query = query.in_('auction_site', filters['auction_sites'])
+                if filters.get('expiration_from_date'):
+                    query = query.gte('expiration_date', filters['expiration_from_date'])
+                if filters.get('expiration_to_date'):
+                    exp_to = filters['expiration_to_date']
+                    if isinstance(exp_to, str) and len(exp_to) == 10:
+                        exp_to = f"{exp_to}T23:59:59"
+                    query = query.lte('expiration_date', exp_to)
+
+            result = await query.execute()
+            return result.data if result.data else []
+
+        except Exception as e:
+            logger.error("Failed to get auctions by domains", error=str(e), domain_count=len(domains) if domains else 0)
+            return []
+
     async def update_auction_page_statistics(self, domain: str, page_statistics: Dict[str, Any]) -> bool:
         """
         Update page_statistics for an auction
@@ -2271,6 +2321,24 @@ class DatabaseService:
             logger.error("Failed to fetch DataForSEO key", error=str(e))
             return None
 
+    async def log_api_usage(self, user_action: str, api_service: str, request_id: str, cost: float, credits_count: float, domain: str = None, user_id: str = None):
+        client = await self._get_client()
+        try:
+            record = {
+                'user_action': user_action,
+                'api_service': api_service,
+                'request_id': request_id,
+                'cost': cost,
+                'credits_count': credits_count,
+                'domain': domain,
+                'created_at': __import__('datetime').datetime.utcnow().isoformat()
+            }
+            if user_id:
+                record['user_id'] = user_id
+            await client.table('api_usage_logs').insert(record).execute()
+        except Exception as e:
+            logger.error('Failed to log API usage', error=str(e))
+
 
 # Global database service instance
 _db_service: Optional[DatabaseService] = None
@@ -2291,19 +2359,3 @@ def get_database() -> DatabaseService:
     if _db_service is None:
         raise RuntimeError("Database service not initialized")
     return _db_service
-
-
-    async def log_api_usage(self, user_action: str, api_service: str, request_id: str, cost: float, credits_count: float, domain: str = None):
-        client = await self._get_client()
-        try:
-            await client.table('api_usage_logs').insert({
-                'user_action': user_action,
-                'api_service': api_service,
-                'request_id': request_id,
-                'cost': cost,
-                'credits_count': credits_count,
-                'domain': domain,
-                'created_at': __import__('datetime').datetime.utcnow().isoformat()
-            }).execute()
-        except Exception as e:
-            logger.error('Failed to log API usage', error=str(e))
