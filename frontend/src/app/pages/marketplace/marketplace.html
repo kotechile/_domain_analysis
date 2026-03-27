@@ -524,10 +524,26 @@
                     </td>
                     <td class="text-center">
                         <div class="flex flex-col items-center">
+                            @switch (getExpirationStatus(item.expiration_date)) {
+                            @case ('today') {
+                            <span
+                                class="text-xs font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-500 animate-pulse">
+                                TODAY
+                            </span>
+                            }
+                            @case ('soon') {
+                            <span class="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500">
+                                {{ item.expiration_date | date:'MMM d' }}
+                            </span>
+                            }
+                            @default {
                             <span class="text-xs font-bold" style="color: var(--text-color)">
                                 {{ item.expiration_date | date:'MMM d, y' }}
                             </span>
-                            <span class="text-[9px] font-bold opacity-30 uppercase tracking-tighter">Ends on</span>
+                            }
+                            }
+                            <span class="text-[9px] font-bold opacity-30 uppercase tracking-tighter mt-0.5">Ends
+                                on</span>
                         </div>
                     </td>
                     <td class="text-right pr-4">

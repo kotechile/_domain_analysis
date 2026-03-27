@@ -566,6 +566,22 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     this.onlyDisplayedDomains.set(!this.onlyDisplayedDomains());
   }
 
+  // Helper to check if domain is expiring today or soon (within 7 days)
+  getExpirationStatus(expirationDate: string): 'today' | 'soon' | 'future' {
+    if (!expirationDate) return 'future';
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expDate = new Date(expirationDate);
+    expDate.setHours(0, 0, 0, 0);
+
+    const diffTime = expDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays <= 0) return 'today';
+    if (diffDays <= 7) return 'soon';
+    return 'future';
+  }
+
   toggleFilters() {
     this.showFilters.set(!this.showFilters());
   }
