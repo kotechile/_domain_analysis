@@ -2322,19 +2322,30 @@ class DatabaseService:
             return None
 
     async def log_api_usage(self, user_action: str, api_service: str, request_id: str, cost: float, credits_count: float, domain: str = None, user_id: str = None):
+        """Log API usage to api_usage_logs table
+
+        Note: The table uses 'endpoint' column to store the API service name.
+        user_action and api_service are combined into endpoint for storage.
+        """
         client = await self._get_client()
         try:
+            # Combine user_action and api_service into endpoint field
+            endpoint = f"{user_action}: {api_service}" if user_action else api_service
+
             record = {
-                'user_action': user_action,
-                'api_service': api_service,
+                'endpoint': endpoint,
                 'request_id': request_id,
                 'cost': cost,
                 'credits_count': credits_count,
                 'domain': domain,
                 'created_at': __import__('datetime').datetime.utcnow().isoformat()
             }
+            # Only add user_id if the column exists (check if table has it)
             if user_id:
-                record['user_id'] = user_id
+                try:
+                    record['user_id'] = user_id
+                except:
+                    pass  # user_id column may not exist
             await client.table('api_usage_logs').insert(record).execute()
         except Exception as e:
             logger.error('Failed to log API usage', error=str(e))

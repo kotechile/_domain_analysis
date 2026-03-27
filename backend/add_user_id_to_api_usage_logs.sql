@@ -1,13 +1,24 @@
--- Migration: Add user_id column to api_usage_logs table
--- Run this if your api_usage_logs table was created before the user_id column was added
+-- Migration to add user_id column if it doesn't exist (for existing tables)
+-- The table already has: id, endpoint, request_id, cost, credits_count, domain, created_at
 
--- Add user_id column
-ALTER TABLE api_usage_logs
-ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'api_usage_logs' AND column_name = 'user_id'
+    ) THEN
+        ALTER TABLE api_usage_logs ADD COLUMN user_id UUID REFERENCES auth.users(id);
+        CREATE INDEX idx_api_usage_logs_user_id ON api_usage_logs(user_id);
+    END IF;
+END $$;
 
--- Create index for faster querying
-CREATE INDEX IF NOT EXISTS idx_api_usage_logs_user_id ON api_usage_logs(user_id);
-
--- Update RLS policies to allow service role to insert with user_id
-DROP POLICY IF EXISTS "Admin manage api_usage_logs" ON api_usage_logs;
-CREATE POLICY "Admin manage api_usage_logs" ON api_usage_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Ensure RLS policy exists
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE tablename = 'api_usage_logs' AND policyname = 'Admin manage api_usage_logs'
+    ) THEN
+        CREATE POLICY "Admin manage api_usage_logs" ON api_usage_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
+    END IF;
+END $$;
