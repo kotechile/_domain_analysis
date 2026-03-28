@@ -12,8 +12,7 @@ ENV PYTHONPATH=/app
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
     libffi-dev \
@@ -29,6 +28,7 @@ RUN apt-get update \
     libgdk-pixbuf2.0-0 \
     shared-mime-info \
     curl \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 
