@@ -179,7 +179,7 @@ class DataForSEOService:
             logger.error("Failed to get DataForSEO data", domain=domain, error=str(e))
             return None
     
-    async def get_historical_rank_overview(self, domain: str) -> Optional[Dict[str, Any]]:
+    async def get_historical_rank_overview(self, domain: str, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get historical rank overview from DataForSEO"""
         try:
             credentials = await self._get_credentials()
@@ -202,11 +202,38 @@ class DataForSEOService:
 
                 if response.status_code == 200:
                     data = response.json()
+                    # Extract cost from response
+                    api_cost = data.get("cost", 0) or 0
+
                     if data.get("status_code") == 20000 and data.get("tasks"):
                         result = data["tasks"][0].get("result", [])
                         if result and result[0].get("items"):
                             items_count = len(result[0].get("items", []))
-                            logger.info("DataForSEO historical rank overview retrieved successfully", domain=domain, items_count=items_count)
+                            logger.info("DataForSEO historical rank overview retrieved successfully", domain=domain, items_count=items_count, cost=api_cost)
+
+                            # Track usage with actual cost
+                            await self.usage_tracking.track_usage(
+                                user_id=user_id,
+                                resource_type='dataforseo',
+                                operation='historical_rank_overview',
+                                provider='dataforseo',
+                                model='v3',
+                                cost_estimated=api_cost,
+                                details={'domain': domain}
+                            )
+
+                            # Log to api_usage_logs for cost tracking with actual cost
+                            db_logs = get_database()
+                            await db_logs.log_api_usage(
+                                user_action='HISTORICAL_ANALYSIS',
+                                api_service='DataForSEO Historical Rank Overview',
+                                request_id=str(__import__('uuid').uuid4()),
+                                cost=api_cost,
+                                credits_count=0.0,
+                                domain=domain,
+                                user_id=str(user_id) if user_id else None
+                            )
+
                             return result[0]
 
                 logger.warning("DataForSEO historical rank overview request failed", domain=domain, status=response.status_code)
@@ -216,7 +243,7 @@ class DataForSEOService:
             logger.error("Failed to get DataForSEO historical rank overview", domain=domain, error=str(e))
             return None
 
-    async def get_traffic_analytics_history(self, domain: str) -> Optional[Dict[str, Any]]:
+    async def get_traffic_analytics_history(self, domain: str, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get traffic analytics history from DataForSEO"""
         try:
             credentials = await self._get_credentials()
@@ -238,11 +265,38 @@ class DataForSEOService:
 
                 if response.status_code == 200:
                     data = response.json()
+                    # Extract cost from response
+                    api_cost = data.get("cost", 0) or 0
+
                     if data.get("status_code") == 20000 and data.get("tasks"):
                         result = data["tasks"][0].get("result", [])
                         if result and result[0].get("items"):
                             items_count = len(result[0].get("items", []))
-                            logger.info("DataForSEO traffic analytics history retrieved successfully", domain=domain, items_count=items_count)
+                            logger.info("DataForSEO traffic analytics history retrieved successfully", domain=domain, items_count=items_count, cost=api_cost)
+
+                            # Track usage with actual cost
+                            await self.usage_tracking.track_usage(
+                                user_id=user_id,
+                                resource_type='dataforseo',
+                                operation='traffic_analytics_history',
+                                provider='dataforseo',
+                                model='v3',
+                                cost_estimated=api_cost,
+                                details={'domain': domain}
+                            )
+
+                            # Log to api_usage_logs for cost tracking with actual cost
+                            db_logs = get_database()
+                            await db_logs.log_api_usage(
+                                user_action='HISTORICAL_ANALYSIS',
+                                api_service='DataForSEO Traffic Analytics History',
+                                request_id=str(__import__('uuid').uuid4()),
+                                cost=api_cost,
+                                credits_count=0.0,
+                                domain=domain,
+                                user_id=str(user_id) if user_id else None
+                            )
+
                             return result[0]
 
                 logger.warning("DataForSEO traffic analytics history request failed", domain=domain, status=response.status_code)
@@ -252,7 +306,7 @@ class DataForSEOService:
             logger.error("Failed to get DataForSEO traffic analytics history", domain=domain, error=str(e))
             return None
 
-    async def fetch_bulk_traffic_estimation_live(self, domains: List[str]) -> Optional[List[Dict[str, Any]]]:
+    async def fetch_bulk_traffic_estimation_live(self, domains: List[str], user_id: Optional[UUID] = None) -> Optional[List[Dict[str, Any]]]:
         """
         Fetch bulk traffic estimation using the Live endpoint (DataForSEO Labs). Blocks until results are returned (usually < 1s). """
         try:
@@ -260,29 +314,56 @@ class DataForSEOService:
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
-            
+
             async with httpx.AsyncClient(timeout=60.0) as client: # Increased timeout for bulk live
                 url = f"{credentials['api_url']}/dataforseo_labs/google/bulk_traffic_estimation/live"
-                
+
                 # Prepare single task with list of targets
                 payload = [{ "targets": domains, "location_code": 2840, "language_name": "English" }]
-                    
+
                 logger.info("Fetching DataForSEO bulk traffic estimation (Live)", url=url, domain_count=len(domains))
-                
+
                 response = await client.post( url, auth=(credentials['login'], credentials['password']), json=payload )
-                
+
                 if response.status_code == 200:
                     data = response.json()
+                    # Extract cost from response
+                    api_cost = data.get("cost", 0) or 0
+
                     if data.get("status_code") == 20000 and data.get("tasks"):
                         task_data = data["tasks"][0]
-                        
+
                         # Check results
                         if task_data.get("result") and len(task_data["result"]) > 0:
                             # The first result object contains the list of items
                             first_result = task_data["result"][0]
                             if first_result.get("items"):
                                 items = first_result["items"]
-                                logger.info("DataForSEO bulk traffic retrieved successfully", count=len(items))
+                                logger.info("DataForSEO bulk traffic retrieved successfully", count=len(items), cost=api_cost)
+
+                                # Track usage with actual cost
+                                await self.usage_tracking.track_usage(
+                                    user_id=user_id,
+                                    resource_type='dataforseo',
+                                    operation='bulk_traffic_estimation',
+                                    provider='dataforseo',
+                                    model='v3',
+                                    cost_estimated=api_cost,
+                                    details={'domain_count': len(domains), 'domains': domains[:10]}  # Limit domains in details
+                                )
+
+                                # Log to api_usage_logs for cost tracking with actual cost
+                                db_logs = get_database()
+                                await db_logs.log_api_usage(
+                                    user_action='BULK_ANALYSIS',
+                                    api_service='DataForSEO Bulk Traffic Estimation',
+                                    request_id=str(__import__('uuid').uuid4()),
+                                    cost=api_cost,
+                                    credits_count=0.0,
+                                    domain=f"bulk:{len(domains)} domains",
+                                    user_id=str(user_id) if user_id else None
+                                )
+
                                 return items
                             else:
                                 logger.warning("DataForSEO task finished but no items found", status_msg=task_data.get("status_message"))
@@ -291,36 +372,39 @@ class DataForSEOService:
                              # Check for specific error in task
                              logger.warning("DataForSEO task returned no result", status_msg=task_data.get("status_message"))
                              return None
-                             
+
                 logger.error("DataForSEO bulk traffic request failed", status=response.status_code, response=response.text[:200])
                 return None
-                
+
         except Exception as e:
             logger.error("Failed to fetch DataForSEO bulk traffic", error=str(e))
             return None
 
-    async def get_historical_bulk_traffic_estimation(self, domain: str) -> Optional[Dict[str, Any]]:
+    async def get_historical_bulk_traffic_estimation(self, domain: str, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
         """Get historical bulk traffic estimation from DataForSEO Labs"""
         try:
             credentials = await self._get_credentials()
             if not credentials:
                 logger.error("DataForSEO credentials not available")
                 return None
-            
+
             async with httpx.AsyncClient(timeout=30.0) as client:
                 url = f"{credentials['api_url']}/dataforseo_labs/google/historical_bulk_traffic_estimation/live"
-                
+
                 # ) Calculate dates (last 2 years approx to get enough history
                 end_date = datetime.utcnow()
                 start_date = end_date - timedelta(days=365*2)
-                
+
                 payload = [{ "targets": [domain], "location_code": 2840, "language_code": "en", "date_from": start_date.strftime("%Y-%m-%d"), "date_to": end_date.strftime("%Y-%m-%d"), "item_types": ["organic", "paid"] }]
-                
+
                 logger.info("Making DataForSEO historical bulk traffic estimation request", url=url, domain=domain)
                 response = await client.post( url, auth=(credentials['login'], credentials['password']), json=payload )
-                
+
                 if response.status_code == 200:
                     data = response.json()
+                    # Extract cost from response
+                    api_cost = data.get("cost", 0) or 0
+
                     if data.get("status_code") == 20000 and data.get("tasks"):
                         result = data["tasks"][0].get("result", [])
                         if result and result[0].get("items"):
@@ -328,12 +412,36 @@ class DataForSEOService:
                             items = result[0]["items"]
                             for item in items:
                                 if item.get("target") == domain:
-                                    logger.info("DataForSEO historical bulk traffic retrieved successfully", domain=domain)
+                                    logger.info("DataForSEO historical bulk traffic retrieved successfully", domain=domain, cost=api_cost)
+
+                                    # Track usage with actual cost
+                                    await self.usage_tracking.track_usage(
+                                        user_id=user_id,
+                                        resource_type='dataforseo',
+                                        operation='historical_bulk_traffic_estimation',
+                                        provider='dataforseo',
+                                        model='v3',
+                                        cost_estimated=api_cost,
+                                        details={'domain': domain}
+                                    )
+
+                                    # Log to api_usage_logs for cost tracking with actual cost
+                                    db_logs = get_database()
+                                    await db_logs.log_api_usage(
+                                        user_action='HISTORICAL_ANALYSIS',
+                                        api_service='DataForSEO Historical Bulk Traffic Estimation',
+                                        request_id=str(__import__('uuid').uuid4()),
+                                        cost=api_cost,
+                                        credits_count=0.0,
+                                        domain=domain,
+                                        user_id=str(user_id) if user_id else None
+                                    )
+
                                     return item
-                
+
                 logger.warning("DataForSEO historical bulk traffic request failed", domain=domain, status=response.status_code)
                 return None
-                
+
         except Exception as e:
             logger.error("Failed to get DataForSEO historical bulk traffic", domain=domain, error=str(e))
             return None

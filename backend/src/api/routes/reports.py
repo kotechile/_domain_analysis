@@ -2,7 +2,7 @@
 Reports API routes
 """
 
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from datetime import datetime
@@ -15,6 +15,7 @@ from services.external_apis import DataForSEOService
 from services.pdf_service import PDFService
 from services.analysis_service import AnalysisService
 from utils.date_utils import parse_iso_datetime
+from middleware.auth_middleware import get_current_user
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -82,17 +83,19 @@ async def get_page_summary(domain: str):
 
 
 @router.get("/reports/{domain}/history", response_model=HistoricalData)
-async def get_domain_history(domain: str):
+async def get_domain_history(domain: str, current_user = Depends(get_current_user)):
     """
     Get historical metrics for a domain (ranking, traffic)
     """
     try:
+        from uuid import UUID
         service = AnalysisService()
-        history = service.get_or_fetch_historical_data(domain)
-        
+        user_id = UUID(current_user['id']) if current_user and 'id' in current_user else None
+        history = await service.get_or_fetch_historical_data(domain, user_id)
+
         if not history:
              raise HTTPException(status_code=404, detail="Historical data not available")
-             
+
         return history
     except HTTPException:
         raise

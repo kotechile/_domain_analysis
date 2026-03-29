@@ -693,7 +693,7 @@ class AnalysisService:
 
 
 
-    async def get_or_fetch_historical_data(self, domain: str) -> Optional['HistoricalData']:
+    async def get_or_fetch_historical_data(self, domain: str, user_id: Optional[UUID] = None) -> Optional['HistoricalData']:
         """Get or fetch historical data for a domain"""
         try:
             # 1. Check if report has historical data
@@ -701,14 +701,14 @@ class AnalysisService:
             if report and report.historical_data:
                 logger.info("Using cached historical data", domain=domain)
                 return report.historical_data
-                
+
             logger.info("Fetching new historical data", domain=domain)
-            
+
             # ) 2. Fetch from APIs (parallel execution
-            rank_task = asyncio.create_task(self.dataforseo_service.get_historical_rank_overview(domain))
-            traffic_task = asyncio.create_task(self.dataforseo_service.get_traffic_analytics_history(domain))
-            bulk_traffic_task = asyncio.create_task(self.dataforseo_service.get_historical_bulk_traffic_estimation(domain))
-            
+            rank_task = asyncio.create_task(self.dataforseo_service.get_historical_rank_overview(domain, user_id))
+            traffic_task = asyncio.create_task(self.dataforseo_service.get_traffic_analytics_history(domain, user_id))
+            bulk_traffic_task = asyncio.create_task(self.dataforseo_service.get_historical_bulk_traffic_estimation(domain, user_id))
+
             results = await asyncio.gather( rank_task, traffic_task, bulk_traffic_task, return_exceptions=True )
             rank_data, traffic_data, bulk_traffic_data = results
             

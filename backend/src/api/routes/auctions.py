@@ -1540,14 +1540,15 @@ async def process_traffic_metrics_background_task(domains: list[str]):
     try:
         from services.external_apis import DataForSEOService
         from services.database import get_database
-        
+
         service = DataForSEOService()
         db = get_database()
-        
+
         logger.info("Starting background processing for traffic data", domains=len(domains))
-        
+
         # ) Call Live API (this blocks this task but not the main thread
-        items = service.fetch_bulk_traffic_estimation_live(domains)
+        # Note: This is a system operation, user_id is None. Cost will be tracked as system usage.
+        items = await service.fetch_bulk_traffic_estimation_live(domains, user_id=None)
         
         if items:
             logger.info("Traffic data retrieved", count=len(items))
