@@ -102,34 +102,46 @@ async def health_check():
             logger.warning("Database health check failed", error=error_msg, error_type=error_type, exc_info=True)
             services_status['database'] = 'unhealthy'
         
-        # ) Check external APIs with timeouts (run in parallel for speed
+        # 2) Check external APIs with timeouts (run in parallel for speed)
         async def check_dataforseo():
             service = DataForSEOService()
-            await service.health_check()
+            return await service.health_check()
         
         async def check_wayback():
             service = WaybackMachineService()
-            await service.health_check()
+            return await service.health_check()
         
         async def check_llm():
             service = LLMService()
-            await service.health_check()
+            return await service.health_check()
         
-        # Run external API checks in parallel with timeouts
+        # Run external API checks in parallel with shorter timeouts
+        # Shorter timeouts (3-5s) ensure we respond before Docker/Coolify timeouts (usually 10s)
         dataforseo_status, wayback_status, llm_status = await asyncio.gather(
-            check_service_with_timeout('DataForSEO', check_dataforseo, timeout=5.0),
-            check_service_with_timeout('Wayback Machine', check_wayback, timeout=10.0),
-            check_service_with_timeout('LLM', check_llm, timeout=5.0)
+            check_service_with_timeout('DataForSEO', check_dataforseo, timeout=3.0),
+            check_service_with_timeout('Wayback Machine', check_wayback, timeout=5.0),
+            check_service_with_timeout('LLM', check_llm, timeout=3.0)
         )
         
         services_status['dataforseo'] = dataforseo_status
         services_status['wayback_machine'] = wayback_status
         services_status['llm'] = llm_status
         
-        # Determine overall status
-        overall_status = 'healthy' if all(status == 'healthy' for status in services_status.values()) else 'degraded'
+        # Determine overall status - only database is CRITICAL for 'unhealthy' vs 'healthy'
+        # External APIs being down makes us 'degraded' but still functional
+        if services_status.get('database') == 'healthy':
+            if all(status == 'healthy' for status in services_status.values()):
+                overall_status = 'healthy'
+            else:
+                overall_status = 'degraded'
+        else:
+            overall_status = 'unhealthy'
         
-        return HealthResponse( status=overall_status, services=services_status )
+        return HealthResponse(
+            status=overall_status,
+            services=services_status,
+            timestamp=datetime.utcnow()
+        )
         
     except Exception as e:
         logger.error("Health check failed", error=str(e))
