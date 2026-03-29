@@ -9,6 +9,7 @@ except ImportError:
 
 from typing import Optional, Dict, Any, List
 import structlog
+import asyncio
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -66,24 +67,30 @@ class DatabaseService:
 
     
     async def init_database(self):
-        """Initialize database tables and indexes"""
-        client = await self._get_client()
+        """Initialize database tables and indexes in the background to avoid blocking startup"""
+        logger.info("Initializing database connection...")
         try:
-            # Get async client
+            # First, ensure we can connect – this is fast
             client = await self._get_client()
-                
-            # Create tables if they don't exist
-            # Note: We don't raise here to allow health checks to still pass if table creation is slow
-            try:
-                await self._create_tables()
-                await self._create_indexes()
-                logger.info("Database initialization completed")
-            except Exception as e:
-                logger.warning("Table/Index creation failed, but client is active", error=str(e))
-                
+            logger.info("Database connection established")
+            
+            # Start table/index creation in the background
+            # This prevents slow RPC calls from blocking FastAPI startup and health checks
+            asyncio.create_task(self._run_initialization_queries())
+            
         except Exception as e:
-            logger.error("Database initialization failed", error=str(e))
-            # Don't raise, allowing the app to start and report 'degraded' in health checks
+            logger.error("Critical: Database initialization failed to connect", error=str(e))
+            # We don't raise here to allow the app to start and report health status
+            
+    async def _run_initialization_queries(self):
+        """Internal method to run SQL initialization in the background"""
+        try:
+            logger.info("Starting background database schema verification...")
+            await self._create_tables()
+            await self._create_indexes()
+            logger.info("Database schema verification and initialization completed")
+        except Exception as e:
+            logger.warning("Background database initialization encountered errors", error=str(e))
     
     async def _create_tables(self):
         """Create database tables and indexes one by one"""
