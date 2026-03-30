@@ -14,6 +14,7 @@ from services.analysis_service import AnalysisService
 from services.database import get_database
 from services.pricing_service import PricingService
 from services.credits_service import CreditsService
+from services.usage_tracking import UsageTrackingService
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -281,13 +282,14 @@ async def get_analysis_progress(domain: str):
 
 
 @router.post("/analyze/{domain}/refresh")
-async def refresh_analysis_data(domain: str, data_types: Optional[list] = None, force: bool = False):
+async def refresh_analysis_data(domain: str, data_types: Optional[list] = None, force: bool = False, current_user = Depends(get_current_user)):
     """
     Manually refresh analysis data
     """
     try:
         analysis_service = AnalysisService()
         db = get_database()
+        usage_tracking = UsageTrackingService()
         
         # Check if analysis exists
         report = await db.get_report(domain)
@@ -330,8 +332,22 @@ async def refresh_analysis_data(domain: str, data_types: Optional[list] = None, 
                 detailed_data = DetailedAnalysisData( domain_name=domain, data_type=data_type, json_data=data )
                 await db.save_detailed_data(detailed_data)
                 refreshed_count += 1
-        
-        return { "success": True, "message": f"Refreshed {refreshed_count} data types successfully", "refreshed_types": [dt.value for dt in valid_data_types], "refresh_id": f"refresh_{domain}_{int(datetime.utcnow().timestamp())}" }
+
+        # Track cost if any API calls were made
+        if total_cost > 0:
+            usage_tracker = UsageTrackingService()
+            await usage_tracker.track_usage(
+                user_id=None,  # System operation
+                resource_type='dataforseo',
+                operation='refresh_analysis_data',
+                provider='dataforseo',
+                model='v3',
+                cost_estimated=total_cost,
+                details={'domain': domain, 'data_types': [dt.value for dt in valid_data_types], 'refreshed_count': refreshed_count}
+            )
+            logger.info("DataForSEO cost tracked for refresh", domain=domain, cost=total_cost)
+
+        return { "success": True, "message": f"Refreshed {refreshed_count} data types successfully", "refreshed_types": [dt.value for dt in valid_data_types], "refresh_id": f"refresh_{domain}_{int(datetime.utcnow().timestamp())}", "cost_tracked": total_cost }
         
     except HTTPException:
         raise

@@ -336,12 +336,24 @@ async def receive_bulk_page_summary_webhook(request: N8NBulkPageSummaryWebhookRe
             async with _webhook_semaphore:
                 await process_data()
 
+        # Calculate cost based on items processed (estimate $0.01 per item)
+        estimated_cost = request.cost if request.cost is not None else (len(result_data) * 0.01)
+
         # Start processing in background and return immediately
         asyncio.create_task(process_with_semaphore())
-        if request.cost is not None or request.credits_count is not None:
-            await get_database().log_api_usage(user_action='BULK REFRESH', api_service='Backlinks (Bulk Summary)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=None)
 
-        return { "success": True, "message": "Bulk page summary data queued for processing", "request_id": request.request_id, "items_queued": len(result_data) }
+        # Log API usage with calculated or provided cost
+        await get_database().log_api_usage(
+            user_action='BULK REFRESH',
+            api_service='Backlinks (Bulk Summary)',
+            request_id=request.request_id,
+            cost=estimated_cost,
+            credits_count=request.credits_count or 0.0,
+            domain=None
+        )
+        logger.info("Bulk page summary cost tracked", request_id=request.request_id, cost=estimated_cost, items=len(result_data))
+
+        return { "success": True, "message": "Bulk page summary data queued for processing", "request_id": request.request_id, "items_queued": len(result_data), "cost_tracked": estimated_cost }
         
     except Exception as e:
         logger.error("Failed to process N8N bulk summary webhook", request_id=request.request_id if hasattr(request, 'request_id') else None, error=str(e))
@@ -437,12 +449,15 @@ async def receive_bulk_rank_webhook(request: N8NBulkRankWebhookRequest):
             result_data = [result_data] if result_data else []
         
         logger.info("Final bulk rank result_data structure", is_list=isinstance(result_data, list), item_count=len(result_data) if isinstance(result_data, list) else 0, first_item_keys=list(result_data[0].keys()) if isinstance(result_data, list) and len(result_data) > 0 and isinstance(result_data[0], dict) else None)
-        
+
+        # Calculate cost based on items processed (DataForSEO charges per item)
+        # Bulk rank API: approximately $0.001 per domain
+        estimated_cost = request.cost if request.cost is not None else (len(result_data) * 0.001)
+
         # Process each result
         db = get_database()
-        if request.cost is not None or request.credits_count is not None:
-            await db.log_api_usage(user_action='BULK REFRESH', api_service='Rank (Bulk)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=None)
-        processed_count = 0
+        await db.log_api_usage(user_action='BULK REFRESH', api_service='Rank (Bulk)', request_id=request.request_id, cost=estimated_cost, credits_count=request.credits_count or 0.0, domain=None)
+        logger.info("Bulk rank cost tracked", request_id=request.request_id, cost=estimated_cost, items=len(result_data))
         failed_count = 0
         failed_domains = []
         
@@ -560,11 +575,14 @@ async def receive_bulk_backlinks_webhook(request: N8NBulkRankWebhookRequest):
         if not isinstance(result_data, list):
             logger.warning("Bulk backlinks data is not a list, attempting to wrap", data_type=type(result_data).__name__)
             result_data = [result_data] if result_data else []
-        
+
+        # Calculate cost based on items processed
+        # Bulk backlinks API: approximately $0.005 per domain (more expensive than rank)
+        estimated_cost = request.cost if request.cost is not None else (len(result_data) * 0.005)
+
         db = get_database()
-        if request.cost is not None or request.credits_count is not None:
-            await db.log_api_usage(user_action='BULK REFRESH', api_service='Backlinks (Bulk)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=None)
-        processed_count = 0
+        await db.log_api_usage(user_action='BULK REFRESH', api_service='Backlinks (Bulk)', request_id=request.request_id, cost=estimated_cost, credits_count=request.credits_count or 0.0, domain=None)
+        logger.info("Bulk backlinks cost tracked", request_id=request.request_id, cost=estimated_cost, items=len(result_data))
         failed_count = 0
         failed_domains = []
         
@@ -668,12 +686,14 @@ async def receive_bulk_spam_score_webhook(request: N8NBulkRankWebhookRequest):
             logger.warning("Bulk spam score data is not a list, attempting to wrap", data_type=type(result_data).__name__)
             result_data = [result_data] if result_data else []
         
+        # Calculate cost based on items processed
+        # Bulk spam score API: approximately $0.001 per domain
+        estimated_cost = request.cost if request.cost is not None else (len(result_data) * 0.001)
+
         db = get_database()
-        if request.cost is not None or request.credits_count is not None:
-            await db.log_api_usage(user_action='BULK REFRESH', api_service='Spam Score (Bulk)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=None)
+        await db.log_api_usage(user_action='BULK REFRESH', api_service='Spam Score (Bulk)', request_id=request.request_id, cost=estimated_cost, credits_count=request.credits_count or 0.0, domain=None)
+        logger.info("Bulk spam score cost tracked", request_id=request.request_id, cost=estimated_cost, items=len(result_data))
         processed_count = 0
-        failed_count = 0
-        failed_domains = []
         
         for result_item in result_data:
             try:
@@ -799,10 +819,14 @@ async def receive_bulk_traffic_batch_webhook(request: N8NBulkRankWebhookRequest)
             return { "success": False, "message": "No items found in response data" }
         
         logger.info("Processing bulk traffic data", request_id=request.request_id, item_count=len(items))
-        
+
+        # Calculate cost based on items processed
+        # Traffic API: approximately $0.001 per domain
+        estimated_cost = request.cost if request.cost is not None else (len(items) * 0.001)
+
         db = get_database()
-        if request.cost is not None or request.credits_count is not None:
-            await db.log_api_usage(user_action='BULK REFRESH', api_service='Traffic (Bulk)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=None)
+        await db.log_api_usage(user_action='BULK REFRESH', api_service='Traffic (Bulk)', request_id=request.request_id, cost=estimated_cost, credits_count=request.credits_count or 0.0, domain=None)
+        logger.info("Bulk traffic cost tracked", request_id=request.request_id, cost=estimated_cost, items=len(items))
         processed_count = 0
         failed_count = 0
         failed_domains = []
