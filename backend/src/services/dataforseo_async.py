@@ -4,7 +4,7 @@ DataForSEO Async Service - Implements standard POST → GET pattern for cost eff
 
 import asyncio
 import httpx
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime, timedelta
 from uuid import UUID
 import structlog
@@ -35,28 +35,29 @@ class DataForSEOAsyncService:
             self._credentials = self.secrets_service.get_dataforseo_credentials()
         return self._credentials
 
-    async def get_detailed_backlinks_async(self, domain: str, limit: int = 10000, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
-        """Get detailed backlinks using async pattern"""
+    async def get_detailed_backlinks_async(self, domain: str, limit: int = 10000, user_id: Optional[UUID] = None) -> Tuple[Optional[Dict[str, Any]], float]:
+        """Get detailed backlinks using async pattern, returns (data, cost)"""
         return await self._execute_async_task( domain=domain, task_type=DetailedDataType.BACKLINKS, post_endpoint="/backlinks/backlinks/task_post", get_endpoint="/backlinks/backlinks/task_get", post_data={ "target": domain, "limit": limit, "mode": "as_is", "filters": ["dofollow", "=", True] }, user_id=user_id )
 
-    async def get_detailed_keywords_async(self, domain: str, limit: int = 10000, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
-        """Get detailed keywords using async pattern"""
+    async def get_detailed_keywords_async(self, domain: str, limit: int = 10000, user_id: Optional[UUID] = None) -> Tuple[Optional[Dict[str, Any]], float]:
+        """Get detailed keywords using async pattern, returns (data, cost)"""
         return await self._execute_async_task( domain=domain, task_type=DetailedDataType.KEYWORDS, post_endpoint="/dataforseo_labs/google/ranked_keywords/task_post", get_endpoint="/dataforseo_labs/google/ranked_keywords/task_get", post_data={ "target": domain, "language_name": "English", "location_name": "United States", "load_rank_absolute": True, "limit": limit }, user_id=user_id )
 
-    async def get_referring_domains_async(self, domain: str, limit: int = 10000, user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
-        """Get referring domains using async pattern"""
+    async def get_referring_domains_async(self, domain: str, limit: int = 10000, user_id: Optional[UUID] = None) -> Tuple[Optional[Dict[str, Any]], float]:
+        """Get referring domains using async pattern, returns (data, cost)"""
         return await self._execute_async_task( domain=domain, task_type=DetailedDataType.REFERRING_DOMAINS, post_endpoint="/backlinks/backlinks/task_post", get_endpoint="/backlinks/backlinks/task_get", post_data={ "target": domain, "limit": limit, "mode": "as_is", "filters": ["dofollow", "=", True], "order_by": ["domain_from_rank,desc"] }, user_id=user_id )
 
-    async def _execute_async_task(self, domain: str, task_type: DetailedDataType, post_endpoint: str, get_endpoint: str, post_data: Dict[str, Any], user_id: Optional[UUID] = None) -> Optional[Dict[str, Any]]:
-        """Execute async task pattern: POST → poll → GET"""
+    async def _execute_async_task(self, domain: str, task_type: DetailedDataType, post_endpoint: str, get_endpoint: str, post_data: Dict[str, Any], user_id: Optional[UUID] = None) -> Tuple[Optional[Dict[str, Any]], float]:
+        """Execute async task pattern: POST → poll → GET, returns (data, cost)"""
         try:
             # Check if data already exists and is fresh
             db = get_database()
             existing_data = await db.get_detailed_data(domain, task_type)
             if existing_data and self._is_data_fresh(existing_data):
                 logger.info("Using fresh cached data", domain=domain, task_type=task_type)
-                return existing_data.json_data
-            
+                # Return cached data with 0 cost (no API call made)
+                return existing_data.json_data, 0.0
+
             # Check for existing pending task
             existing_task = await db.get_pending_task(domain, task_type)
             if existing_task:
@@ -66,17 +67,17 @@ class DataForSEOAsyncService:
             # Step 1: POST task
             task_id = await self._post_task(post_endpoint, post_data)
             if not task_id:
-                return None
+                return None, 0.0
 
             # Save task to database
             await db.save_async_task(AsyncTask( domain_name=domain, task_id=task_id, task_type=task_type, status=AsyncTaskStatus.PROCESSING ))
 
             # Step 2: Poll for completion (pass get_endpoint for correct API call
             return await self._wait_for_task_completion(domain, task_type, task_id, get_endpoint, user_id=user_id)
-            
+
         except Exception as e:
             logger.error("Async task execution failed", domain=domain, task_type=task_type, error=str(e))
-            return None
+            return None, 0.0
     
     async def _post_task(self, endpoint: str, post_data: Dict[str, Any]) -> Optional[str]:
         """POST task to DataForSEO"""

@@ -406,7 +406,7 @@ class AnalysisService:
                     detailed_status_messages.append("Collecting keywords data...")
                     await self._update_progress_data(report, "Collecting keywords data...", detailed_status_messages, progress_tracker)
                     
-                    keywords_data = await self.dataforseo_async_service.get_detailed_keywords_async(domain, 10000, user_id)
+                    keywords_data, keywords_cost = await self.dataforseo_async_service.get_detailed_keywords_async(domain, 10000, user_id)
                     if keywords_data and keywords_data.get("items"):
                         detailed_data_available["keywords"] = True
                         operation_logger.log_data_collection("keywords", record_count=len(keywords_data.get("items", [])), message="Keywords analysis completed")
@@ -471,7 +471,7 @@ class AnalysisService:
                     detailed_status_messages.append("Collecting referring domains data...")
                     await self._update_progress_data(report, "Collecting referring domains data...", detailed_status_messages, progress_tracker)
                     
-                    referring_domains_data = await self.dataforseo_async_service.get_referring_domains_async(domain, 10000, user_id)
+                    referring_domains_data, rd_cost = await self.dataforseo_async_service.get_referring_domains_async(domain, 10000, user_id)
                     if referring_domains_data and referring_domains_data.get("items"):
                         detailed_data_available["referring_domains"] = True
                         operation_logger.log_data_collection("referring_domains", record_count=len(referring_domains_data.get("items", [])), message="Referring domains analysis completed")

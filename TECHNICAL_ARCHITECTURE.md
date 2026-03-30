@@ -1,4 +1,4 @@
-# Domain Analysis System - Technical Architecture
+ # Domain Analysis System - Technical Architecture
 
 This document provides a technical overview of the Domain Analysis system, detailing the scoring engine, data ingestion pipeline, and external service integrations.
 
