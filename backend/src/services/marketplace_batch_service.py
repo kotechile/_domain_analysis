@@ -77,11 +77,15 @@ class MarketplaceBatchService:
 
             if only_displayed and prioritized_domains:
                 # In "only displayed" mode, we only refresh the domains the user is currently viewing
-                # Fetch these specific domains from DB to ensure they exist and match basic criteria
+                # Fetch these specific domains from DB - bypass score/staleness filters since user explicitly selected them
                 prioritized_set = set(d.strip().lower() for d in prioritized_domains if d and d.strip())
-                domains_data = await self.db.get_auctions_by_domains(list(prioritized_set), filters=filters)
+                # Only apply auction_sites filter to ensure we don't fetch from wrong sources
+                basic_filters = {}
+                if filters.get('auction_sites'):
+                    basic_filters['auction_sites'] = filters['auction_sites']
+                domains_data = await self.db.get_auctions_by_domains(list(prioritized_set), filters=basic_filters)
                 domain_names = [d['domain'] for d in domains_data]
-                logger.info(f"[Background] Only displayed mode - using {len(domain_names)} displayed domains", domain_count=len(domain_names))
+                logger.info(f"[Background] Only displayed mode - using {len(domain_names)} displayed domains (bypassed score/staleness filters)", domain_count=len(domain_names))
             else:
                 # Standard mode: find up to 1000 domains matching filters
                 logger.info(f"[Background] Finding domains with filters", filters=filters)
