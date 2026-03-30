@@ -233,9 +233,18 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
               this.snackBar.open(msg, 'Close', { duration: 8000 });
             }
 
-            // Refresh the auction list
+            // Refresh the auction list immediately
             this.fetchAuctions();
             this.creditService.refreshData();
+
+            // Refresh again after delay to catch N8N webhook results
+            // N8N processes asynchronously and webhooks arrive after job "completes"
+            if (status.status === 'completed') {
+              setTimeout(() => {
+                this.fetchAuctions();
+                this.snackBar.open('🔄 Data synced from N8N', 'Close', { duration: 3000 });
+              }, 8000);
+            }
           }
         },
         error: (err) => {
