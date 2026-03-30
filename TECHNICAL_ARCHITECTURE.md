@@ -53,3 +53,4 @@ Triggered on-demand, the `AnalysisService` orchestrates a four-phase workflow:
 
 - **Async Processing**: Uses Python `asyncio` and N8N for non-blocking operations.
 - **Batch Processing**: Auction marketplace data (GoDaddy, Namecheap) is loaded via a staging table and merged in chunks to handle datasets of 100k+ records without database timeouts.
+

@@ -576,6 +576,11 @@ async def receive_bulk_backlinks_webhook(request: N8NBulkRankWebhookRequest):
             logger.warning("Bulk backlinks data is not a list, attempting to wrap", data_type=type(result_data).__name__)
             result_data = [result_data] if result_data else []
 
+        # Initialize counters before cost tracking (required for nonlocal in nested function)
+        processed_count = 0
+        failed_count = 0
+        failed_domains = []
+
         # Calculate cost based on items processed
         # Bulk backlinks API: approximately $0.005 per domain (more expensive than rank)
         estimated_cost = request.cost if request.cost is not None else (len(result_data) * 0.005)
@@ -583,9 +588,7 @@ async def receive_bulk_backlinks_webhook(request: N8NBulkRankWebhookRequest):
         db = get_database()
         await db.log_api_usage(user_action='BULK REFRESH', api_service='Backlinks (Bulk)', request_id=request.request_id, cost=estimated_cost, credits_count=request.credits_count or 0.0, domain=None)
         logger.info("Bulk backlinks cost tracked", request_id=request.request_id, cost=estimated_cost, items=len(result_data))
-        failed_count = 0
-        failed_domains = []
-        
+
         # Process each item in parallel
         async def process_item(result_item):
             nonlocal processed_count, failed_count
@@ -820,6 +823,11 @@ async def receive_bulk_traffic_batch_webhook(request: N8NBulkRankWebhookRequest)
         
         logger.info("Processing bulk traffic data", request_id=request.request_id, item_count=len(items))
 
+        # Initialize counters before cost tracking (required for nonlocal in nested function)
+        processed_count = 0
+        failed_count = 0
+        failed_domains = []
+
         # Calculate cost based on items processed
         # Traffic API: approximately $0.001 per domain
         estimated_cost = request.cost if request.cost is not None else (len(items) * 0.001)
@@ -827,10 +835,7 @@ async def receive_bulk_traffic_batch_webhook(request: N8NBulkRankWebhookRequest)
         db = get_database()
         await db.log_api_usage(user_action='BULK REFRESH', api_service='Traffic (Bulk)', request_id=request.request_id, cost=estimated_cost, credits_count=request.credits_count or 0.0, domain=None)
         logger.info("Bulk traffic cost tracked", request_id=request.request_id, cost=estimated_cost, items=len(items))
-        processed_count = 0
-        failed_count = 0
-        failed_domains = []
-        
+
         # Process each item in parallel
         async def process_item(result_item):
             nonlocal processed_count, failed_count
