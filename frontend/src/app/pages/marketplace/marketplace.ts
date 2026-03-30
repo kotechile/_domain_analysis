@@ -123,6 +123,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   forceRefreshProgress = signal<{ percent: number; message: string } | null>(null);
 
   private progressSubscriptions = new Map<string, Subscription>();
+  private notFoundCount = new Map<string, number>(); // Track 404 errors per job
 
   // Filter Signals
   searchQuery = signal<string>('');
@@ -243,25 +244,53 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
               setTimeout(() => {
                 this.fetchAuctions();
                 this.snackBar.open('🔄 Data synced from N8N', 'Close', { duration: 3000 });
-              }, 8000);
+              }, 15000); // Increased to 15s to allow N8N more time
             }
           }
         },
         error: (err) => {
           console.error('Progress polling error:', err);
+
+          // Track 404 errors - if we get too many, assume job completed and refresh
+          if (err.status === 404) {
+            const currentCount = this.notFoundCount.get(jobId) || 0;
+            this.notFoundCount.set(jobId, currentCount + 1);
+
+            // After 3 consecutive 404s, assume job is done and refresh
+            if (currentCount >= 3) {
+              console.log('Assuming job completed after multiple 404s, refreshing data');
+              this.stopProgressPolling(jobId);
+              this.notFoundCount.delete(jobId);
+              this.fetchAuctions();
+
+              if (type === 'fill_gaps') {
+                this.fillGapsInProgress.set(false);
+                this.fillGapsJobId.set(null);
+                this.fillGapsProgress.set(null);
+                this.snackBar.open('✅ Fill Gaps likely completed - refreshing data', 'Close', { duration: 5000 });
+              } else {
+                this.forceRefreshInProgress.set(false);
+                this.forceRefreshJobId.set(null);
+                this.forceRefreshProgress.set(null);
+                this.snackBar.open('✅ Force Refresh likely completed - refreshing data', 'Close', { duration: 5000 });
+              }
+            }
+            return; // Continue polling
+          }
+
+          // Clear notFoundCount on non-404 error
+          this.notFoundCount.delete(jobId);
           this.stopProgressPolling(jobId);
 
-          // Only clear state if it's a real error (not 404 for job not found yet)
-          if (err.status !== 404) {
-            if (type === 'fill_gaps') {
-              this.fillGapsInProgress.set(false);
-              this.fillGapsJobId.set(null);
-              this.fillGapsProgress.set(null);
-            } else {
-              this.forceRefreshInProgress.set(false);
-              this.forceRefreshJobId.set(null);
-              this.forceRefreshProgress.set(null);
-            }
+          // Clear state for real errors
+          if (type === 'fill_gaps') {
+            this.fillGapsInProgress.set(false);
+            this.fillGapsJobId.set(null);
+            this.fillGapsProgress.set(null);
+          } else {
+            this.forceRefreshInProgress.set(false);
+            this.forceRefreshJobId.set(null);
+            this.forceRefreshProgress.set(null);
           }
         },
         complete: () => {
