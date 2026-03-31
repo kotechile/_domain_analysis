@@ -100,15 +100,18 @@ async def _clear_staging_chunked(db, auction_site: str, job_id: str):
     return total_cleared
 
 
-async def _mark_auctions_for_deletion(db, auction_site: str):
+async def _mark_auctions_for_deletion(db, auction_site: str, offering_type: str = None):
     """
     Mark all auctions for a site with to_delete=true at start of import. Records that are still present in new files will be unflagged during merge. """
-    logger.info("Marking auctions for deletion", auction_site=auction_site)
+    logger.info("Marking auctions for deletion", auction_site=auction_site, offering_type=offering_type)
     try:
         # Update all records for this auction_site to set to_delete = true
         # We do this in chunks to avoid timeouts
         while True:
-            result = await (await db._get_client()).table('auctions').select('domain').eq('auction_site', auction_site).eq('to_delete', False).limit(5000).execute()
+            query = (await db._get_client()).table('auctions').select('domain').eq('auction_site', auction_site).eq('to_delete', False)
+            if offering_type:
+                query = query.eq('offer_type', offering_type)
+            result = await query.limit(5000).execute()
 
             if not result.data:
                 break
@@ -118,27 +121,33 @@ async def _mark_auctions_for_deletion(db, auction_site: str):
             # Update in smaller batches
             for i in range(0, len(domains), 100):
                 batch = domains[i:i+100]
-                await (await db._get_client()).table('auctions').update({'to_delete': True}).eq('auction_site', auction_site).in_('domain', batch).execute()
+                update_query = (await db._get_client()).table('auctions').update({'to_delete': True}).eq('auction_site', auction_site)
+                if offering_type:
+                    update_query = update_query.eq('offer_type', offering_type)
+                await update_query.in_('domain', batch).execute()
 
             await asyncio.sleep(0.01)
 
-        logger.info("Marked auctions for deletion", auction_site=auction_site)
+        logger.info("Marked auctions for deletion", auction_site=auction_site, offering_type=offering_type)
     except Exception as e:
         logger.error("Failed to mark auctions for deletion", auction_site=auction_site, error=str(e))
         raise
 
 
-async def _delete_flagged_auctions(db, auction_site: str):
+async def _delete_flagged_auctions(db, auction_site: str, offering_type: str = None):
     """
     Delete auctions that still have to_delete=true after merge. These are records that were not present in the new file upload. """
-    logger.info("Deleting flagged auctions", auction_site=auction_site)
+    logger.info("Deleting flagged auctions", auction_site=auction_site, offering_type=offering_type)
     total_deleted = 0
 
     try:
         # Delete in chunks to avoid timeouts
         while True:
             # Get batch of records to delete
-            result = await (await db._get_client()).table('auctions').select('domain').eq('auction_site', auction_site).eq('to_delete', True).limit(1000).execute()
+            query = (await db._get_client()).table('auctions').select('domain').eq('auction_site', auction_site).eq('to_delete', True)
+            if offering_type:
+                query = query.eq('offer_type', offering_type)
+            result = await query.limit(1000).execute()
 
             if not result.data:
                 break
@@ -148,30 +157,34 @@ async def _delete_flagged_auctions(db, auction_site: str):
             # Delete in smaller batches
             for i in range(0, len(domains), 100):
                 batch = domains[i:i+100]
-                await (await db._get_client()).table('auctions').delete().eq('auction_site', auction_site).eq('to_delete', True).in_('domain', batch).execute()
+                del_query = (await db._get_client()).table('auctions').delete().eq('auction_site', auction_site).eq('to_delete', True)
+                if offering_type:
+                    del_query = del_query.eq('offer_type', offering_type)
+                await del_query.in_('domain', batch).execute()
                 total_deleted += len(batch)
 
             await asyncio.sleep(0.01)
 
-        logger.info("Deleted flagged auctions", auction_site=auction_site, total_deleted=total_deleted)
+        logger.info("Deleted flagged auctions", auction_site=auction_site, offering_type=offering_type, total_deleted=total_deleted)
         return total_deleted
     except Exception as e:
         logger.error("Failed to delete flagged auctions", auction_site=auction_site, error=str(e))
         raise
 
 
-async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
+async def _perform_python_chunked_merge(db, auction_site: str, job_id: str, offering_type: str = None):
     """
     Perform merging from staging to main table in chunks from Python
     to avoid database statement timeouts. """
-    logger.info("Starting chunked merge from Python", job_id=job_id, site=auction_site)
+    logger.info("Starting chunked merge from Python", job_id=job_id, site=auction_site, offering_type=offering_type)
 
     total_merged = 0
 
     while True:
         # 1. Fetch a batch of records from staging
         # We also need to fetch columns that we want to keep if they are in the staging record, # but the staging record usually only has basic auction info.
-        result = await (await db._get_client()).table('auctions_staging').select('*').eq('job_id', job_id).limit(2000).execute()
+        # Fetch a smaller batch to prevent large HTTP upsert bodies triggering SSL drops
+        result = await (await db._get_client()).table('auctions_staging').select('*').eq('job_id', job_id).limit(500).execute()
         records = result.data
 
         if not records:
@@ -200,9 +213,19 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
 
         main_records = list(unique_records.values())
 
-        # 3. Upsert to main table
+        # 3. Upsert to main table with retries for network stability
         try:
-            await (await db._get_client()).table('auctions').upsert( main_records, on_conflict='domain,auction_site,expiration_date' ).execute()
+            client = await db._get_client()
+            retries = 3
+            for attempt in range(retries):
+                try:
+                    await client.table('auctions').upsert( main_records, on_conflict='domain,auction_site,expiration_date' ).execute()
+                    break
+                except Exception as e:
+                    if attempt == retries - 1:
+                        raise
+                    logger.warning("SSL or network error during chunked upsert, retrying", attempt=attempt, error=str(e))
+                    await asyncio.sleep(2 ** attempt)
 
             # 4. Delete merged records from staging in small sub-batches
             # ) Use smaller batches for the IN filter to avoid "URL component 'query' too long" (max ~2000 chars
@@ -227,8 +250,8 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str):
     # Post-merge: Delete auctions that still have to_delete=true
     # These are records that were not present in the new file upload
     try:
-        deleted_count = await _delete_flagged_auctions(db, auction_site)
-        logger.info("Post-merge cleanup completed", job_id=job_id, site=auction_site, deleted_count=deleted_count)
+        deleted_count = await _delete_flagged_auctions(db, auction_site, offering_type)
+        logger.info("Post-merge cleanup completed", job_id=job_id, site=auction_site, offering_type=offering_type, deleted_count=deleted_count)
     except Exception as e:
         logger.warning("Failed to delete flagged auctions after merge", job_id=job_id, site=auction_site, error=str(e))
 
@@ -277,7 +300,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
         # 2.5 Mark all existing auctions for this site with to_delete=true
         # Records still present in new files will be unflagged during merge
         try:
-            await _mark_auctions_for_deletion(db, auction_site)
+            await _mark_auctions_for_deletion(db, auction_site, offering_type)
         except Exception as e:
             logger.warning("Failed to mark auctions for deletion, continuing", job_id=job_id, error=str(e))
 
@@ -312,7 +335,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
         
         scoring_service = DomainScoringService()
         
-        BATCH_SIZE = 2000
+        BATCH_SIZE = 500
         batch_list = []
         processed_count = 0
         scored_count = 0
@@ -522,7 +545,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
         try:
              # Use the Python-based chunked merge helper instead of RPC
              # This aligns with the JSON upload logic which is working correctly
-             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id)
+             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id, offering_type)
              
              merge_stats = {'inserted': merged_count, 'updated': 0}
              logger.info("Merge complete", stats=merge_stats)
@@ -641,62 +664,43 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
 
         # ) Loading and Merging (simplified logic
         if db.client:
-             # General "Mark & Sweep" cleanup logic - Mark Phase - DISABLED
              effective_offering_type = offering_type or 'auction'
-             logger.info("Marking records for deletion (cleanup phase 1) - DISABLED", job_id=job_id, auction_site=auction_site, offering_type=effective_offering_type)
              
-             # try:
-             #     # Build the base query
-             # ) mark_query = (await db._get_client()).table('auctions').update({'deletion_flag': True}).eq('auction_site', auction_site
-             #     
-             #     # Apply scope rules
-             #     if auction_site.lower() != 'namesilo':
-             # ) mark_query = mark_query.eq('offer_type', effective_offering_type
-             #     
-             # ) await      mark_result = mark_query.execute(
-             #     marked_count = len(mark_result.data) if mark_result.data else 0
-             #     
-             # ) logger.info("Marked records for deletion", #               job_id=job_id, #               count=marked_count, #               scope_site=auction_site, #               scope_type=effective_offering_type if auction_site.lower() != 'namesilo' else 'ALL'
-             # except Exception as e:
-             # ) logger.warning("Failed to mark records for deletion", job_id=job_id, error=str(e)
+             # General "Mark & Sweep" cleanup logic - Mark Phase
+             try:
+                 await _mark_auctions_for_deletion(db, auction_site, effective_offering_type)
+             except Exception as e:
+                 logger.warning("Failed to mark records for deletion, continuing", job_id=job_id, error=str(e))
 
              # Clear
              # Use chunked delete helper
              await _clear_staging_chunked(db, auction_site, job_id)
              
-             # Insert in batches
-             batch_size = 5000
+             # Insert in batches with retries for large networks payload stability
+             batch_size = 500
              for i in range(0, len(auction_dicts), batch_size):
                  batch = auction_dicts[i:i + batch_size]
                  staging_batch = [{k: v for k, v in r.items() if k != 'ranking'} for r in batch]
-                 await (await db._get_client()).table('auctions_staging').insert(staging_batch).execute()
+                 
+                 client = await db._get_client()
+                 retries = 3
+                 for attempt in range(retries):
+                     try:
+                         await client.table('auctions_staging').insert(staging_batch).execute()
+                         break
+                     except Exception as e:
+                         if attempt == retries - 1:
+                             raise
+                         logger.warning("SSL or network error during batch insert, retrying", attempt=attempt, error=str(e))
+                         await asyncio.sleep(2 ** attempt)
+                         
                  # Small sleep to yield control
                  await asyncio.sleep(0.01)
              
-             # Merge using robust Python-based chunked merge
-             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id)
+             # Merge using robust Python-based chunked merge (Sweep happens here)
+             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id, effective_offering_type)
              inserted_count = merged_count
-
-             # Cleanup (Sweep phase) - DISABLED
-             deleted_count = 0
-             # ) logger.info("Cleaning up stale records (cleanup phase 2)", job_id=job_id
-             # try:
-             #     # Build the base query
-             # ) delete_query = (await db._get_client()).table('auctions').delete().eq('auction_site', auction_site).eq('deletion_flag', True
-             #     
-             #     # Apply same scope rules as Mark phase
-             #     # Use effective_offering_type
-             #     effective_offering_type = offering_type or 'auction'
-             #     if auction_site.lower() != 'namesilo':
-             # ) delete_query = delete_query.eq('offer_type', effective_offering_type
-             #     
-             # ) await      delete_result = delete_query.execute(
-             #     deleted_count = len(delete_result.data) if delete_result.data else 0
-             #     
-             # ) logger.info("Cleanup complete: deleted stale records", #               job_id=job_id, #               deleted=deleted_count, #               site=auction_site
-             #               
-             # except Exception as e:
-             # ) logger.error("Failed to cleanup stale records", job_id=job_id, error=str(e)
+             deleted_count = 0  # logged inside _perform_python_chunked_merge
 
              result = { 'inserted': inserted_count, 'updated': 0, 'skipped': 0, 'total': total_records, 'deleted': deleted_count }
 
