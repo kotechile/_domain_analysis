@@ -1,6 +1,5 @@
-# Use Python 3.10 slim image
-# Use Python 3.10 slim bookworm for stability
-FROM python:3.10-slim-bookworm
+# Stage 1: Build stage
+FROM python:3.10-slim-bookworm AS builder
 
 # Set working directory
 WORKDIR /app
@@ -8,10 +7,9 @@ WORKDIR /app
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
@@ -21,26 +19,45 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     zlib1g-dev \
     libjpeg-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install and upgrade pip
+RUN pip install --no-cache-dir --upgrade pip
+
+# Copy requirements and install dependencies into a prefix
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# Stage 2: Final stage
+FROM python:3.10-slim-bookworm
+
+# Set working directory
+WORKDIR /app
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Install runtime dependencies for weasyprint and other libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libpango-1.0-0 \
     libpangocairo-1.0-0 \
     libpangoft2-1.0-0 \
     libgdk-pixbuf2.0-0 \
     shared-mime-info \
+    libxml2 \
+    libxslt1.1 \
     curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy built packages from builder stage
+COPY --from=builder /install /usr/local
 
-
-# Copy requirements first for better caching
-COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
-
-# Download spaCy model in separate layer
+# Download spaCy model
 RUN python -m spacy download en_core_web_sm
 
 # Copy application code
@@ -55,9 +72,8 @@ USER appuser
 EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=20s --start-period=90s --retries=5 \
+HEALTHCHECK --interval=30s --timeout=20s --start-period=60s --retries=5 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
-# Run the application - listen on all interfaces
-# Use 4 workers so heavy background tasks (CSV ingestion) don't starve the API
+# Run the application
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--timeout-keep-alive", "1800", "--timeout-graceful-shutdown", "30"]

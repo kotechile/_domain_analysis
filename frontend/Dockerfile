@@ -25,8 +25,8 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Build the Angular application
-RUN npm run build
+# Build the Angular application with increased memory limit
+RUN NG_CLI_ANALYTICS=false node --max-old-space-size=2048 ./node_modules/@angular/cli/bin/ng build --configuration=production
 RUN ls -la /app/dist/angular-version/browser || echo "Build directory not found"
 
 # Production stage with nginx
