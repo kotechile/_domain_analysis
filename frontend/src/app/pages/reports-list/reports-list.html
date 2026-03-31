@@ -1,0 +1,140 @@
+<div class="p-10 space-y-8 animate-in fade-in slide-in-from-bottom-5 duration-1000">
+    <!-- Header Section -->
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div class="space-y-4">
+            <div class="flex items-center space-x-3">
+                <div class="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+                    <i-lucide [name]="History" class="w-6 h-6 text-indigo-500"></i-lucide>
+                </div>
+                <h1 class="text-3xl font-black tracking-tight" style="color: var(--text-color)">
+                    Analysis History
+                </h1>
+            </div>
+            <p class="text-sm font-bold opacity-40 uppercase tracking-widest" style="color: var(--text-color)">
+                YOUR PREVIOUS DEEP AUDITS & SCAN RESULTS
+            </p>
+        </div>
+        
+        <div class="flex items-center gap-3">
+            <button (click)="fetchReports()" class="btn-primary flex items-center space-x-2">
+                <i-lucide [name]="Trash2" class="w-4 h-4"></i-lucide>
+                <span>Refresh List</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Reports Table Card -->
+    <div class="table-container shadow-2xl relative">
+        <table class="w-full">
+            <thead>
+                <tr>
+                    <th>Domain</th>
+                    <th>Date & Time</th>
+                    <th>Audit Type</th>
+                    <th>Metrics</th>
+                    <th>Status</th>
+                    <th class="text-right pr-10">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (loading()) {
+                    @for (i of [1,2,3,4,5]; track $index) {
+                        <tr class="animate-pulse">
+                            @for (j of [1,2,3,4,5,6]; track $index) {
+                                <td class="px-6 py-5 border-t border-opacity-5">
+                                    <div class="h-4 bg-white/5 rounded-md w-24"></div>
+                                </td>
+                            }
+                        </tr>
+                    }
+                } @else if (reports().length > 0) {
+                    @for (report of reports(); track report.domain_name) {
+                        <tr [routerLink]="['/reports', report.domain_name]" class="cursor-pointer group">
+                            <!-- Domain Name -->
+                            <td>
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/5 group-hover:border-indigo-500/30 transition-all">
+                                        <span class="text-[10px] font-black uppercase text-indigo-500">{{ report.domain_name.charAt(0) }}</span>
+                                    </div>
+                                    <span class="text-sm font-bold tracking-tight">{{ report.domain_name }}</span>
+                                </div>
+                            </td>
+
+                            <!-- Date Created -->
+                            <td class="opacity-40 font-bold tabular-nums">
+                                {{ report.analysis_timestamp | date: 'short' }}
+                            </td>
+
+                            <!-- Analysis Mode (Proxy) -->
+                             <td>
+                                <div class="flex items-center space-x-2">
+                                    <i-lucide [name]="getModeIcon(report)" class="w-3.5 h-3.5 opacity-40"></i-lucide>
+                                    <span class="text-[10px] font-black uppercase tracking-widest opacity-40">
+                                        {{ report.llm_analysis ? 'Deep AI' : 'Quick' }}
+                                    </span>
+                                </div>
+                             </td>
+
+                            <!-- Domain Rating & Traffic -->
+                            <td>
+                                <div class="flex flex-col space-y-1">
+                                    <div class="flex items-center justify-between text-[10px] opacity-40 font-bold">
+                                        <span>DR: {{ report.data_for_seo_metrics?.domain_rating || '-' }}</span>
+                                        <span>EST: {{ report.data_for_seo_metrics?.organic_traffic || '-' }}</span>
+                                    </div>
+                                    <div class="h-1 bg-white/5 rounded-full w-24 overflow-hidden">
+                                        <div class="h-full bg-indigo-500/20" [style.width.%]="(report.data_for_seo_metrics?.domain_rating || 0) * 1"></div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- Status Badge -->
+                            <td>
+                                <div class="status-badge" [ngClass]="getStatusClass(report.status)">
+                                    <i-lucide [name]="report.status === 'completed' ? CheckCircle : (report.status === 'in_progress' ? Clock : BrainCircuit)" class="w-3 h-3"></i-lucide>
+                                    <span>{{ report.status | titlecase }}</span>
+                                </div>
+                            </td>
+
+                            <!-- Button Action -->
+                            <td class="text-right">
+                                <div class="flex items-center justify-end space-x-3 pr-4">
+                                    <button class="p-2 rounded-xl bg-white/5 hover:bg-white/10 group-hover:bg-indigo-500/20 transition-all group-hover:scale-110">
+                                        <i-lucide [name]="ArrowRight" class="w-4 h-4 text-indigo-500"></i-lucide>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                } @else {
+                    <tr>
+                        <td colspan="6" class="py-20 text-center space-y-6 opacity-30">
+                            <i-lucide [name]="Search" class="w-12 h-12 mx-auto mb-4 stroke-1"></i-lucide>
+                            <p class="font-black uppercase tracking-[0.3em] text-xs">No reports found.</p>
+                            <a routerLink="/" class="text-indigo-500 uppercase text-[10px] border-b border-indigo-500 font-black">Scan a domain now</a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex items-center justify-between px-2">
+        <p class="text-[10px] font-black uppercase opacity-20 tracking-widest" style="color: var(--text-color)">
+            Showing recent analysis scans (Max {{ limit() }} per page)
+        </p>
+        <div class="flex items-center space-x-3">
+            <button (click)="prevPage()" [disabled]="offset() === 0" 
+                    class="h-10 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest border border-opacity-10 opacity-60 hover:opacity-100 disabled:opacity-20 transition-all"
+                    style="border-color: var(--border-color); color: var(--text-color)">
+                Prev
+            </button>
+            <button (click)="nextPage()" [disabled]="reports().length < limit()"
+                    class="h-10 px-6 rounded-xl text-[10px] font-black uppercase tracking-widest border border-opacity-10 opacity-60 hover:opacity-100 disabled:opacity-20 transition-all"
+                    style="border-color: var(--border-color); color: var(--text-color)">
+                Next
+            </button>
+        </div>
+    </div>
+</div>

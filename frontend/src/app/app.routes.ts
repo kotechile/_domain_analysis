@@ -7,12 +7,14 @@ import { ThemeShowcaseComponent } from './components/theme-showcase/theme-showca
 import { LoginComponent } from './pages/login/login';
 import { AuthCallbackComponent } from './pages/auth-callback/auth-callback';
 import { AuthGuard } from './guards/auth.guard';
+import { ReportsListComponent } from './pages/reports-list/reports-list';
 
 export const routes: Routes = [
     { path: 'login', component: LoginComponent },
     { path: 'auth/callback', component: AuthCallbackComponent },
     { path: '', component: DomainAnalysisComponent, canActivate: [AuthGuard] },
     { path: 'marketplace', component: MarketplaceComponent, canActivate: [AuthGuard] },
+    { path: 'reports', component: ReportsListComponent, canActivate: [AuthGuard] },
     { path: 'reports/:domain', component: ReportDetailComponent, canActivate: [AuthGuard] },
     { path: 'billing', component: BillingComponent, canActivate: [AuthGuard] },
     { path: 'themes', component: ThemeShowcaseComponent, canActivate: [AuthGuard] }

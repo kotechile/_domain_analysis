@@ -58,6 +58,7 @@ export class SidebarComponent {
 
   navItems = [
     { path: '/', label: 'Deep Analysis', icon: BrainCircuit },
+    { path: '/reports', label: 'Recent Scans', icon: History },
     { path: '/marketplace', label: 'Marketplace', icon: Table },
     { path: '/billing', label: 'Billing & Credits', icon: CreditCard },
     { path: '/themes', label: 'Settings & UI', icon: Settings }

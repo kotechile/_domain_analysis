@@ -99,9 +99,9 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
                 this.report.set(res.report);
                 this.error.set(null);
 
-                // Stop polling if completed or failed
-                if (res.report.status === 'completed' || res.report.status === 'failed') {
-                    this.stopPolling();
+                // Start polling if it's in progress
+                if (res.report.status === 'pending' || res.report.status === 'in_progress') {
+                    this.startPolling(d);
                 }
             } else {
                 this.error.set(res.message || 'Failed to fetch report');
@@ -110,6 +110,35 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
             console.error('Error fetching report:', err);
             this.error.set('Connection error. Please try again.');
         } finally {
+            this.loading.set(false);
+        }
+    }
+
+    async reAnalyze() {
+        const d = this.domain();
+        if (!d) return;
+
+        this.loading.set(true);
+        this.error.set(null);
+
+        try {
+            // Trigger fresh analysis
+            const res = await firstValueFrom(this.api.analyzeDomain(d, 'dual'));
+            if (res.success) {
+                // If successful, start polling for the new analysis
+                this.startPolling(d);
+            } else {
+                this.error.set(res.message || 'Failed to start re-analysis');
+                this.loading.set(false);
+            }
+        } catch (err: any) {
+            console.error('Error starting re-analysis:', err);
+            // Handle 402 Insufficient credits specifically
+            if (err.status === 402) {
+                this.error.set('Insufficient credits to re-analyze this domain.');
+            } else {
+                this.error.set('Failed to start re-analysis. Please check your credit balance.');
+            }
             this.loading.set(false);
         }
     }

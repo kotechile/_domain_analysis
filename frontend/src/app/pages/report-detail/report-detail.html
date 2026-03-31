@@ -38,7 +38,7 @@
         </div>
 
         <div class="flex items-center gap-3">
-            <button (click)="fetchReport(true)"
+            <button (click)="reAnalyze()"
                 class="h-12 px-6 rounded-2xl text-sm font-black uppercase tracking-widest flex items-center space-x-2 border transition-all active:scale-95 opacity-80 hover:opacity-100"
                 style="border-color: var(--border-color); color: var(--text-color); background: var(--card-bg)">
                 <i-lucide [name]="RefreshCw" class="w-4 h-4"></i-lucide>
@@ -48,7 +48,7 @@
                 class="h-12 px-8 rounded-2xl text-sm font-black uppercase tracking-widest flex items-center space-x-2 text-white shadow-xl hover:shadow-accent-color/20 active:scale-95 transition-all"
                 style="background: var(--accent-color)">
                 <i-lucide [name]="Download" class="w-4 h-4"></i-lucide>
-                <span>Full PDF</span>
+                <span>Detailed Analysis</span>
             </button>
         </div>
     </div>
@@ -134,19 +134,54 @@
         <div class="p-8 flex-grow">
             <!-- Loading Overlay for in-progress analysis -->
             @if (report()?.status === 'in_progress' || report()?.status === 'pending') {
-            <div class="flex flex-col items-center justify-center py-20 space-y-6 animate-pulse">
+            <div class="flex flex-col items-center justify-center py-20 space-y-8 animate-pulse text-center">
                 <div class="relative">
-                    <i-lucide [name]="Sparkles" class="w-16 h-16 opacity-10 animate-spin-slow"
+                    <i-lucide [name]="Sparkles" class="w-20 h-20 opacity-10 animate-spin-slow"
                         style="color: var(--accent-color)"></i-lucide>
                     <i-lucide [name]="Search"
-                        class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 opacity-40"></i-lucide>
+                        class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 opacity-40"></i-lucide>
                 </div>
-                <div class="text-center space-y-2">
-                    <h3 class="text-xl font-black uppercase tracking-widest" style="color: var(--text-color)">Analyzing
-                        Core DNA</h3>
-                    <p class="text-sm opacity-40 max-w-xs mx-auto" style="color: var(--text-color)">
-                        We are processing Wayback snapshots, Backlink health, and LLM market projections.
-                    </p>
+                
+                <div class="space-y-4 max-w-md">
+                    <div class="space-y-1">
+                        <h3 class="text-2xl font-black uppercase tracking-tighter" style="color: var(--text-color)">
+                            {{ report()?.progress_data?.current_operation || 'Analyzing Core DNA' }}
+                        </h3>
+                        <p class="text-xs font-bold opacity-30 uppercase tracking-[0.2em]">
+                            Phase: {{ report()?.progress_data?.phase || 'Essential' }} • 
+                            {{ report()?.progress_data?.progress_percentage || 0 }}% Complete
+                        </p>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="w-full h-2 rounded-full bg-slate-200 dark:bg-white/5 overflow-hidden">
+                        <div class="h-full bg-accent-color transition-all duration-500 rounded-full"
+                             [style.width.%]="report()?.progress_data?.progress_percentage || 0"
+                             style="background: var(--accent-color)"></div>
+                    </div>
+
+                    <div class="p-4 rounded-2xl border border-opacity-5 space-y-2 text-left" 
+                         style="border-color: var(--border-color); background: rgba(var(--accent-color-rgb), 0.02)">
+                        <span class="text-[10px] font-black uppercase opacity-30 tracking-widest block">Completed Tasks</span>
+                        <div class="space-y-1.5 min-h-[60px]">
+                            @if (report()?.progress_data?.completed_operations?.length) {
+                                @for (op of report()?.progress_data?.completed_operations; track $index) {
+                                    <div class="flex items-center space-x-2 text-[11px] font-bold opacity-60 text-green-500">
+                                        <i-lucide [name]="CheckCircle" class="w-3 h-3"></i-lucide>
+                                        <span>{{ op }}</span>
+                                    </div>
+                                }
+                            } @else {
+                                <p class="text-[11px] opacity-30 font-medium italic">Initializing analysis pipeline...</p>
+                            }
+                        </div>
+                    </div>
+
+                    @if (report()?.progress_data?.estimated_time_remaining) {
+                        <p class="text-[11px] font-bold opacity-40 uppercase">
+                           Estimated completion in ~{{ report()?.progress_data?.estimated_time_remaining }}s
+                        </p>
+                    }
                 </div>
             </div>
             } @else if (report()?.status === 'completed') {

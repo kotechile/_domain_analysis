@@ -73,6 +73,8 @@ export interface DomainAnalysisReport {
     processing_time_seconds?: number;
     error_message?: string;
     backlinks_page_summary?: BulkPageSummaryResult;
+    analysis_phase?: string;
+    progress_data?: ProgressInfo;
 }
 
 export interface DataForSEOMetrics {
