@@ -25,10 +25,10 @@ export interface ProgressInfo {
     progress_percentage: number;
     current_operation: string;
     status_message: string;
-    completed_operations: number;
-    total_operations: number;
+    completed_operations: string[];
+    total_operations?: number;
     estimated_time_remaining: number;
-    detailed_status: string[];
+    error_message?: string;
     last_updated: string;
 }
 
