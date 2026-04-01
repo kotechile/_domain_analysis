@@ -1327,11 +1327,11 @@ class DatabaseService:
                 sort_by = 'expiration_date'
             
             if order == 'desc':
-                # Hack for postgrest-py < 2.0 ignoring nullsfirst=False
-                query = query.order(f"{sort_by}.nullslast", desc=True).order('domain', desc=True)
+                # Since postgrest-py currently drops the nullslast modifier, filter out NULLs entirely for clean sorting
+                query = query.not_.is_(sort_by, 'null').order(sort_by, desc=True).order('domain', desc=True)
             else:
                 # Use stable sort by adding domain as tie-breaker
-                query = query.order(f"{sort_by}.nullslast", desc=False).order('domain', desc=False)
+                query = query.not_.is_(sort_by, 'null').order(sort_by, desc=False).order('domain', desc=False)
             
             # Get total count - execute query with count header
             client = await self._get_client()
