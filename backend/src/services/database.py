@@ -1326,12 +1326,14 @@ class DatabaseService:
             if sort_by not in valid_sort_fields:
                 sort_by = 'expiration_date'
             
+            if sort_by == 'score':
+                # Filter out NULL scores only when sorting by score to keep the list clean
+                query = query.not_.is_('score', 'null')
+
             if order == 'desc':
-                # Since postgrest-py currently drops the nullslast modifier, filter out NULLs entirely for clean sorting
-                query = query.not_.is_(sort_by, 'null').order(sort_by, desc=True).order('domain', desc=True)
+                query = query.order(sort_by, desc=True).order('domain', desc=True)
             else:
-                # Use stable sort by adding domain as tie-breaker
-                query = query.not_.is_(sort_by, 'null').order(sort_by, desc=False).order('domain', desc=False)
+                query = query.order(sort_by, desc=False).order('domain', desc=False)
             
             # Get total count - execute query with count header
             client = await self._get_client()
