@@ -19,15 +19,15 @@ services:
     expose:
       - "8000"
     environment:
-      - REDIS_URL=redis://redis:6379
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_KEY}
-      - DATAFORSEO_LOGIN=${DATAFORSEO_LOGIN}
-      - DATAFORSEO_PASSWORD=${DATAFORSEO_PASSWORD}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - SECRET_KEY=${SECRET_KEY}
-      - ALLOWED_ORIGINS='["http://localhost:3000", "http://frontend:3000", "https://${COOLIFY_FQDN}", "https://n8n.giniloh.com", "https://scout.buildomain.com"]'
-      - ALLOWED_HOSTS='["*"]'
+      REDIS_URL: redis://redis:6379
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_KEY: ${SUPABASE_KEY}
+      DATAFORSEO_LOGIN: ${DATAFORSEO_LOGIN}
+      DATAFORSEO_PASSWORD: ${DATAFORSEO_PASSWORD}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      SECRET_KEY: ${SECRET_KEY}
+      ALLOWED_ORIGINS: '["http://localhost:3000", "http://frontend:3000", "https://${COOLIFY_FQDN}", "https://n8n.giniloh.com", "https://scout.buildomain.com"]'
+      ALLOWED_HOSTS: '["*"]'
     depends_on:
       - redis
     restart: unless-stopped
@@ -63,8 +63,8 @@ services:
       - "traefik.http.middlewares.scout-redirect.redirectscheme.permanent=true"
       - "traefik.docker.network=coolify"
     environment:
-      - REACT_APP_API_URL=/api/v1
-      - API_BACKEND_URL=http://backend:8000
+      REACT_APP_API_URL: /api/v1
+      API_BACKEND_URL: http://backend:8000
     depends_on:
       - backend
     restart: unless-stopped

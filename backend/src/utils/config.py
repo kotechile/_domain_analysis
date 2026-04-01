@@ -3,8 +3,10 @@ Configuration management for the Domain Analysis System
 """
 
 from pydantic_settings import BaseSettings
-from typing import List, Optional
+from pydantic import field_validator
+from typing import List, Optional, Any
 import os
+import json
 
 
 class Settings(BaseSettings):
@@ -18,9 +20,38 @@ class Settings(BaseSettings):
     # Server settings
     HOST: str = "0.0.0.0"
     PORT: int = 8000
-    ALLOWED_ORIGINS: List[str] = [ "http://localhost:3000", "http://localhost:3001", "http://localhost:3010", "https://scout.buildomain.com", "https://n8n.giniloh.com"
-    ]
-    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1", "*.ngrok-free.dev", "*.ngrok.io", "*.ngrok.app"]
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:3001,http://localhost:3010,https://scout.buildomain.com,https://n8n.giniloh.com"
+    ALLOWED_HOSTS: str = "localhost,127.0.0.1,*.ngrok-free.dev,*.ngrok.io,*.ngrok.app"
+    
+    @property
+    def parsed_allowed_origins(self) -> List[str]:
+        return self._parse_list(self.ALLOWED_ORIGINS)
+        
+    @property
+    def parsed_allowed_hosts(self) -> List[str]:
+        return self._parse_list(self.ALLOWED_HOSTS)
+
+    def _parse_list(self, v: Any) -> List[str]:
+        """Convert comma-separated strings or JSON lists to a real list"""
+        if isinstance(v, str):
+            # Strip ALL possible outer quotes from shell/docker (e.g. '''["a", "b"]''')
+            v = v.strip()
+            while len(v) > 1 and ((v.startswith("'") and v.endswith("'")) or (v.startswith('"') and v.endswith('"'))):
+                v = v[1:-1].strip()
+                
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    # Fallback: strip brackets and try comma-splitting
+                    v = v[1:-1]
+            
+            if not v:
+                return []
+                
+            # Handle comma-separated strings
+            return [i.strip() for i in v.split(",") if i.strip()]
+        return v if isinstance(v, list) else []
     
     # Database settings (Supabase) - ESSENTIAL SECRETS
     SUPABASE_URL: str
@@ -105,6 +136,9 @@ def get_settings() -> Settings:
     global _settings
     if _settings is None:
         _settings = Settings()
+        # Add debug logging for startup issues - will appear in container logs
+        print(f">>> BACKEND BOOTING: Settings initialized successfully.")
+        print(f">>> parsed_allowed_origins={_settings.parsed_allowed_origins}")
     return _settings
 
 
