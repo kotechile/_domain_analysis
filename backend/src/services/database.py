@@ -1327,11 +1327,11 @@ class DatabaseService:
                 sort_by = 'expiration_date'
             
             if order == 'desc':
-                # Use stable sort by adding domain as tie-breaker
-                query = query.order(sort_by, desc=True, nullsfirst=False).order('domain', desc=True)
+                # Hack for postgrest-py < 2.0 ignoring nullsfirst=False
+                query = query.order(f"{sort_by}.nullslast", desc=True).order('domain', desc=True)
             else:
                 # Use stable sort by adding domain as tie-breaker
-                query = query.order(sort_by, desc=False).order('domain', desc=False)
+                query = query.order(f"{sort_by}.nullslast", desc=False).order('domain', desc=False)
             
             # Get total count - execute query with count header
             client = await self._get_client()
