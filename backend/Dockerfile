@@ -76,4 +76,4 @@ HEALTHCHECK --interval=30s --timeout=20s --start-period=60s --retries=5 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
 # Run the application
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--timeout-keep-alive", "1800", "--timeout-graceful-shutdown", "30"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--timeout-keep-alive", "1800", "--timeout-graceful-shutdown", "30"]

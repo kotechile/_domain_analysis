@@ -22,6 +22,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import structlog
 from contextlib import asynccontextmanager
+import os
+
+print("\n>>> BACKEND BOOTING: Process ID", os.getpid(), flush=True)
 
 from api.routes import analysis, reports, health, development_plan, n8n_webhook, bulk_analysis, auctions, filters, auth_test, credits
 from api.routes import debug_offer_type
