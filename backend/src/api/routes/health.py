@@ -39,7 +39,7 @@ async def health_check():
     try:
         services_status = {}
         
-        # ) Check database connection (critical, no timeout
+        # ) Check database connection (with timeout
         try:
             # Verify URL configuration first
             from utils.config import get_settings
@@ -48,9 +48,6 @@ async def health_check():
             if not supabase_url:
                 services_status['database'] = 'unhealthy'
                 logger.error("SUPABASE_URL is not set in environment variables")
-            elif 'sb_domain' in supabase_url and 'sbdomain' not in supabase_url:
-                # ) Warn about potential URL mismatch (underscore vs no underscore
-                logger.warning("SUPABASE_URL contains 'sb_domain' - verify this matches your actual server URL", url=supabase_url)
             
             # Try to get or initialize database
             try:
@@ -66,36 +63,19 @@ async def health_check():
             
             if db.client is None:
                 services_status['database'] = 'unhealthy'
-                logger.warning("Database client not initialized - check SUPABASE_URL and SUPABASE_KEY environment variables")
+                logger.warning("Database client not initialized")
             else:
-                # ) Test with secrets table first (known to exist
-                try:
-                    result = await (await db._get_client()).table('secrets').select('id').limit(1).execute()
-                    # Test reports table access
-                    try:
-                        await (await db._get_client()).table('reports').select('id').limit(1).execute()
-                        services_status['database'] = 'healthy'
-                        logger.info("Database connection healthy - all tables accessible")
-                    except Exception as table_error:
-                        error_msg = str(table_error)
-                        error_type = type(table_error).__name__
-                        # Check for connection pool or server availability issues
-                        if 'no available server' in error_msg.lower() or '503' in error_msg:
-                            logger.warning("Database connection pool exhausted or server unavailable", error=error_msg, error_type=error_type)
-                            services_status['database'] = 'degraded'  # Temporary connection issue
-                        else:
-                            logger.warning("Reports table not accessible", error=error_msg, error_type=error_type)
-                            services_status['database'] = 'degraded'  # Connection works but some tables missing
-                except Exception as secrets_error:
-                    error_msg = str(secrets_error)
-                    error_type = type(secrets_error).__name__
-                    # Check for connection pool or server availability issues
-                    if 'no available server' in error_msg.lower() or '503' in error_msg:
-                        logger.warning("Database connection pool exhausted or server unavailable", error=error_msg, error_type=error_type)
-                        services_status['database'] = 'degraded'  # Temporary connection issue, not completely unhealthy
-                    else:
-                        logger.warning("Secrets table not accessible", error=error_msg, error_type=error_type)
-                        services_status['database'] = 'unhealthy'
+                # ) Use a wrapper with timeout for the actual database check
+                async def db_check():
+                    # Test with secrets table
+                    await (await db._get_client()).table('secrets').select('id').limit(1).execute()
+                    # Test reports table
+                    await (await db._get_client()).table('reports').select('id').limit(1).execute()
+                    return True
+
+                db_status = await check_service_with_timeout('database', db_check, timeout=3.0)
+                services_status['database'] = db_status
+
         except Exception as e:
             error_type = type(e).__name__
             error_msg = str(e)
