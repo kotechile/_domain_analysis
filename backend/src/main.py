@@ -42,26 +42,32 @@ logger = structlog.get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup and shutdown events"""
-    # Startup
-    logger.info("Starting Domain Analysis System")
-    try:
-        await init_database()
-        logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error("Database initialization failed", error=str(e))
-    
-    try:
-        await init_cache()
-        logger.info("Cache initialized successfully")
-    except Exception as e:
-        logger.warning("Cache initialization failed", error=str(e))
-    
-    logger.info("Application startup complete")
+    # Startup in background to avoid blocking port binding and health checks
+    async def startup_services():
+        logger.info("Starting background services initialization")
+        try:
+            await init_database()
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error("Database initialization failed", error=str(e))
+        
+        try:
+            await init_cache()
+            logger.info("Cache initialized successfully")
+        except Exception as e:
+            logger.warning("Cache initialization failed", error=str(e))
+        
+        logger.info("Application background startup complete")
+
+    # Trigger background startup
+    import asyncio
+    asyncio.create_task(startup_services())
     
     yield
     
     # Shutdown
     logger.info("Shutting down Domain Analysis System")
+
 
 
 # Initialize FastAPI application
