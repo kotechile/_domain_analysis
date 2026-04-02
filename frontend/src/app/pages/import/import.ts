@@ -12,29 +12,7 @@ import { AuctionUploadProgress } from '../../models/domain.model';
   standalone: true,
   imports: [CommonModule, LucideAngularModule, MatSnackBarModule, DatePipe, DecimalPipe, TitleCasePipe],
   templateUrl: './import.html',
-  styles: [`
-    .dashboard-card {
-      @apply rounded-2xl border border-opacity-10 p-6 transition-all duration-300;
-      border-color: var(--border-color);
-      background: var(--card-bg);
-    }
-    .dashboard-card:hover { border-color: var(--accent-color); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); }
-    
-    .status-pill {
-      @apply px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center space-x-1.5;
-    }
-    .status-completed { background: rgba(16, 185, 129, 0.1); color: #10b981; }
-    .status-processing { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
-    .status-waiting { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
-    .status-failed { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
-    .status-pending { background: rgba(107, 114, 128, 0.1); color: #6b7280; }
-
-    .progress-bar { @apply h-2 w-full bg-gray-100 rounded-full overflow-hidden dark:bg-gray-800; }
-    .progress-fill { @apply h-full bg-accent transition-all duration-500 ease-out; }
-    
-    .stat-label { @apply text-[10px] font-black uppercase tracking-widest opacity-40; color: var(--text-color); }
-    .stat-value { @apply text-lg font-black mt-1; color: var(--text-color); }
-  `]
+  styles: [``]
 })
 export class ImportComponent implements OnInit, OnDestroy {
   private api = inject(ApiService);
