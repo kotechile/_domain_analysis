@@ -27,8 +27,8 @@ RUN npm install 2>&1 | tee /tmp/npm-install.log || (cat /tmp/npm-install.log && 
 # Copy source code
 COPY . .
 
-# Build the Angular application - use shell script for better error visibility
-RUN sh -c 'npm run build; EXIT_CODE=$?; if [ $EXIT_CODE -ne 0 ]; then echo "=== BUILD FAILED WITH EXIT CODE $EXIT_CODE ==="; exit $EXIT_CODE; fi'
+# Build the Angular application with output capture
+RUN npm run build 2>&1 | tee /tmp/build-output.log || (cat /tmp/build-output.log; exit 1)
 
 # Find and verify build output
 RUN ls -la /app/dist/ 2>/dev/null || echo "No dist folder found"
