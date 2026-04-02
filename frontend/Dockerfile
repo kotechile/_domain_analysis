@@ -27,11 +27,12 @@ RUN npm install 2>&1 | tee /tmp/npm-install.log || (cat /tmp/npm-install.log && 
 # Copy source code
 COPY . .
 
-# Build the Angular application with output capture
-RUN npm run build 2>&1 | tee /tmp/build-output.log || (cat /tmp/build-output.log; exit 1)
+# Build the Angular application with output capture and verification
+RUN npm run build 2>&1 | tee /tmp/build-output.log || (echo "=== BUILD OUTPUT ==="; cat /tmp/build-output.log; echo "=== END BUILD OUTPUT ==="; exit 1)
 
-# Find and verify build output
-RUN ls -la /app/dist/ 2>/dev/null || echo "No dist folder found"
+# Verify build output exists
+RUN echo "=== Checking build output ===" && \
+    ls -la /app/dist/ 2>/dev/null || (echo "No dist folder found - build failed"; cat /tmp/build-output.log; exit 1)
 
 # Production stage with nginx
 FROM nginx:alpine
