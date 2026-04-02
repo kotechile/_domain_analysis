@@ -5,7 +5,12 @@ ARG REACT_APP_SUPABASE_ANON_KEY
 ARG REACT_APP_URL=https://scout.buildomain.com
 
 # Multi-stage build for Angular app
-FROM node:20-alpine AS build
+FROM node:20-slim AS build
+
+# Install build dependencies for native modules
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 # Pass build arg to environment
 ENV REACT_APP_API_URL=$REACT_APP_API_URL
@@ -13,6 +18,7 @@ ENV REACT_APP_SUPABASE_URL=$REACT_APP_SUPABASE_URL
 ENV REACT_APP_SUPABASE_ANON_KEY=$REACT_APP_SUPABASE_ANON_KEY
 ENV REACT_APP_URL=$REACT_APP_URL
 ENV NG_CLI_ANALYTICS=false
+ENV NODE_OPTIONS=--max-old-space-size=4096
 
 # Set working directory
 WORKDIR /app
@@ -20,17 +26,30 @@ WORKDIR /app
 # Copy package files first (better layer caching)
 COPY package*.json ./
 
-# Install dependencies with ci for cleaner installs
-RUN npm ci --prefer-offline --no-audit
+# Install dependencies
+RUN npm ci --prefer-offline --no-audit 2>&1 || (echo "=== NPM INSTALL FAILED ===" && exit 1)
 
 # Copy source code
 COPY . .
 
-# Build the Angular application with increased memory and parallel jobs
-RUN node --max-old-space-size=4096 ./node_modules/.bin/ng build --configuration=production
+# Build the Angular application
+RUN echo "=== Starting Angular build ===" && \
+    npm run build 2>&1 || \
+    (echo "=== ANGULAR BUILD FAILED ===" && \
+     echo "Node version:" && node --version && \
+     echo "NPM version:" && npm --version && \
+     echo "Angular CLI:" && cat ./node_modules/@angular/cli/package.json | grep version && \
+     exit 1)
 
-# Verify build output
-RUN ls -la /app/dist/angular-version/browser/ || (echo "Build failed - checking dist structure:" && ls -la /app/dist/ 2>/dev/null || echo "No dist folder found" && exit 1)
+# Verify build output exists
+RUN if [ ! -d "/app/dist/angular-version/browser" ]; then \
+        echo "=== BUILD OUTPUT NOT FOUND ===" && \
+        ls -la /app/dist/ 2>/dev/null || echo "No dist folder found" && \
+        find /app/dist -type d 2>/dev/null | head -20 && \
+        exit 1; \
+    fi && \
+    echo "=== Build output verified ===" && \
+    ls -la /app/dist/angular-version/browser/
 
 # Production stage with nginx
 FROM nginx:alpine
