@@ -27,8 +27,8 @@ RUN npm install 2>&1 | tee /tmp/npm-install.log || (cat /tmp/npm-install.log && 
 # Copy source code
 COPY . .
 
-# Build the Angular application - fail on error
-RUN npm run build
+# Build the Angular application with output capture
+RUN npm run build > /tmp/build.log 2>&1 || (cat /tmp/build.log && exit 1)
 
 # Find and verify build output - Angular 21 outputs to different paths
 RUN echo "=== Checking for build output ===" && \
