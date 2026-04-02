@@ -1,0 +1,48 @@
+# Node modules
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Angular build output
+dist
+.tmp
+
+# Git
+.git
+.gitignore
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+*.spec.ts
+test.ts
+karma.conf.js
+
+# Environment files (not needed in Docker build)
+.env
+.env.local
+.env.*.local
+
+# Documentation
+README.md
+CHANGELOG.md
+docs
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore

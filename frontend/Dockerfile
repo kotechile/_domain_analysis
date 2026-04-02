@@ -5,29 +5,32 @@ ARG REACT_APP_SUPABASE_ANON_KEY
 ARG REACT_APP_URL=https://scout.buildomain.com
 
 # Multi-stage build for Angular app
-FROM node:20-alpine as build
+FROM node:20-alpine AS build
 
 # Pass build arg to environment
 ENV REACT_APP_API_URL=$REACT_APP_API_URL
 ENV REACT_APP_SUPABASE_URL=$REACT_APP_SUPABASE_URL
 ENV REACT_APP_SUPABASE_ANON_KEY=$REACT_APP_SUPABASE_ANON_KEY
 ENV REACT_APP_URL=$REACT_APP_URL
+ENV NG_CLI_ANALYTICS=false
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy package files first (better layer caching)
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies with ci for cleaner installs
+RUN npm ci --prefer-offline --no-audit
 
 # Copy source code
 COPY . .
 
-# Build the Angular application with increased memory limit
-RUN NG_CLI_ANALYTICS=false node --max-old-space-size=2048 ./node_modules/@angular/cli/bin/ng build --configuration=production
-RUN ls -la /app/dist/angular-version/browser || echo "Build directory not found"
+# Build the Angular application with increased memory and parallel jobs
+RUN node --max-old-space-size=4096 ./node_modules/.bin/ng build --configuration=production
+
+# Verify build output
+RUN ls -la /app/dist/angular-version/browser/ || (echo "Build failed - checking dist structure:" && ls -la /app/dist/ 2>/dev/null || echo "No dist folder found" && exit 1)
 
 # Production stage with nginx
 FROM nginx:alpine
