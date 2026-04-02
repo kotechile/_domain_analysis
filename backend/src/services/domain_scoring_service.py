@@ -138,8 +138,17 @@ class DomainScoringService:
         return True, None
     
     def _tokenize_domain(self, domain_name: str) -> List[str]:
-        """Tokenize domain name into words"""
-        # Try spaCy first
+        """Tokenize domain name into words. Optimized to use fast regex first."""
+        if not domain_name:
+            return []
+
+        # 1. Fast path: heuristic splitting (camelCase or just lowercase)
+        # This is 100x faster than spaCy and sufficient for most filtering
+        tokens = re.findall(r'[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)', domain_name)
+        if tokens:
+            return tokens
+            
+        # 2. Try spaCy as a heavy fallback
         if self.nlp:
             try:
                 doc = self.nlp(domain_name)
@@ -150,14 +159,8 @@ class DomainScoringService:
             except Exception as e:
                 logger.warning("spaCy tokenization failed", domain=domain_name, error=str(e))
         
-        # ) Fallback: heuristic splitting (camelCase, etc.
-        # Split on capital letters
-        tokens = re.findall(r'[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)', domain_name)
-        if tokens:
-            return tokens
-        
-        # Last resort: return as single token
-        return [domain_name] if domain_name else []
+        # 3. Last resort: return as single token
+        return [domain_name]
     
     def _calculate_age_score(self, domain: NamecheapDomain) -> float:
         """Calculate age score based on registered_date"""

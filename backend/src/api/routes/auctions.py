@@ -26,6 +26,9 @@ from utils.date_utils import parse_iso_datetime
 logger = structlog.get_logger()
 router = APIRouter()
 
+# Global lock to prevent multiple concurrent uploads from saturating CPU/DB
+_upload_status_lock = asyncio.Lock()
+
 
 @router.get("/auctions/troubleshoot-uploads")
 async def troubleshoot_uploads( limit: int = 10 ):
@@ -273,302 +276,310 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
     auctions_service = AuctionsService()
     
     try:
-        # 1. Count Total Lines (approx) for progress tracking
-        # ) This is creating an extra pass but on local FS it's fast (O(n) sequential read
-        total_records = 0
-        if is_file:
+        # Check if another upload is running and mark as queued if so
+        if _upload_status_lock.locked():
+            logger.info("Another upload is in progress, queuing job", job_id=job_id)
             try:
-                # Use bytes mode for fast reading, assuming standard line endings
-                with open(csv_content, 'rb') as f:
-                    # Subtract 1 for header, but ensure non-negative
-                    count = sum(1 for _ in f) - 1
-                    total_records = max(0, count)
-                logger.info("Counted logical lines in file", job_id=job_id, count=total_records, filename=filename)
+                await db.update_csv_upload_progress(job_id=job_id, status='queued', current_stage='waiting_for_lock')
+            except: pass
+
+        async with _upload_status_lock:
+            # 1. Count Total Lines (approx) for progress tracking
+            # This is creating an extra pass but on local FS it's fast (O(n) sequential read)
+            total_records = 0
+            if is_file:
+                try:
+                    # Use bytes mode for fast reading, assuming standard line endings
+                    with open(csv_content, 'rb') as f:
+                        # Subtract 1 for header, but ensure non-negative
+                        count = sum(1 for _ in f) - 1
+                        total_records = max(0, count)
+                    logger.info("Counted logical lines in file", job_id=job_id, count=total_records, filename=filename)
+                except Exception as e:
+                    logger.warning("Failed to count lines in file, progress will be approximate", job_id=job_id, error=str(e))
+                    total_records = 0
+            
+            # Update status to parsing
+            await db.update_csv_upload_progress( job_id=job_id, status='parsing', current_stage='parsing', total_records=total_records if total_records > 0 else None )
+        
+            # 2. Clear Staging for this Job ID to ensure clean slate
+            try:
+                await _clear_staging_chunked(db, auction_site, job_id)
             except Exception as e:
-                logger.warning("Failed to count lines in file, progress will be approximate", job_id=job_id, error=str(e))
-                total_records = 0
-        
-        # Update status to parsing
-        await db.update_csv_upload_progress( job_id=job_id, status='parsing', current_stage='parsing', total_records=total_records if total_records > 0 else None )
-        
-        # 2. Clear Staging for this Job ID to ensure clean slate
-        try:
-            await _clear_staging_chunked(db, auction_site, job_id)
-        except Exception as e:
-            logger.warning("Failed to clear staging (might be empty), continuing", job_id=job_id, error=str(e))
+                logger.warning("Failed to clear staging (might be empty), continuing", job_id=job_id, error=str(e))
 
-        # 2.5 Mark all existing auctions for this site with to_delete=true
-        # Records still present in new files will be unflagged during merge
-        try:
-            # For GoDaddy and NameSilo, the files often contain mixed types (Buy Now and Auction).
-            # To ensure proper cleanup of stale records, we mark ALL records for these sites.
-            # For Namecheap, files are usually separated by type, so we follow the offering_type.
-            cleanup_type = offering_type
-            if auction_site.lower() in ['godaddy', 'namesilo']:
-                cleanup_type = None
-                
-            await _mark_auctions_for_deletion(db, auction_site, cleanup_type)
-        except Exception as e:
-            logger.warning("Failed to mark auctions for deletion, continuing", job_id=job_id, error=str(e))
-
-        # 3. Stream & Process
-        # Helper function to map NameSilo Type field to offer_type
-        def map_namesilo_type_to_offer_type(type_field: str) -> str:
-            if not type_field:
-                return 'auction'
-            type_lower = type_field.lower().strip()
-            # Explicit mappings for NameSilo Type field values
-            if 'offer/counter' in type_lower or 'offer' in type_lower or 'counter' in type_lower:
-                # Offer/Counter Offer is treated as buy_now
-                return 'buy_now'
-            elif type_lower == 'auction':
-                return 'auction'
-            elif type_lower == 'expired':
-                # Expired domains are classified as backorder
-                return 'backorder'
-            elif 'customer auction' in type_lower:
-                return 'auction'
-            elif 'expired domain auction' in type_lower:
-                return 'backorder'
-            elif 'backorder' in type_lower:
-                return 'backorder'
-            else:
-                return 'auction'
-
-        logger.info("Starting streaming process", job_id=job_id, auction_site=auction_site)
-        
-        # Get generator
-        iterator = auctions_service.load_auctions_from_csv(csv_content, auction_site, filename, is_file=is_file)
-        
-        scoring_service = DomainScoringService()
-        
-        BATCH_SIZE = 500
-        batch_list = []
-        processed_count = 0
-        scored_count = 0
-        passed_count = 0
-        failed_count = 0
-        skipped_count = 0
-        
-        # For NameSilo type stats
-        namesilo_type_counts = {}
-        error_message = None
-        
-        async def process_batch(batch, is_last=False):
-            nonlocal processed_count, scored_count, passed_count, failed_count, skipped_count
-            
-            if not batch:
-                return
-
-            # Insert into staging
-            # ) Prepare staging records (remove 'ranking', 'score' if None, etc.
-            staging_batch = []
-            for record in batch:
-                # Create a clean dict for staging
-                staging_record = {k: v for k, v in record.items() if k not in ['ranking']}
-                
-                # Cleanup specific fields
-                if 'offer_type' in staging_record and not staging_record['offer_type']:
-                     del staging_record['offer_type']
-                     
-                staging_batch.append(staging_record)
-            
-            # Retry logic for insert
-            max_retries = 2
-            inserted = False
-            for retry in range(max_retries + 1):
-                try:
-                    if retry > 0:
-                        await asyncio.sleep(1.0 * retry)
-                        
-                    await (await db._get_client()).table('auctions_staging').insert(staging_batch).execute()
-                    inserted = True
-                    break
-                except Exception as insert_err:
-                    if retry == max_retries:
-                         logger.error("Failed to insert batch to staging", job_id=job_id, error=str(insert_err))
-                         # We don't raise here to allow partial success if possible? 
-                         # Actually if staging insert fails, we probably should fail the job or at least log heavily
-            
-            if inserted:
-                processed_count += len(batch)
-                
-                # Update progress
-                # Yield control
-                await asyncio.sleep(0.01)
-                
-                try:
-                    await db.update_csv_upload_progress( job_id=job_id, status='processing', processed_records=processed_count, current_stage='processing_batch', total_records=total_records if total_records > 0 else processed_count ) # Update total if we go over
-                except Exception:
-                    pass # Ignore progress update errors
-
-        # Loop through iterator
-        total_processed_so_far = 0
-        for auction_input in iterator:
-            total_processed_so_far += 1
-            
-            # Update progress in DB every 1000 records (including skipped/filtered)
-            if total_processed_so_far % 1000 == 0:
-                try:
-                    await db.update_csv_upload_progress( 
-                        job_id=job_id, 
-                        status='processing', 
-                        processed_records=total_processed_so_far, 
-                        current_stage='streaming',
-                        total_records=total_records if total_records > 0 else total_processed_so_far + 100 
-                    )
-                    await asyncio.sleep(0.01) # Yield control
-                except Exception:
-                    pass
-
+            # 2.5 Mark all existing auctions for this site with to_delete=true
+            # Records still present in new files will be unflagged during merge
             try:
-                auction = auction_input.to_auction()
-                
-                # Logic copied from original process_csv_upload_async
-                start_date_iso = auction.start_date.isoformat() if auction.start_date else None
-                expiration_date = auction.expiration_date
+                # For GoDaddy and NameSilo, the files often contain mixed types (Buy Now and Auction).
+                # To ensure proper cleanup of stale records, we mark ALL records for these sites.
+                # For Namecheap, files are usually separated by type, so we follow the offering_type.
+                cleanup_type = offering_type
+                if auction_site.lower() in ['godaddy', 'namesilo']:
+                    cleanup_type = None
+                    
+                await _mark_auctions_for_deletion(db, auction_site, cleanup_type)
+            except Exception as e:
+                logger.warning("Failed to mark auctions for deletion, continuing", job_id=job_id, error=str(e))
 
-                # Filter: Skip auctions that expire more than 2 weeks in the future
-                if expiration_date and auction_site.lower() == 'namecheap':
-                    if expiration_date.tzinfo is None:
-                        expiration_date = expiration_date.replace(tzinfo=timezone.utc)
-                    two_weeks_from_now = datetime.now(timezone.utc) + timedelta(days=14)
-                    if expiration_date > two_weeks_from_now:
+            # 3. Stream & Process
+            # Helper function to map NameSilo Type field to offer_type
+            def map_namesilo_type_to_offer_type(type_field: str) -> str:
+                if not type_field:
+                    return 'auction'
+                type_lower = type_field.lower().strip()
+                # Explicit mappings for NameSilo Type field values
+                if 'offer/counter' in type_lower or 'offer' in type_lower or 'counter' in type_lower:
+                    # Offer/Counter Offer is treated as buy_now
+                    return 'buy_now'
+                elif type_lower == 'auction':
+                    return 'auction'
+                elif type_lower == 'expired':
+                    # Expired domains are classified as backorder
+                    return 'backorder'
+                elif 'customer auction' in type_lower:
+                    return 'auction'
+                elif 'expired domain auction' in type_lower:
+                    return 'backorder'
+                elif 'backorder' in type_lower:
+                    return 'backorder'
+                else:
+                    return 'auction'
+
+            logger.info("Starting streaming process", job_id=job_id, auction_site=auction_site)
+            
+            # Get generator
+            iterator = auctions_service.load_auctions_from_csv(csv_content, auction_site, filename, is_file=is_file)
+            
+            scoring_service = DomainScoringService()
+            
+            BATCH_SIZE = 500
+            batch_list = []
+            processed_count = 0
+            scored_count = 0
+            passed_count = 0
+            failed_count = 0
+            skipped_count = 0
+            
+            # For NameSilo type stats
+            namesilo_type_counts = {}
+            error_message = None
+            
+            async def process_batch(batch, is_last=False):
+                nonlocal processed_count, scored_count, passed_count, failed_count, skipped_count
+                
+                if not batch:
+                    return
+
+                # Insert into staging
+                # Prepare staging records (remove 'ranking', 'score' if None, etc.)
+                staging_batch = []
+                for record in batch:
+                    # Create a clean dict for staging
+                    staging_record = {k: v for k, v in record.items() if k not in ['ranking']}
+                    
+                    # Cleanup specific fields
+                    if 'offer_type' in staging_record and not staging_record['offer_type']:
+                         del staging_record['offer_type']
+                         
+                    staging_batch.append(staging_record)
+                
+                # Retry logic for insert
+                max_retries = 2
+                inserted = False
+                for retry in range(max_retries + 1):
+                    try:
+                        if retry > 0:
+                            await asyncio.sleep(1.0 * retry)
+                            
+                        await (await db._get_client()).table('auctions_staging').insert(staging_batch).execute()
+                        inserted = True
+                        break
+                    except Exception as insert_err:
+                        if retry == max_retries:
+                             logger.error("Failed to insert batch to staging", job_id=job_id, error=str(insert_err))
+                             # We don't raise here to allow partial success if possible? 
+                             # Actually if staging insert fails, we probably should fail the job or at least log heavily
+                
+                if inserted:
+                    processed_count += len(batch)
+                    
+                    # Update progress
+                    # Yield control
+                    await asyncio.sleep(0.01)
+                    
+                    try:
+                        await db.update_csv_upload_progress( job_id=job_id, status='processing', processed_records=processed_count, current_stage='processing_batch', total_records=total_records if total_records > 0 else processed_count ) # Update total if we go over
+                    except Exception:
+                        pass # Ignore progress update errors
+
+            # Loop through iterator
+            total_processed_so_far = 0
+            for auction_input in iterator:
+                total_processed_so_far += 1
+                
+                # Update progress in DB every 1000 records (including skipped/filtered)
+                if total_processed_so_far % 1000 == 0:
+                    try:
+                        await db.update_csv_upload_progress( 
+                            job_id=job_id, 
+                            status='processing', 
+                            processed_records=total_processed_so_far, 
+                            current_stage='streaming',
+                            total_records=total_records if total_records > 0 else total_processed_so_far + 100 
+                        )
+                        await asyncio.sleep(0.01) # Yield control
+                    except Exception:
+                        pass
+
+                try:
+                    auction = auction_input.to_auction()
+                    
+                    # Logic copied from original process_csv_upload_async
+                    start_date_iso = auction.start_date.isoformat() if auction.start_date else None
+                    expiration_date = auction.expiration_date
+
+                    # Filter: Skip auctions that expire more than 2 weeks in the future
+                    if expiration_date and auction_site.lower() == 'namecheap':
+                        if expiration_date.tzinfo is None:
+                            expiration_date = expiration_date.replace(tzinfo=timezone.utc)
+                        two_weeks_from_now = datetime.now(timezone.utc) + timedelta(days=14)
+                        if expiration_date > two_weeks_from_now:
+                            skipped_count += 1
+                            continue
+                    elif not expiration_date and auction_site.lower() == 'namecheap':
+                        # Namecheap records should have expiration dates - skip if missing
+                        logger.debug("Skipping Namecheap record without expiration date", domain=auction.domain)
                         skipped_count += 1
                         continue
-                elif not expiration_date and auction_site.lower() == 'namecheap':
-                    # Namecheap records should have expiration dates - skip if missing
-                    logger.debug("Skipping Namecheap record without expiration date", domain=auction.domain)
-                    skipped_count += 1
-                    continue
-                
-                # NameSilo fallback
-                if not expiration_date and auction_site.lower() == 'namesilo':
-                     expiration_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
-                
-                expiration_date_iso = expiration_date.isoformat() if expiration_date else None
-
-                namecheap_domain = NamecheapDomain( name=auction.domain, registered_date=None, # Extract from source_data if needed
-                    url=None, start_date=auction.start_date, end_date=auction.expiration_date, price=None )
-                
-                # Score
-                scored = scoring_service.score_domain(namecheap_domain)
-                scored_count += 1
-                
-                if scored.filter_status == 'PASS':
-                    passed_count += 1
-                else:
-                    failed_count += 1
-
-                score_value = scored.total_meaning_score if scored.total_meaning_score is not None else None
-                
-                # Determine offer_type
-                record_offer_type = offering_type
-                if auction_site.lower() == 'namesilo':
-                    type_field = auction.source_data.get('Type', '').strip() if auction.source_data else ''
-                    record_offer_type = map_namesilo_type_to_offer_type(type_field)
-                    namesilo_type_counts[type_field] = namesilo_type_counts.get(type_field, 0) + 1
-                elif auction_site.lower() == 'godaddy':
-                    # ) Extract auctionType from GoDaddy JSON (BuyNow or Bid
-                    auction_type = auction.source_data.get('auctionType', '').strip() if auction.source_data else ''
-                    if auction_type.lower() == 'buynow':
-                        record_offer_type = 'buy_now'
-                    elif auction_type.lower() == 'bid':
-                        record_offer_type = 'auction'
-                    # If auctionType not found, fall back to offering_type parameter
-                    if not record_offer_type:
-                        record_offer_type = 'auction'
-                elif auction_site.lower() == 'namecheap':
-                    # Detect from filename for Namecheap
-                    if 'buy_now' in filename.lower():
-                        record_offer_type = 'buy_now'
-                    else:
-                        record_offer_type = 'auction'
-                elif not record_offer_type:
-                     # Detect from filename for Namecheap
-                     if 'buy_now' in filename.lower():
-                         record_offer_type = 'buy_now'
-                     else:
-                         record_offer_type = 'auction'
-
-                # First seen for Namecheap
-                first_seen_date = None
-                if auction_site.lower() == 'namecheap':
-                     # Try to get registeredDate from source_data
-                     reg_date_str = auction.source_data.get('registeredDate') if auction.source_data else None
-                     if reg_date_str:
-                         first_seen_date = reg_date_str # Already string or parsed? AuctionInput source_data is dict of strings mostly
-                
-                auction_dict = { 'domain': auction.domain, 'start_date': start_date_iso, 'expiration_date': expiration_date_iso, 'auction_site': auction.auction_site, 'current_bid': auction.current_bid, 'source_data': auction.source_data, 'link': auction.link, 'processed': True, 'preferred': False, 'has_statistics': False, 'score': score_value, 'ranking': None, 'first_seen': first_seen_date, 'to_delete': False, # Default
-                    'offer_type': record_offer_type, 'job_id': job_id }
-                
-                batch_list.append(auction_dict)
-                
-                if len(batch_list) >= BATCH_SIZE:
-                    await process_batch(batch_list)
-                    batch_list = []
-                    # Log progress to stdout for observability
-                    logger.info("Processed batch", job_id=job_id, count=processed_count, total_estimated=total_records)
-
                     
-            except Exception as e:
-                logger.warning("Failed to process auction record", domain=getattr(auction_input, 'domain', '?'), error=str(e))
-                skipped_count += 1
-                if not error_message:
-                    error_message = f"Record failure ({getattr(auction_input, 'domain', '?')}): {str(e)}"
-        
-        # FINAL: Sync processed_count to what we actually looped through
-        processed_count = scored_count
-        
-        # Process remaining
-        if batch_list:
-            logger.info("Processing final batch", job_id=job_id, count=len(batch_list))
-            await process_batch(batch_list, is_last=True)
+                    # NameSilo fallback
+                    if not expiration_date and auction_site.lower() == 'namesilo':
+                         expiration_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
+                    
+                    expiration_date_iso = expiration_date.isoformat() if expiration_date else None
+
+                    namecheap_domain = NamecheapDomain( name=auction.domain, registered_date=None, # Extract from source_data if needed
+                        url=None, start_date=auction.start_date, end_date=auction.expiration_date, price=None )
+                    
+                    # Score
+                    scored = scoring_service.score_domain(namecheap_domain)
+                    scored_count += 1
+                    
+                    if scored.filter_status == 'PASS':
+                        passed_count += 1
+                    else:
+                        failed_count += 1
+
+                    score_value = scored.total_meaning_score if scored.total_meaning_score is not None else None
+                    
+                    # Determine offer_type
+                    record_offer_type = offering_type
+                    if auction_site.lower() == 'namesilo':
+                        type_field = auction.source_data.get('Type', '').strip() if auction.source_data else ''
+                        record_offer_type = map_namesilo_type_to_offer_type(type_field)
+                        namesilo_type_counts[type_field] = namesilo_type_counts.get(type_field, 0) + 1
+                    elif auction_site.lower() == 'godaddy':
+                        # Extract auctionType from GoDaddy JSON (BuyNow or Bid)
+                        auction_type = auction.source_data.get('auctionType', '').strip() if auction.source_data else ''
+                        if auction_type.lower() == 'buynow':
+                            record_offer_type = 'buy_now'
+                        elif auction_type.lower() == 'bid':
+                            record_offer_type = 'auction'
+                        # If auctionType not found, fall back to offering_type parameter
+                        if not record_offer_type:
+                            record_offer_type = 'auction'
+                    elif auction_site.lower() == 'namecheap':
+                        # Detect from filename for Namecheap
+                        if 'buy_now' in filename.lower():
+                            record_offer_type = 'buy_now'
+                        else:
+                            record_offer_type = 'auction'
+                    elif not record_offer_type:
+                         # Detect from filename for Namecheap
+                         if 'buy_now' in filename.lower():
+                             record_offer_type = 'buy_now'
+                         else:
+                             record_offer_type = 'auction'
+
+                    # First seen for Namecheap
+                    first_seen_date = None
+                    if auction_site.lower() == 'namecheap':
+                         # Try to get registeredDate from source_data
+                         reg_date_str = auction.source_data.get('registeredDate') if auction.source_data else None
+                         if reg_date_str:
+                             first_seen_date = reg_date_str # Already string or parsed? AuctionInput source_data is dict of strings mostly
+                    
+                    auction_dict = { 'domain': auction.domain, 'start_date': start_date_iso, 'expiration_date': expiration_date_iso, 'auction_site': auction.auction_site, 'current_bid': auction.current_bid, 'source_data': auction.source_data, 'link': auction.link, 'processed': True, 'preferred': False, 'has_statistics': False, 'score': score_value, 'ranking': None, 'first_seen': first_seen_date, 'to_delete': False, # Default
+                        'offer_type': record_offer_type, 'job_id': job_id }
+                    
+                    batch_list.append(auction_dict)
+                    
+                    if len(batch_list) >= BATCH_SIZE:
+                        await process_batch(batch_list)
+                        batch_list = []
+                        # Log progress to stdout for observability
+                        logger.info("Processed batch", job_id=job_id, count=processed_count, total_estimated=total_records)
+
+                        
+                except Exception as e:
+                    logger.warning("Failed to process auction record", domain=getattr(auction_input, 'domain', '?'), error=str(e))
+                    skipped_count += 1
+                    if not error_message:
+                        error_message = f"Record failure ({getattr(auction_input, 'domain', '?')}): {str(e)}"
             
-        logger.info("Streaming complete", job_id=job_id, processed=processed_count, passed=passed_count, failed=failed_count, skipped=skipped_count)
-        
-        # Use final stats for the report
-        final_processed_for_report = scored_count + skipped_count
-        
-        if final_processed_for_report == 0:
-             # Empty file case
-             error_msg = f"CSV file is empty or contains no valid records. Site: {auction_site}"
-             logger.error(error_msg, job_id=job_id)
-             await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg )
-             return
+            # FINAL: Sync processed_count to what we actually looped through
+            processed_count = scored_count
+            
+            # Process remaining
+            if batch_list:
+                logger.info("Processing final batch", job_id=job_id, count=len(batch_list))
+                await process_batch(batch_list, is_last=True)
+                
+            logger.info("Streaming complete", job_id=job_id, processed=processed_count, passed=passed_count, failed=failed_count, skipped=skipped_count)
+            
+            # Use final stats for the report
+            final_processed_for_report = scored_count + skipped_count
+            
+            if final_processed_for_report == 0:
+                 # Empty file case
+                 error_msg = f"CSV file is empty or contains no valid records. Site: {auction_site}"
+                 logger.error(error_msg, job_id=job_id)
+                 await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg )
+                 return
 
-        # 4. Merge Staging to Main
-        await db.update_csv_upload_progress( 
-            job_id=job_id, 
-            status='processing', 
-            current_stage='merging', 
-            processed_records=final_processed_for_report, 
-            skipped_count=skipped_count,
-            error_message=error_message if skipped_count > 0 else None
-        )
-        
-        logger.info("Merging staging to main table (using python chunked merge)", job_id=job_id)
-        
-        try:
-             # Use the Python-based chunked merge helper instead of RPC
-             # This aligns with the JSON upload logic which is working correctly
-             
-             # Use the same cleanup strategy as the Mark phase
-             cleanup_type = offering_type
-             if auction_site.lower() in ['godaddy', 'namesilo']:
-                 cleanup_type = None
+            # 4. Merge Staging to Main
+            await db.update_csv_upload_progress( 
+                job_id=job_id, 
+                status='processing', 
+                current_stage='merging', 
+                processed_records=final_processed_for_report, 
+                skipped_count=skipped_count,
+                error_message=error_message if skipped_count > 0 else None
+            )
+            
+            logger.info("Merging staging to main table (using python chunked merge)", job_id=job_id)
+            
+            try:
+                 # Use the Python-based chunked merge helper instead of RPC
+                 # This aligns with the JSON upload logic which is working correctly
                  
-             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id, cleanup_type)
-             
-             merge_stats = {'inserted': merged_count, 'updated': 0}
-             logger.info("Merge complete", stats=merge_stats)
-             
-        except Exception as merge_err:
-             logger.error("Merge failed", error=str(merge_err), job_id=job_id)
-             raise merge_err
+                 # Use the same cleanup strategy as the Mark phase
+                 cleanup_type = offering_type
+                 if auction_site.lower() in ['godaddy', 'namesilo']:
+                     cleanup_type = None
+                     
+                 merged_count = await _perform_python_chunked_merge(db, auction_site, job_id, cleanup_type)
+                 
+                 merge_stats = {'inserted': merged_count, 'updated': 0}
+                 logger.info("Merge complete", stats=merge_stats)
+                 
+            except Exception as merge_err:
+                 logger.error("Merge failed", error=str(merge_err), job_id=job_id)
+                 raise merge_err
 
-        # 5. Success
-        await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=processed_count, skipped_count=skipped_count, completed=True )
+            # 5. Success
+            await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=processed_count, skipped_count=skipped_count, completed=True )
         
     except Exception as e:
         logger.error("An unexpected error occurred during CSV processing", job_id=job_id, error=str(e), exc_info=True)
@@ -583,23 +594,31 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
     auctions_service = AuctionsService()
     
     try:
-        # Update status to parsing
-        await db.update_csv_upload_progress( job_id=job_id, status='parsing', current_stage='parsing' )
-        
-        # Parse JSON using auctions service
-        logger.info("Parsing JSON content", job_id=job_id, auction_site=auction_site, filename=filename, is_file=is_file)
-        auction_inputs = auctions_service.load_auctions_from_json(json_content, auction_site, filename, is_file=is_file)
-        
-        if not auction_inputs:
-            error_msg = f"JSON file is empty or contains no valid auction records. Auction site: {auction_site}, Filename: {filename}"
-            logger.error(error_msg, job_id=job_id, auction_site=auction_site, filename=filename)
-            await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg )
-            return
-        
-        total_records = len(auction_inputs)
-        
-        # Update status to processing
-        await db.update_csv_upload_progress( job_id=job_id, status='processing', total_records=total_records, current_stage='scoring' )
+        # Check if another upload is running and mark as queued if so
+        if _upload_status_lock.locked():
+            logger.info("Another upload is in progress, queuing job", job_id=job_id)
+            try:
+                await db.update_csv_upload_progress(job_id=job_id, status='queued', current_stage='waiting_for_lock')
+            except: pass
+
+        async with _upload_status_lock:
+            # Update status to parsing
+            await db.update_csv_upload_progress( job_id=job_id, status='parsing', current_stage='parsing' )
+            
+            # Parse JSON using auctions service
+            logger.info("Parsing JSON content", job_id=job_id, auction_site=auction_site, filename=filename, is_file=is_file)
+            auction_inputs = auctions_service.load_auctions_from_json(json_content, auction_site, filename, is_file=is_file)
+            
+            if not auction_inputs:
+                error_msg = f"JSON file is empty or contains no valid auction records. Auction site: {auction_site}, Filename: {filename}"
+                logger.error(error_msg, job_id=job_id, auction_site=auction_site, filename=filename)
+                await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg )
+                return
+            
+            total_records = len(auction_inputs)
+            
+            # Update status to processing
+            await db.update_csv_upload_progress( job_id=job_id, status='processing', total_records=total_records, current_stage='scoring' )
         
         # Initialize scoring service
         scoring_service = DomainScoringService()
@@ -636,11 +655,11 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                                source_data.get('registered date'))
                     if reg_date:
                         if isinstance(reg_date, str) and reg_date.strip():
-                                registered_date = parse_iso_datetime(date_str)
+                                registered_date = reg_date # Fallback or parse if needed
                         elif isinstance(reg_date, datetime):
                             registered_date = reg_date
                 
-                namecheap_domain = NamecheapDomain( name=auction.domain, registered_date=registered_date, url=None, start_date=auction.start_date, end_date=auction.expiration_date, price=None, bid_count=None, ahrefs_domain_rating=None, umbrella_ranking=None, cloudflare_ranking=None, estibot_value=None, extensions_taken=None, keyword_search_count=None, last_sold_price=None, last_sold_year=None, is_partner_sale=None, semrush_a_score=None, majestic_citation=None, ahrefs_backlinks=None, semrush_backlinks=None, majestic_backlinks=None, majestic_trust_flow=None, go_value=None )
+                namecheap_domain = NamecheapDomain( name=auction.domain, registered_date=registered_date, url=None, start_date=auction.start_date, end_date=auction.expiration_date, price=None )
                 
                 # Score domain
                 scored = scoring_service.score_domain(namecheap_domain)
@@ -675,7 +694,7 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
         # Update stage
         await db.update_csv_upload_progress( job_id=job_id, processed_records=len(auction_dicts), skipped_count=skipped_count, current_stage='loading_staging' )
 
-        # ) Loading and Merging (simplified logic
+        # Loading and Merging (simplified logic)
         if db.client:
              effective_offering_type = offering_type or 'auction'
              
