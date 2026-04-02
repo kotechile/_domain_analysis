@@ -21,18 +21,17 @@ WORKDIR /app
 # Copy package files first (better layer caching)
 COPY package*.json ./
 
-# Install dependencies - capture full output to file for debugging
-RUN npm install 2>&1 | tee /tmp/npm-install.log || (cat /tmp/npm-install.log && exit 1)
+# Install dependencies
+RUN npm ci --prefer-offline --no-audit
 
 # Copy source code
 COPY . .
 
-# Build the Angular application with output capture and verification
-RUN set -o pipefail && npm run build 2>&1 | tee /tmp/build-output.log
+# Build the Angular application
+RUN npm run build
 
 # Verify build output exists
-RUN echo "=== Checking build output ===" && \
-    ls -la /app/dist/angular-version/browser 2>/dev/null || (echo "Build output not found"; cat /tmp/build-output.log 2>/dev/null; exit 1)
+RUN ls -la /app/dist/angular-version/browser
 
 # Production stage with nginx
 FROM nginx:alpine
