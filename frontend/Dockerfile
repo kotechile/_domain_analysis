@@ -27,11 +27,23 @@ RUN npm install 2>&1 | tee /tmp/npm-install.log || (cat /tmp/npm-install.log && 
 # Copy source code
 COPY . .
 
-# Build the Angular application - capture full output to file for debugging
-RUN npm run build 2>&1 | tee /tmp/ng-build.log || (cat /tmp/ng-build.log && exit 1)
+# Build the Angular application - fail on error
+RUN npm run build
 
-# Verify build output exists
-RUN ls -la /app/dist/angular-version/browser/
+# Find and verify build output - Angular 21 outputs to different paths
+RUN echo "=== Checking for build output ===" && \
+    find /app/dist -name "index.html" -type f 2>/dev/null | head -5 && \
+    if [ -d "/app/dist/angular-version/browser" ]; then \
+        echo "Found build at: /app/dist/angular-version/browser"; \
+    elif [ -f "/app/dist/index.html" ]; then \
+        echo "Found build at: /app/dist/"; \
+        mkdir -p /app/dist/angular-version/browser && \
+        cp -r /app/dist/* /app/dist/angular-version/browser/ 2>/dev/null || true; \
+    else \
+        echo "Build output not found!"; \
+        ls -la /app/dist/ 2>/dev/null || echo "No dist folder"; \
+        exit 1; \
+    fi
 
 # Production stage with nginx
 FROM nginx:alpine
