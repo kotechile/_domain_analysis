@@ -99,6 +99,7 @@ class Settings(BaseSettings):
     N8N_WEBHOOK_URL_BULK_TRAFFIC: Optional[str] = None  # For bulk traffic
     N8N_WEBHOOK_URL_TRUNCATE: Optional[str] = None  # For truncating tables via SQL
     N8N_WEBHOOK_URL_AUCTION_SCORING: Optional[str] = None  # For auction scoring workflow
+    N8N_API_KEY: Optional[str] = None  # JWT Key for n8n authentication
     N8N_CALLBACK_URL: Optional[str] = None
     N8N_TIMEOUT: int = 60  # seconds
     N8N_USE_FOR_BACKLINKS: bool = True

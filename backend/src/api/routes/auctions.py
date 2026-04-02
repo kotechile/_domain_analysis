@@ -300,7 +300,14 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
         # 2.5 Mark all existing auctions for this site with to_delete=true
         # Records still present in new files will be unflagged during merge
         try:
-            await _mark_auctions_for_deletion(db, auction_site, offering_type)
+            # For GoDaddy and NameSilo, the files often contain mixed types (Buy Now and Auction).
+            # To ensure proper cleanup of stale records, we mark ALL records for these sites.
+            # For Namecheap, files are usually separated by type, so we follow the offering_type.
+            cleanup_type = offering_type
+            if auction_site.lower() in ['godaddy', 'namesilo']:
+                cleanup_type = None
+                
+            await _mark_auctions_for_deletion(db, auction_site, cleanup_type)
         except Exception as e:
             logger.warning("Failed to mark auctions for deletion, continuing", job_id=job_id, error=str(e))
 
@@ -396,18 +403,32 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     pass # Ignore progress update errors
 
         # Loop through iterator
+        total_processed_so_far = 0
         for auction_input in iterator:
+            total_processed_so_far += 1
+            
+            # Update progress in DB every 1000 records (including skipped/filtered)
+            if total_processed_so_far % 1000 == 0:
+                try:
+                    await db.update_csv_upload_progress( 
+                        job_id=job_id, 
+                        status='processing', 
+                        processed_records=total_processed_so_far, 
+                        current_stage='streaming',
+                        total_records=total_records if total_records > 0 else total_processed_so_far + 100 
+                    )
+                    await asyncio.sleep(0.01) # Yield control
+                except Exception:
+                    pass
+
             try:
                 auction = auction_input.to_auction()
                 
                 # Logic copied from original process_csv_upload_async
-                # ) ... score ... # ... map types ... # Convert date types for JSON serialization (Supabase expects ISO strings
                 start_date_iso = auction.start_date.isoformat() if auction.start_date else None
                 expiration_date = auction.expiration_date
 
                 # Filter: Skip auctions that expire more than 2 weeks in the future
-                # This helps manage large files like Namecheap_Market_Sales.csv with 1M+ records
-                # ONLY apply for namecheap to avoid skipping manual NameSilo/GoDaddy uploads
                 if expiration_date and auction_site.lower() == 'namecheap':
                     if expiration_date.tzinfo is None:
                         expiration_date = expiration_date.replace(tzinfo=timezone.utc)
@@ -478,7 +499,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                      if reg_date_str:
                          first_seen_date = reg_date_str # Already string or parsed? AuctionInput source_data is dict of strings mostly
                 
-                auction_dict = { 'domain': auction.domain, 'start_date': start_date_iso, 'expiration_date': expiration_date_iso, 'auction_site': auction.auction_site, 'current_bid': auction.current_bid, 'source_data': auction.source_data, 'link': auction.link, 'processed': True, 'preferred': False, 'has_statistics': False, 'score': score_value, 'ranking': None, 'first_seen': first_seen_date, 'deletion_flag': False, # Default
+                auction_dict = { 'domain': auction.domain, 'start_date': start_date_iso, 'expiration_date': expiration_date_iso, 'auction_site': auction.auction_site, 'current_bid': auction.current_bid, 'source_data': auction.source_data, 'link': auction.link, 'processed': True, 'preferred': False, 'has_statistics': False, 'score': score_value, 'ranking': None, 'first_seen': first_seen_date, 'to_delete': False, # Default
                     'offer_type': record_offer_type, 'job_id': job_id }
                 
                 batch_list.append(auction_dict)
@@ -489,20 +510,6 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     # Log progress to stdout for observability
                     logger.info("Processed batch", job_id=job_id, count=processed_count, total_estimated=total_records)
 
-                # yield control
-                if (scored_count + skipped_count) % 1000 == 0:
-                    await asyncio.sleep(0.01)
-                    # Update progress in DB more frequently for better feedback
-                    try:
-                        await db.update_csv_upload_progress( 
-                            job_id=job_id, 
-                            status='processing', 
-                            processed_records=scored_count + skipped_count, 
-                            current_stage='streaming',
-                            total_records=total_records if total_records > 0 else scored_count + skipped_count + 100 
-                        )
-                    except Exception:
-                        pass
                     
             except Exception as e:
                 logger.warning("Failed to process auction record", domain=getattr(auction_input, 'domain', '?'), error=str(e))
@@ -545,7 +552,13 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
         try:
              # Use the Python-based chunked merge helper instead of RPC
              # This aligns with the JSON upload logic which is working correctly
-             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id, offering_type)
+             
+             # Use the same cleanup strategy as the Mark phase
+             cleanup_type = offering_type
+             if auction_site.lower() in ['godaddy', 'namesilo']:
+                 cleanup_type = None
+                 
+             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id, cleanup_type)
              
              merge_stats = {'inserted': merged_count, 'updated': 0}
              logger.info("Merge complete", stats=merge_stats)
@@ -668,7 +681,12 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
              
              # General "Mark & Sweep" cleanup logic - Mark Phase
              try:
-                 await _mark_auctions_for_deletion(db, auction_site, effective_offering_type)
+                 # site-specific cleanup strategy
+                 cleanup_type = effective_offering_type
+                 if auction_site.lower() in ['godaddy', 'namesilo']:
+                     cleanup_type = None
+                     
+                 await _mark_auctions_for_deletion(db, auction_site, cleanup_type)
              except Exception as e:
                  logger.warning("Failed to mark records for deletion, continuing", job_id=job_id, error=str(e))
 
@@ -698,7 +716,11 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                  await asyncio.sleep(0.01)
              
              # Merge using robust Python-based chunked merge (Sweep happens here)
-             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id, effective_offering_type)
+             cleanup_type = effective_offering_type
+             if auction_site.lower() in ['godaddy', 'namesilo']:
+                 cleanup_type = None
+                 
+             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id, cleanup_type)
              inserted_count = merged_count
              deleted_count = 0  # logged inside _perform_python_chunked_merge
 

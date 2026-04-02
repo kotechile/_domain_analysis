@@ -161,7 +161,7 @@ class DatabaseService:
             "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS score DECIMAL(10,2);",
             "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS offer_type VARCHAR(50);",
             "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS first_seen TIMESTAMP WITH TIME ZONE;",
-            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS deletion_flag BOOLEAN DEFAULT false;",
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS to_delete BOOLEAN DEFAULT false;",
             
             # Ensure auctions_staging table has ALL necessary columns (critical for bulk uploads)
             "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS job_id VARCHAR(255);",
@@ -169,7 +169,7 @@ class DatabaseService:
             "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS score DECIMAL(10,2);",
             "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS offer_type VARCHAR(50);",
             "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS first_seen TIMESTAMP WITH TIME ZONE;",
-            "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS deletion_flag BOOLEAN DEFAULT false;",
+            "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS to_delete BOOLEAN DEFAULT false;",
             "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS processed BOOLEAN DEFAULT false;",
             "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS preferred BOOLEAN DEFAULT false;",
             "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS has_statistics BOOLEAN DEFAULT false;"
