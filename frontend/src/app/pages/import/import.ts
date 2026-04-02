@@ -68,7 +68,7 @@ export class ImportComponent implements OnInit, OnDestroy {
           catchError(() => of(null))
         );
       })
-    ).subscribe(progress => {
+    ).subscribe((progress: AuctionUploadProgress | null) => {
       if (progress) {
         this.activeJob.set(progress);
       } else {
@@ -90,7 +90,7 @@ export class ImportComponent implements OnInit, OnDestroy {
     this.isLoading.set(true);
     this.api.getLatestActiveUploadProgress().pipe(
       catchError(() => of(null))
-    ).subscribe(progress => {
+    ).subscribe((progress: AuctionUploadProgress | null) => {
       this.activeJob.set(progress);
       this.isLoading.set(false);
     });
@@ -103,7 +103,7 @@ export class ImportComponent implements OnInit, OnDestroy {
           this.snackBar.open('Job marked as failed manually', 'Close', { duration: 3000 });
           this.fetchLatestJob();
         },
-        error: (err) => {
+        error: (err: any) => {
           this.snackBar.open('Failed to mark job as failed', 'Close', { duration: 3000 });
         }
       });
@@ -112,10 +112,10 @@ export class ImportComponent implements OnInit, OnDestroy {
 
   triggerAnalysis() {
     this.api.triggerAuctionsAnalysis().subscribe({
-      next: (res) => {
+      next: (res: any) => {
         this.snackBar.open(`Triggered analysis for ${res.triggered_count} domains`, 'Close', { duration: 3000 });
       },
-      error: (err) => {
+      error: (err: any) => {
         this.snackBar.open('Failed to trigger analysis', 'Close', { duration: 3000 });
       }
     });
@@ -123,10 +123,10 @@ export class ImportComponent implements OnInit, OnDestroy {
 
   triggerBulkRank() {
     this.api.triggerBulkRankAnalysis().subscribe({
-      next: (res) => {
+      next: (res: any) => {
         this.snackBar.open(`Triggered bulk rank for ${res.triggered_count} domains`, 'Close', { duration: 3000 });
       },
-      error: (err) => {
+      error: (err: any) => {
         this.snackBar.open('Failed to trigger bulk rank', 'Close', { duration: 3000 });
       }
     });
