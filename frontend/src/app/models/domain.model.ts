@@ -464,6 +464,15 @@ export interface NamecheapAnalysisResponse {
     error_count: number;
 }
 
+export interface Project {
+    id: string;
+    name: string;
+    description: string;
+    base_prompt?: string;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface Auction {
     id: string;
     domain: string;
