@@ -160,6 +160,26 @@ export class ApiService {
     );
   }
 
+  getLatestActiveUploadProgress(): Observable<Models.AuctionUploadProgress> {
+    return this.http.get<Models.AuctionUploadProgress>(`${this.baseUrl}/auctions/upload-progress/latest-active`);
+  }
+
+  getUploadProgress(jobId: string): Observable<Models.AuctionUploadProgress> {
+    return this.http.get<Models.AuctionUploadProgress>(`${this.baseUrl}/auctions/upload-progress/${jobId}`);
+  }
+
+  markUploadJobAsFailed(jobId: string, errorMessage?: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/auctions/upload-progress/${jobId}/mark-failed`, { error_message: errorMessage });
+  }
+
+  triggerAuctionsAnalysis(limit: number = 100): Observable<Models.AuctionTriggerResponse> {
+    return this.http.post<Models.AuctionTriggerResponse>(`${this.baseUrl}/auctions/trigger-analysis?limit=${limit}`, {});
+  }
+
+  triggerBulkRankAnalysis(limit: number = 1000): Observable<Models.AuctionTriggerResponse> {
+    return this.http.post<Models.AuctionTriggerResponse>(`${this.baseUrl}/auctions/trigger-bulk-rank?limit=${limit}`, {});
+  }
+
   /**
    * Utility Methods
    */

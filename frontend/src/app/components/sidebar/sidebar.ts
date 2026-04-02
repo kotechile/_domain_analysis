@@ -1,7 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { LucideAngularModule, Search, Table, Settings, CreditCard, ChevronRight, LayoutDashboard, BrainCircuit, History } from 'lucide-angular';
+import { LucideAngularModule, Search, Table, Settings, CreditCard, ChevronRight, LayoutDashboard, BrainCircuit, History, Activity } from 'lucide-angular';
 import { SupabaseService } from '../../services/supabase';
 import { CreditService } from '../../services/credit';
 
@@ -55,11 +55,13 @@ export class SidebarComponent {
   readonly LayoutDashboard = LayoutDashboard;
   readonly BrainCircuit = BrainCircuit;
   readonly History = History;
+  readonly Activity = Activity;
 
   navItems = [
     { path: '/', label: 'Deep Analysis', icon: BrainCircuit },
     { path: '/reports', label: 'Recent Scans', icon: History },
     { path: '/marketplace', label: 'Marketplace', icon: Table },
+    { path: '/import', label: 'Import Dashboard', icon: Activity },
     { path: '/billing', label: 'Billing & Credits', icon: CreditCard },
     { path: '/themes', label: 'Settings & UI', icon: Settings }
   ];

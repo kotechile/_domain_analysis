@@ -99,7 +99,23 @@ class DomainScoringService:
             return parts[0].lower(), '.' + parts[1].lower()
         return domain_name.lower(), ''
     
-    def _stage1_filter(self, domain: NamecheapDomain) -> Tuple[bool, Optional[str]]:
+    def score_domain(self, domain: NamecheapDomain, fast_mode: bool = False) -> ScoredDomain:
+        """
+        Score a domain based on filters and metrics
+        Returns: ScoredDomain object
+        """
+        # 1. Stage 1: Filtering
+        passed, reason = self._stage1_filter(domain, fast_mode=fast_mode)
+        
+        if not passed:
+            return ScoredDomain(domain=domain, filter_status='FAIL', filter_reason=reason, total_meaning_score=0.0)
+        
+        # 2. Stage 2: Scoring
+        meaning_score = self._calculate_semantic_value(domain, fast_mode=fast_mode)
+        
+        return ScoredDomain(domain=domain, filter_status='PASS', filter_reason=None, total_meaning_score=meaning_score)
+    
+    def _stage1_filter(self, domain: NamecheapDomain, fast_mode: bool = False) -> Tuple[bool, Optional[str]]:
         """
         Stage 1: Absolute filtering (hard stops)
         Returns: (passed, reason_if_failed)
@@ -125,7 +141,7 @@ class DomainScoringService:
             return False, f"Contains more than {self.max_numbers} numbers"
         
         # ) Filter 3.5: Pronunciation (tokenization
-        tokens = self._tokenize_domain(name_part)
+        tokens = self._tokenize_domain(name_part, fast_mode=fast_mode)
         if not tokens:
             return False, "Could not tokenize domain"
         
@@ -137,7 +153,7 @@ class DomainScoringService:
         
         return True, None
     
-    def _tokenize_domain(self, domain_name: str) -> List[str]:
+    def _tokenize_domain(self, domain_name: str, fast_mode: bool = False) -> List[str]:
         """Tokenize domain name into words. Optimized to use fast regex first."""
         if not domain_name:
             return []
@@ -148,8 +164,8 @@ class DomainScoringService:
         if tokens:
             return tokens
             
-        # 2. Try spaCy as a heavy fallback
-        if self.nlp:
+        # 2. Try spaCy as a heavy fallback - SKIP if in fast_mode
+        if not fast_mode and self.nlp:
             try:
                 doc = self.nlp(domain_name)
                 # Extract tokens that are alphabetic
@@ -158,9 +174,8 @@ class DomainScoringService:
                     return tokens
             except Exception as e:
                 logger.warning("spaCy tokenization failed", domain=domain_name, error=str(e))
-        
-        # 3. Last resort: return as single token
-        return [domain_name]
+                
+        return []
     
     def _calculate_age_score(self, domain: NamecheapDomain) -> float:
         """Calculate age score based on registered_date"""

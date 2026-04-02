@@ -415,11 +415,14 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
 
             # Loop through iterator
             total_processed_so_far = 0
+            is_namecheap = auction_site.lower() == 'namecheap'
+            
             for auction_input in iterator:
                 total_processed_so_far += 1
                 
-                # Update progress in DB every 1000 records (including skipped/filtered)
-                if total_processed_so_far % 1000 == 0:
+                # Update progress in DB every 100 records (including skipped/filtered)
+                # This makes the dashboard MUCH more responsive for large files
+                if total_processed_so_far % 100 == 0:
                     try:
                         await db.update_csv_upload_progress( 
                             job_id=job_id, 
@@ -428,9 +431,14 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                             current_stage='streaming',
                             total_records=total_records if total_records > 0 else total_processed_so_far + 100 
                         )
-                        await asyncio.sleep(0.01) # Yield control
+                        # Yield control to event loop more frequently
+                        await asyncio.sleep(0.005)
                     except Exception:
                         pass
+                
+                # Periodically log to stdout so Coolify logs show life
+                if total_processed_so_far % 5000 == 0:
+                    logger.info("Importing records...", job_id=job_id, processed=total_processed_so_far, total_est=total_records)
 
                 try:
                     auction = auction_input.to_auction()
@@ -440,14 +448,14 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     expiration_date = auction.expiration_date
 
                     # Filter: Skip auctions that expire more than 2 weeks in the future
-                    if expiration_date and auction_site.lower() == 'namecheap':
+                    if expiration_date and is_namecheap:
                         if expiration_date.tzinfo is None:
                             expiration_date = expiration_date.replace(tzinfo=timezone.utc)
                         two_weeks_from_now = datetime.now(timezone.utc) + timedelta(days=14)
                         if expiration_date > two_weeks_from_now:
                             skipped_count += 1
                             continue
-                    elif not expiration_date and auction_site.lower() == 'namecheap':
+                    elif not expiration_date and is_namecheap:
                         # Namecheap records should have expiration dates - skip if missing
                         logger.debug("Skipping Namecheap record without expiration date", domain=auction.domain)
                         skipped_count += 1
@@ -459,11 +467,18 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     
                     expiration_date_iso = expiration_date.isoformat() if expiration_date else None
 
-                    namecheap_domain = NamecheapDomain( name=auction.domain, registered_date=None, # Extract from source_data if needed
-                        url=None, start_date=auction.start_date, end_date=auction.expiration_date, price=None )
+                    # Prepare for scoring
+                    namecheap_domain = NamecheapDomain( 
+                        name=auction.domain, 
+                        registered_date=None, 
+                        url=None, 
+                        start_date=auction.start_date, 
+                        end_date=auction.expiration_date, 
+                        price=None 
+                    )
                     
-                    # Score
-                    scored = scoring_service.score_domain(namecheap_domain)
+                    # Score - Use fast_mode for Namecheap because files are too big for full NLP
+                    scored = scoring_service.score_domain(namecheap_domain, fast_mode=is_namecheap)
                     scored_count += 1
                     
                     if scored.filter_status == 'PASS':

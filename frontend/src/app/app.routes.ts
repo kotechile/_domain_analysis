@@ -8,12 +8,14 @@ import { LoginComponent } from './pages/login/login';
 import { AuthCallbackComponent } from './pages/auth-callback/auth-callback';
 import { AuthGuard } from './guards/auth.guard';
 import { ReportsListComponent } from './pages/reports-list/reports-list';
+import { ImportComponent } from './pages/import/import';
 
 export const routes: Routes = [
     { path: 'login', component: LoginComponent },
     { path: 'auth/callback', component: AuthCallbackComponent },
     { path: '', component: DomainAnalysisComponent, canActivate: [AuthGuard] },
     { path: 'marketplace', component: MarketplaceComponent, canActivate: [AuthGuard] },
+    { path: 'import', component: ImportComponent, canActivate: [AuthGuard] },
     { path: 'reports', component: ReportsListComponent, canActivate: [AuthGuard] },
     { path: 'reports/:domain', component: ReportDetailComponent, canActivate: [AuthGuard] },
     { path: 'billing', component: BillingComponent, canActivate: [AuthGuard] },

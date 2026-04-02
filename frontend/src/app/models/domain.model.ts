@@ -508,7 +508,7 @@ export interface AuctionUploadResponse {
 export interface AuctionUploadProgress {
     success: boolean;
     job_id: string;
-    status: 'pending' | 'parsing' | 'processing' | 'completed' | 'failed';
+    status: 'pending' | 'waiting_for_lock' | 'parsing' | 'processing' | 'completed' | 'failed';
     filename: string;
     auction_site: string;
     total_records: number;
