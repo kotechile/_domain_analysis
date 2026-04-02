@@ -568,3 +568,9 @@ export interface PurchaseResponse {
     new_balance: number;
     message: string;
 }
+
+export interface AuctionTriggerResponse {
+    success: boolean;
+    triggered_count: number;
+    message: string;
+}
