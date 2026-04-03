@@ -28,7 +28,7 @@ RUN npm ci --prefer-offline --no-audit
 COPY . .
 
 # Build the Angular application
-RUN npm run build
+RUN npm run build > /tmp/build.log 2>&1 || { cat /tmp/build.log; exit 1; }
 
 # Verify build output exists
 RUN ls -la /app/dist/angular-version/browser
