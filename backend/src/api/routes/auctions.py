@@ -389,11 +389,14 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                 for record in batch:
                     # Create a clean dict for staging
                     staging_record = {k: v for k, v in record.items() if k not in ['ranking']}
-                    
+
+                    # Add job_id for merge isolation
+                    staging_record['job_id'] = job_id
+
                     # Cleanup specific fields
                     if 'offer_type' in staging_record and not staging_record['offer_type']:
                          del staging_record['offer_type']
-                         
+
                     staging_batch.append(staging_record)
                 
                 # Retry logic for insert
@@ -774,7 +777,11 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
              batch_size = 500
              for i in range(0, len(auction_dicts), batch_size):
                  batch = auction_dicts[i:i + batch_size]
-                 staging_batch = [{k: v for k, v in r.items() if k != 'ranking'} for r in batch]
+                 staging_batch = []
+                 for r in batch:
+                     s = {k: v for k, v in r.items() if k != 'ranking'}
+                     s['job_id'] = job_id  # Add job_id for merge isolation
+                     staging_batch.append(s)
                  
                  client = await db._get_client()
                  retries = 3
