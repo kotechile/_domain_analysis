@@ -608,7 +608,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
             # 5. Success
             end_mem = process.memory_info().rss / 1024 / 1024 if 'process' in locals() and process else None
             logger.info(f"[CSV UPLOAD COMPLETE] {job_id}", processed=processed_count, skipped=skipped_count, merged=merged_count, end_memory_mb=end_mem)
-            await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=processed_count, skipped_count=skipped_count, completed=True )
+            await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=processed_count, skipped_count=skipped_count, inserted_count=merged_count, completed=True )
 
     except Exception as e:
         import traceback
@@ -805,7 +805,7 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
         # Final update
         end_mem = process.memory_info().rss / 1024 / 1024 if 'process' in locals() and process else None
         logger.info(f"[JSON UPLOAD COMPLETE] {job_id}", total=total_records, merged=merged_count, end_memory_mb=end_mem)
-        await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=total_records, completed=True )
+        await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=total_records, inserted_count=merged_count, completed=True )
         
     except Exception as e:
         import traceback
