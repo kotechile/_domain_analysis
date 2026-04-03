@@ -181,7 +181,15 @@ class DatabaseService:
             except Exception as e:
                 # Log but continue - some might already exist or RPC might fail for specific reasons
                 logger.debug("Failed to execute individual SQL statement", sql=sql[:50], error=str(e))
-        
+
+        # Notify PostgREST to reload schema cache after ALTER TABLE changes
+        # This is critical for bulk uploads - without this, new columns won't be visible to PostgREST
+        try:
+            await client.rpc('exec_sql', {'sql': "NOTIFY pgrst, 'reload schema';"}).execute()
+            logger.info("PostgREST schema cache reload triggered")
+        except Exception as e:
+            logger.debug("Failed to trigger PostgREST schema reload", error=str(e))
+
         logger.info("Database tables verification completed")
     
     async def _create_indexes(self):

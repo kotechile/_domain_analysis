@@ -196,6 +196,30 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str, offe
         # 2. Prepare for upsert to main table
         # ON CONFLICT DO UPDATE command cannot affect row a second time" error.
         unique_records = {}
+
+        # Pre-fetch existing domains to preserve their scores and source_data
+        existing_domains = set()
+        for r in records:
+            key = (r.get('domain'), r.get('auction_site'), r.get('expiration_date'))
+            existing_domains.add(key)
+
+        # Fetch existing scores and source_data in batch
+        existing_data = {}
+        if existing_domains:
+            # Build query for existing domains
+            client = await db._get_client()
+            for key in existing_domains:
+                domain, auction_site, exp_date = key
+                try:
+                    existing_result = await client.table('auctions').select('domain', 'score', 'source_data').eq('domain', domain).eq('auction_site', auction_site).eq('expiration_date', exp_date).limit(1).execute()
+                    if existing_result.data:
+                        existing_data[key] = {
+                            'score': existing_result.data[0].get('score'),
+                            'source_data': existing_result.data[0].get('source_data')
+                        }
+                except Exception:
+                    pass
+
         for r in records:
             # Key must match the database unique constraint: domain + auction_site + expiration_date
             key = (r.get('domain'), r.get('auction_site'), r.get('expiration_date'))
@@ -206,12 +230,27 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str, offe
             if not link and isinstance(source_data, dict):
                 link = source_data.get('link')
 
-            clean_r = { 'domain': r.get('domain'), 'start_date': r.get('start_date'), 'expiration_date': r.get('expiration_date'), 'auction_site': r.get('auction_site'), 'current_bid': r.get('current_bid'), 'source_data': r.get('source_data'), 'link': link, 'offer_type': r.get('offer_type'), 'score': r.get('score'), 'first_seen': r.get('first_seen'), 'to_delete': False } # Unflag - this record is still present
-            # Remove keys with None values to let Supabase/Postgres handle defaults/preservation
-            clean_r = {k: v for k, v in clean_r.items() if v is not None}
+            # Preserve existing score and source_data for updates (new records have None)
+            preserved = existing_data.get(key, {})
+            existing_score = preserved.get('score')
+            existing_source = preserved.get('source_data')
 
-            # NOTE: We EXPLICITLY do NOT include 'has_statistics', 'page_statistics', or 'traffic_data'
-            # to prevent overwriting them with nulls. # Overwrite existing - assuming later records in batch might be newer or identical
+            # For new records: score is None (will be scored later), source_data is from file
+            # For existing records: keep their score and source_data
+            clean_r = { 'domain': r.get('domain'), 'start_date': r.get('start_date'), 'expiration_date': r.get('expiration_date'), 'auction_site': r.get('auction_site'), 'current_bid': r.get('current_bid'), 'link': link, 'offer_type': r.get('offer_type'), 'first_seen': r.get('first_seen'), 'to_delete': False }
+
+            # Only include score if it's not None (new records have None, existing keep their score)
+            if r.get('score') is not None:
+                clean_r['score'] = r.get('score')
+            elif existing_score is not None:
+                clean_r['score'] = existing_score
+
+            # Only include source_data if it has meaningful data
+            if r.get('source_data') is not None:
+                clean_r['source_data'] = r.get('source_data')
+            elif existing_source is not None:
+                clean_r['source_data'] = existing_source
+
             unique_records[key] = clean_r
 
         main_records = list(unique_records.values())
@@ -259,6 +298,108 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str, offe
         logger.warning("Failed to delete flagged auctions after merge", job_id=job_id, site=auction_site, error=str(e))
 
     return total_merged
+
+
+async def _score_new_domains_after_merge(db, auction_site: str, scoring_service, job_id: str, fast_mode: bool = False) -> int:
+    """
+    Score only NEW domains that were just inserted (score is NULL).
+    Existing domains kept their previous score.
+
+    OPTIMIZED: Uses batch SELECT and batch UPDATE to minimize SSL connections.
+    """
+    logger.info("Starting post-merge scoring for new domains", job_id=job_id, auction_site=auction_site, fast_mode=fast_mode)
+
+    total_scored = 0
+    BATCH_SIZE = 200  # Fetch and score in batches
+    MAX_UPDATE_BATCH = 50  # Smaller batches for DB updates to avoid SSL issues
+
+    while True:
+        # Fetch unprocessed/new domains (score is NULL)
+        result = await (await db._get_client()).table('auctions').select(
+            'domain', 'expiration_date', 'start_date'
+        ).eq('auction_site', auction_site).is_('score', None).limit(BATCH_SIZE).execute()
+
+        if not result.data:
+            break
+
+        domains_to_score = result.data
+        logger.info("Found domains needing scoring", job_id=job_id, count=len(domains_to_score), total_scored=total_scored)
+
+        # Score all domains in the batch first
+        scored_domains = []
+        for record in domains_to_score:
+            try:
+                domain_name = record['domain']
+
+                # Create NamecheapDomain for scoring
+                namecheap_domain = NamecheapDomain(
+                    name=domain_name,
+                    registered_date=None,
+                    url=None,
+                    start_date=record.get('start_date'),
+                    end_date=record.get('expiration_date'),
+                    price=None
+                )
+
+                # Score the domain
+                scored = scoring_service.score_domain(namecheap_domain, fast_mode=fast_mode)
+                score_value = scored.total_meaning_score if scored.total_meaning_score is not None else None
+
+                scored_domains.append({
+                    'domain': domain_name,
+                    'score': score_value,
+                    'expiration_date': record.get('expiration_date')
+                })
+
+            except Exception as e:
+                logger.warning("Failed to score domain during post-merge", domain=record.get('domain'), error=str(e))
+                # Still include with None score so we don't get stuck
+                scored_domains.append({
+                    'domain': record.get('domain'),
+                    'score': None,
+                    'expiration_date': record.get('expiration_date')
+                })
+
+        # Batch update - use smaller sub-batches to avoid SSL issues
+        for i in range(0, len(scored_domains), MAX_UPDATE_BATCH):
+            sub_batch = scored_domains[i:i + MAX_UPDATE_BATCH]
+            try:
+                # Update each domain individually but in small batches
+                for sd in sub_batch:
+                    await (await db._get_client()).table('auctions').update({
+                        'score': sd['score'],
+                        'processed': True
+                    }).eq('domain', sd['domain']).eq('auction_site', auction_site).eq('expiration_date', sd['expiration_date']).execute()
+                    total_scored += 1
+            except Exception as e:
+                logger.warning("Batch update failed, falling back to individual updates", error=str(e))
+                # Fallback to individual updates
+                for sd in sub_batch:
+                    try:
+                        await (await db._get_client()).table('auctions').update({
+                            'score': sd['score'],
+                            'processed': True
+                        }).eq('domain', sd['domain']).eq('auction_site', auction_site).eq('expiration_date', sd['expiration_date']).execute()
+                        total_scored += 1
+                    except Exception:
+                        pass
+
+            # Small delay between batches to let SSL settle
+            await asyncio.sleep(0.5)
+
+        # Update progress periodically
+        try:
+            await db.update_csv_upload_progress(
+                job_id=job_id,
+                status='processing',
+                current_stage='scoring_new',
+                processed_records=total_scored
+            )
+        except Exception:
+            pass
+
+    logger.info("Post-merge scoring complete", job_id=job_id, auction_site=auction_site, total_scored=total_scored)
+    return total_scored
 
 
 async def process_csv_upload_async( job_id: str, csv_content: str, filename: str, auction_site: str, offering_type: Optional[str] = None, is_file: bool = False ):
@@ -358,27 +499,28 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                 else:
                     return 'auction'
 
-            logger.info("Starting streaming process", job_id=job_id, auction_site=auction_site)
-            
+            logger.info("Starting streaming process (FAST MODE - no scoring during upload)", job_id=job_id, auction_site=auction_site)
+
             # Get generator
             iterator = auctions_service.load_auctions_from_csv(csv_content, auction_site, filename, is_file=is_file)
-            
-            scoring_service = DomainScoringService()
-            
-            BATCH_SIZE = 500
+
+            # NOTE: We skip scoring during streaming for performance.
+            # Scoring will be done AFTER merge for only NEW domains.
+            # Existing domains keep their score from previous imports.
+
+            BATCH_SIZE = 1000  # Larger batches since we're just inserting, not scoring
             batch_list = []
             processed_count = 0
-            scored_count = 0
             passed_count = 0
             failed_count = 0
             skipped_count = 0
-            
+
             # For NameSilo type stats
             namesilo_type_counts = {}
             error_message = None
             
             async def process_batch(batch, is_last=False):
-                nonlocal processed_count, scored_count, passed_count, failed_count, skipped_count
+                nonlocal processed_count, passed_count, failed_count, skipped_count
                 
                 if not batch:
                     return
@@ -482,27 +624,9 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     
                     expiration_date_iso = expiration_date.isoformat() if expiration_date else None
 
-                    # Prepare for scoring
-                    namecheap_domain = NamecheapDomain( 
-                        name=auction.domain, 
-                        registered_date=None, 
-                        url=None, 
-                        start_date=auction.start_date, 
-                        end_date=auction.expiration_date, 
-                        price=None 
-                    )
-                    
-                    # Score - Use fast_mode for Namecheap because files are too big for full NLP
-                    scored = scoring_service.score_domain(namecheap_domain, fast_mode=is_namecheap)
-                    scored_count += 1
-                    
-                    if scored.filter_status == 'PASS':
-                        passed_count += 1
-                    else:
-                        failed_count += 1
+                    # NOTE: We skip scoring during streaming for performance.
+                    # Score will be NULL for all records - we'll score only NEW domains after merge.
 
-                    score_value = scored.total_meaning_score if scored.total_meaning_score is not None else None
-                    
                     # Determine offer_type
                     record_offer_type = offering_type
                     if auction_site.lower() == 'namesilo':
@@ -540,7 +664,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                          if reg_date_str:
                              first_seen_date = reg_date_str # Already string or parsed? AuctionInput source_data is dict of strings mostly
                     
-                    auction_dict = { 'domain': auction.domain, 'start_date': start_date_iso, 'expiration_date': expiration_date_iso, 'auction_site': auction.auction_site, 'current_bid': auction.current_bid, 'source_data': auction.source_data, 'link': auction.link, 'processed': True, 'preferred': False, 'has_statistics': False, 'score': score_value, 'ranking': None, 'first_seen': first_seen_date, 'to_delete': False, # Default
+                    auction_dict = { 'domain': auction.domain, 'start_date': start_date_iso, 'expiration_date': expiration_date_iso, 'auction_site': auction.auction_site, 'current_bid': auction.current_bid, 'source_data': auction.source_data, 'link': auction.link, 'processed': False, 'preferred': False, 'has_statistics': False, 'score': None, 'ranking': None, 'first_seen': first_seen_date, 'to_delete': False, # Default - processed=False means needs scoring
                         'offer_type': record_offer_type, 'job_id': job_id }
                     
                     batch_list.append(auction_dict)
@@ -558,18 +682,18 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     if not error_message:
                         error_message = f"Record failure ({getattr(auction_input, 'domain', '?')}): {str(e)}"
             
-            # FINAL: Sync processed_count to what we actually looped through
-            processed_count = scored_count
-            
+            # FINAL: Sync processed_count
+            processed_count = total_processed_so_far
+
             # Process remaining
             if batch_list:
                 logger.info("Processing final batch", job_id=job_id, count=len(batch_list))
                 await process_batch(batch_list, is_last=True)
-                
-            logger.info("Streaming complete", job_id=job_id, processed=processed_count, passed=passed_count, failed=failed_count, skipped=skipped_count)
-            
+
+            logger.info("Streaming complete (FAST MODE - no scoring)", job_id=job_id, processed=processed_count, skipped=skipped_count)
+
             # Use final stats for the report
-            final_processed_for_report = scored_count + skipped_count
+            final_processed_for_report = processed_count + skipped_count
             
             if final_processed_for_report == 0:
                  # Empty file case
@@ -589,21 +713,39 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
             )
             
             logger.info("Merging staging to main table (using python chunked merge)", job_id=job_id)
-            
+
             try:
                  # Use the Python-based chunked merge helper instead of RPC
                  # This aligns with the JSON upload logic which is working correctly
-                 
+
                  # Use the same cleanup strategy as the Mark phase
                  cleanup_type = offering_type
                  if auction_site.lower() in ['godaddy', 'namesilo']:
                      cleanup_type = None
-                     
+
                  merged_count = await _perform_python_chunked_merge(db, auction_site, job_id, cleanup_type)
-                 
+
                  merge_stats = {'inserted': merged_count, 'updated': 0}
                  logger.info("Merge complete", stats=merge_stats)
-                 
+
+                 # =====================================================
+                 # POST-MERGE SCORING: Score only NEW domains (fast!)
+                 # Existing domains kept their score, new domains have NULL score
+                 # =====================================================
+                 await db.update_csv_upload_progress(
+                     job_id=job_id,
+                     status='processing',
+                     current_stage='scoring_new',
+                     processed_records=final_processed_for_report
+                 )
+
+                 scoring_service = DomainScoringService()
+                 scored_new_count = await _score_new_domains_after_merge(
+                     db, auction_site, scoring_service, job_id,
+                     fast_mode=(auction_site.lower() == 'namecheap')
+                 )
+                 logger.info("Post-merge scoring complete", job_id=job_id, new_domains_scored=scored_new_count)
+
             except Exception as merge_err:
                  logger.error("Merge failed", error=str(merge_err), job_id=job_id)
                  raise merge_err
