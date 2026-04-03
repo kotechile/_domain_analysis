@@ -29,6 +29,95 @@ router = APIRouter()
 # Global lock to prevent multiple concurrent uploads from saturating CPU/DB
 _upload_status_lock = asyncio.Lock()
 
+# Number of parallel staging tables for concurrent inserts
+NUM_STAGING_TABLES = 5
+
+
+def get_staging_table_index(domain: str) -> int:
+    """
+    Get staging table index (0-4) for a given domain using hash-based partitioning.
+    Same domain always maps to same table for idempotent inserts.
+    """
+    return abs(hash(domain)) % NUM_STAGING_TABLES
+
+
+def get_staging_table_name(index: int) -> str:
+    """Get staging table name for given index."""
+    return f"auctions_staging_{index}"
+
+
+async def _clear_staging_table_chunked(db, staging_index: int, job_id: str):
+    """
+    Clear a specific staging table (by index) in chunks to avoid statement timeouts.
+    """
+    table_name = get_staging_table_name(staging_index)
+    logger.info(f"Clearing staging table {table_name} in chunks", job_id=job_id, staging_index=staging_index)
+    total_cleared = 0
+
+    while True:
+        client = await db._get_client()
+        clear_res = await client.table(table_name).select('domain').eq('job_id', job_id).limit(5000).execute()
+        if not clear_res.data:
+            break
+
+        domains_to_del = [r['domain'] for r in clear_res.data]
+        for j in range(0, len(domains_to_del), 100):
+            sub_domains = domains_to_del[j:j + 100]
+            await client.table(table_name).delete().eq('job_id', job_id).in_('domain', sub_domains).execute()
+
+        total_cleared += len(domains_to_del)
+        await asyncio.sleep(0.01)
+
+    logger.info(f"Staging table {table_name} cleared", job_id=job_id, staging_index=staging_index, total=total_cleared)
+    return total_cleared
+
+
+async def _clear_all_staging_tables_chunked(db, job_id: str):
+    """
+    Clear all 5 staging tables for a given job_id.
+    Used for cleanup on failure.
+    """
+    logger.info("Clearing all staging tables", job_id=job_id)
+    tasks = [_clear_staging_table_chunked(db, i, job_id) for i in range(NUM_STAGING_TABLES)]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    total = sum(r for r in results if isinstance(r, int))
+    failed = [i for i, r in enumerate(results) if isinstance(r, Exception)]
+
+    if failed:
+        logger.warning("Some staging tables failed to clear", job_id=job_id, failed_tables=failed)
+
+    return total
+
+
+async def _perform_rpc_merge(db, auction_site: str, job_id: str, staging_suffix: int, offering_type: str = None) -> int:
+    """
+    Merge from a specific staging table using the SQL delta merge RPC function.
+    Returns number of new domains inserted (for scoring tracking).
+    """
+    logger.info(f"Starting RPC merge for staging table {staging_suffix}", job_id=job_id, site=auction_site)
+
+    client = await db._get_client()
+
+    try:
+        result = await client.rpc('merge_auctions_delta_from_staging', {
+            'p_job_id': job_id,
+            'p_auction_site': auction_site,
+            'p_staging_table_suffix': staging_suffix,
+            'p_offering_type': offering_type
+        }).execute()
+
+        if result.data:
+            new_domains = [r for r in result.data if r.get('is_new')]
+            logger.info(f"RPC merge complete", job_id=job_id, staging_table=staging_suffix, new_domains=len(new_domains))
+            return len(new_domains)
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"RPC merge failed for staging table {staging_suffix}", job_id=job_id, error=str(e))
+        raise
+
 
 @router.get("/auctions/troubleshoot-uploads")
 async def troubleshoot_uploads( limit: int = 10 ):
@@ -455,11 +544,11 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
             # Update status to parsing
             await db.update_csv_upload_progress( job_id=job_id, status='parsing', current_stage='parsing', total_records=total_records if total_records > 0 else None )
         
-            # 2. Clear Staging for this Job ID to ensure clean slate
+            # 2. Clear ALL 5 staging tables for this Job ID to ensure clean slate
             try:
-                await _clear_staging_chunked(db, auction_site, job_id)
+                await _clear_all_staging_tables_chunked(db, job_id)
             except Exception as e:
-                logger.warning("Failed to clear staging (might be empty), continuing", job_id=job_id, error=str(e))
+                logger.warning("Failed to clear staging tables (might be empty), continuing", job_id=job_id, error=str(e))
 
             # 2.5 Mark all existing auctions for this site with to_delete=true
             # Records still present in new files will be unflagged during merge
@@ -509,7 +598,6 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
             # Existing domains keep their score from previous imports.
 
             BATCH_SIZE = 1000  # Larger batches since we're just inserting, not scoring
-            batch_list = []
             processed_count = 0
             passed_count = 0
             failed_count = 0
@@ -518,61 +606,67 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
             # For NameSilo type stats
             namesilo_type_counts = {}
             error_message = None
-            
-            async def process_batch(batch, is_last=False):
-                nonlocal processed_count, passed_count, failed_count, skipped_count
-                
+
+            # Parallel staging architecture: 5 insert queues, one per staging table
+            insert_queues = {i: [] for i in range(NUM_STAGING_TABLES)}
+            insert_tasks = []
+            insert_errors = []
+
+            async def insert_worker(staging_index: int):
+                """Background worker that inserts batches to specific staging table."""
+                nonlocal insert_errors
+                table_name = get_staging_table_name(staging_index)
+                client = await db._get_client()
+
+                while True:
+                    await asyncio.sleep(0.01)  # Poll for batches
+
+                    if not insert_queues[staging_index]:
+                        continue
+
+                    batch = insert_queues[staging_index]
+                    insert_queues[staging_index] = []
+
+                    if not batch:
+                        continue
+
+                    try:
+                        # Retry logic
+                        for attempt in range(3):
+                            try:
+                                await client.table(table_name).insert(batch).execute()
+                                break
+                            except Exception as e:
+                                if attempt == 2:
+                                    insert_errors.append((staging_index, str(e)))
+                                    raise
+                                await asyncio.sleep(2 ** attempt)
+                    except Exception as e:
+                        insert_errors.append((staging_index, str(e)))
+                        return
+
+            # Start 5 insert workers
+            for i in range(NUM_STAGING_TABLES):
+                insert_tasks.append(asyncio.create_task(insert_worker(i)))
+
+            async def process_batch_parallel(batch):
+                """Partition batch across staging tables and queue for insert."""
+                nonlocal processed_count
+
                 if not batch:
                     return
 
-                # Insert into staging
-                # Prepare staging records (remove 'ranking', 'score' if None, etc.)
-                staging_batch = []
                 for record in batch:
-                    # Create a clean dict for staging
-                    staging_record = {k: v for k, v in record.items() if k not in ['ranking']}
+                    # Route to appropriate staging table based on domain hash
+                    staging_idx = get_staging_table_index(record.get('domain', ''))
+                    insert_queues[staging_idx].append(record)
 
-                    # Add job_id for merge isolation
-                    staging_record['job_id'] = job_id
-
-                    # Cleanup specific fields
-                    if 'offer_type' in staging_record and not staging_record['offer_type']:
-                         del staging_record['offer_type']
-
-                    staging_batch.append(staging_record)
-                
-                # Retry logic for insert
-                max_retries = 2
-                inserted = False
-                for retry in range(max_retries + 1):
-                    try:
-                        if retry > 0:
-                            await asyncio.sleep(1.0 * retry)
-                            
-                        await (await db._get_client()).table('auctions_staging').insert(staging_batch).execute()
-                        inserted = True
-                        break
-                    except Exception as insert_err:
-                        if retry == max_retries:
-                             logger.error("Failed to insert batch to staging", job_id=job_id, error=str(insert_err))
-                             # We don't raise here to allow partial success if possible? 
-                             # Actually if staging insert fails, we probably should fail the job or at least log heavily
-                
-                if inserted:
-                    processed_count += len(batch)
-                    
-                    # Update progress
-                    # Yield control
-                    await asyncio.sleep(0.01)
-                    
-                    try:
-                        await db.update_csv_upload_progress( job_id=job_id, status='processing', processed_records=processed_count, current_stage='processing_batch', total_records=total_records if total_records > 0 else processed_count ) # Update total if we go over
-                    except Exception:
-                        pass # Ignore progress update errors
+                processed_count += len(batch)
 
             # Loop through iterator
             total_processed_so_far = 0
             is_namecheap = auction_site.lower() == 'namecheap'
+            batch_list = []
             
             for auction_input in iterator:
                 total_processed_so_far += 1
@@ -670,7 +764,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     batch_list.append(auction_dict)
                     
                     if len(batch_list) >= BATCH_SIZE:
-                        await process_batch(batch_list)
+                        await process_batch_parallel(batch_list)
                         batch_list = []
                         # Log progress to stdout for observability
                         logger.info("Processed batch", job_id=job_id, count=processed_count, total_estimated=total_records)
@@ -682,19 +776,33 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                     if not error_message:
                         error_message = f"Record failure ({getattr(auction_input, 'domain', '?')}): {str(e)}"
             
-            # FINAL: Sync processed_count
-            processed_count = total_processed_so_far
-
-            # Process remaining
+            # Process remaining batch
             if batch_list:
-                logger.info("Processing final batch", job_id=job_id, count=len(batch_list))
-                await process_batch(batch_list, is_last=True)
+                await process_batch_parallel(batch_list)
+                batch_list = []
+
+            # Give workers time to process remaining batches
+            await asyncio.sleep(1.0)
+
+            # Cancel workers
+            for t in insert_tasks:
+                if not t.done():
+                    t.cancel()
+
+            # Wait for workers to finish
+            await asyncio.gather(*insert_tasks, return_exceptions=True)
+
+            # Check for insert errors
+            if insert_errors:
+                logger.error("Staging insert failed, cleaning up", job_id=job_id, errors=insert_errors)
+                await _clear_all_staging_tables_chunked(db, job_id)
+                raise Exception(f"Staging insert failed: {insert_errors}")
 
             logger.info("Streaming complete (FAST MODE - no scoring)", job_id=job_id, processed=processed_count, skipped=skipped_count)
 
             # Use final stats for the report
             final_processed_for_report = processed_count + skipped_count
-            
+
             if final_processed_for_report == 0:
                  # Empty file case
                  error_msg = f"CSV file is empty or contains no valid records. Site: {auction_site}"
@@ -702,58 +810,59 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                  await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg )
                  return
 
-            # 4. Merge Staging to Main
-            await db.update_csv_upload_progress( 
-                job_id=job_id, 
-                status='processing', 
-                current_stage='merging', 
-                processed_records=final_processed_for_report, 
+            # 4. Merge Staging to Main (sequential merge 0→4)
+            await db.update_csv_upload_progress(
+                job_id=job_id,
+                status='processing',
+                current_stage='merging',
+                processed_records=final_processed_for_report,
                 skipped_count=skipped_count,
                 error_message=error_message if skipped_count > 0 else None
             )
-            
-            logger.info("Merging staging to main table (using python chunked merge)", job_id=job_id)
 
-            try:
-                 # Use the Python-based chunked merge helper instead of RPC
-                 # This aligns with the JSON upload logic which is working correctly
+            # Use the same cleanup strategy as the Mark phase
+            cleanup_type = offering_type
+            if auction_site.lower() in ['godaddy', 'namesilo']:
+                cleanup_type = None
 
-                 # Use the same cleanup strategy as the Mark phase
-                 cleanup_type = offering_type
-                 if auction_site.lower() in ['godaddy', 'namesilo']:
-                     cleanup_type = None
+            # Sequential merge (table 0→4)
+            total_merged = 0
+            for staging_idx in range(NUM_STAGING_TABLES):
+                table_name = get_staging_table_name(staging_idx)
+                logger.info(f"Merging staging table {table_name}", job_id=job_id)
 
-                 merged_count = await _perform_python_chunked_merge(db, auction_site, job_id, cleanup_type)
+                try:
+                    merged = await _perform_rpc_merge(db, auction_site, job_id, staging_idx, cleanup_type)
+                    total_merged += merged
+                    logger.info(f"Merged {table_name}", job_id=job_id, count=merged)
+                except Exception as merge_err:
+                    logger.error(f"Merge failed for {table_name}", job_id=job_id, error=str(merge_err))
+                    raise
 
-                 merge_stats = {'inserted': merged_count, 'updated': 0}
-                 logger.info("Merge complete", stats=merge_stats)
+            logger.info("All staging tables merged", job_id=job_id, total_merged=total_merged)
 
-                 # =====================================================
-                 # POST-MERGE SCORING: Score only NEW domains (fast!)
-                 # Existing domains kept their score, new domains have NULL score
-                 # =====================================================
-                 await db.update_csv_upload_progress(
-                     job_id=job_id,
-                     status='processing',
-                     current_stage='scoring_new',
-                     processed_records=final_processed_for_report
-                 )
+            # =====================================================
+            # POST-MERGE SCORING: Score only NEW domains (fast!)
+            # Existing domains kept their score, new domains have NULL score
+            # =====================================================
+            await db.update_csv_upload_progress(
+                job_id=job_id,
+                status='processing',
+                current_stage='scoring_new',
+                processed_records=final_processed_for_report
+            )
 
-                 scoring_service = DomainScoringService()
-                 scored_new_count = await _score_new_domains_after_merge(
-                     db, auction_site, scoring_service, job_id,
-                     fast_mode=(auction_site.lower() == 'namecheap')
-                 )
-                 logger.info("Post-merge scoring complete", job_id=job_id, new_domains_scored=scored_new_count)
-
-            except Exception as merge_err:
-                 logger.error("Merge failed", error=str(merge_err), job_id=job_id)
-                 raise merge_err
+            scoring_service = DomainScoringService()
+            scored_new_count = await _score_new_domains_after_merge(
+                db, auction_site, scoring_service, job_id,
+                fast_mode=(auction_site.lower() == 'namecheap')
+            )
+            logger.info("Post-merge scoring complete", job_id=job_id, new_domains_scored=scored_new_count)
 
             # 5. Success
             end_mem = process.memory_info().rss / 1024 / 1024 if 'process' in locals() and process else None
-            logger.info(f"[CSV UPLOAD COMPLETE] {job_id}", processed=processed_count, skipped=skipped_count, merged=merged_count, end_memory_mb=end_mem)
-            await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=processed_count, skipped_count=skipped_count, inserted_count=merged_count, completed=True )
+            logger.info(f"[CSV UPLOAD COMPLETE] {job_id}", processed=processed_count, skipped=skipped_count, merged=total_merged, end_memory_mb=end_mem)
+            await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=processed_count, skipped_count=skipped_count, inserted_count=total_merged, completed=True )
 
     except Exception as e:
         import traceback
@@ -911,50 +1020,74 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
              except Exception as e:
                  logger.warning("Failed to mark records for deletion, continuing", job_id=job_id, error=str(e))
 
-             # Clear
-             # Use chunked delete helper
-             await _clear_staging_chunked(db, auction_site, job_id)
-             
-             # Insert in batches with retries for large networks payload stability
-             batch_size = 500
-             for i in range(0, len(auction_dicts), batch_size):
-                 batch = auction_dicts[i:i + batch_size]
-                 staging_batch = []
-                 for r in batch:
-                     s = {k: v for k, v in r.items() if k != 'ranking'}
-                     s['job_id'] = job_id  # Add job_id for merge isolation
-                     staging_batch.append(s)
-                 
-                 client = await db._get_client()
-                 retries = 3
-                 for attempt in range(retries):
-                     try:
-                         await client.table('auctions_staging').insert(staging_batch).execute()
-                         break
-                     except Exception as e:
-                         if attempt == retries - 1:
-                             raise
-                         logger.warning("SSL or network error during batch insert, retrying", attempt=attempt, error=str(e))
-                         await asyncio.sleep(2 ** attempt)
-                         
-                 # Small sleep to yield control
-                 await asyncio.sleep(0.01)
-             
-             # Merge using robust Python-based chunked merge (Sweep happens here)
-             cleanup_type = effective_offering_type
-             if auction_site.lower() in ['godaddy', 'namesilo']:
-                 cleanup_type = None
-                 
-             merged_count = await _perform_python_chunked_merge(db, auction_site, job_id, cleanup_type)
-             inserted_count = merged_count
-             deleted_count = 0  # logged inside _perform_python_chunked_merge
+             # Clear ALL 5 staging tables for this job_id
+             try:
+                 await _clear_all_staging_tables_chunked(db, job_id)
+             except Exception as e:
+                 logger.warning("Failed to clear staging tables, continuing", job_id=job_id, error=str(e))
 
-             logger.info(f"[JSON UPLOAD MERGE] {job_id}", merged=merged_count, total=total_records)
+             # Partition records across 5 staging tables
+             partitioned = {i: [] for i in range(NUM_STAGING_TABLES)}
+             for record in auction_dicts:
+                 staging_idx = get_staging_table_index(record.get('domain', ''))
+                 partitioned[staging_idx].append(record)
+
+             # Parallel insert to 5 staging tables using asyncio.gather
+             async def insert_to_staging(index: int, records: list) -> int:
+                 if not records:
+                     return 0
+                 table_name = get_staging_table_name(index)
+                 client = await db._get_client()
+
+                 # Add job_id to each record
+                 for r in records:
+                     r['job_id'] = job_id
+
+                 batch_size = 500
+                 for i in range(0, len(records), batch_size):
+                     batch = records[i:i + batch_size]
+                     for attempt in range(3):
+                         try:
+                             await client.table(table_name).insert(batch).execute()
+                             break
+                         except Exception:
+                             if attempt == 2:
+                                 raise
+                             await asyncio.sleep(2 ** attempt)
+                     await asyncio.sleep(0.01)
+
+                 return len(records)
+
+             # Execute parallel inserts
+             insert_tasks = [insert_to_staging(i, partitioned[i]) for i in range(NUM_STAGING_TABLES)]
+             insert_results = await asyncio.gather(*insert_tasks, return_exceptions=True)
+
+             # Check for failures
+             for i, result in enumerate(insert_results):
+                 if isinstance(result, Exception):
+                     logger.error(f"JSON parallel insert failed for table {i}", job_id=job_id, error=str(result))
+                     await _clear_all_staging_tables_chunked(db, job_id)
+                     raise result
+
+             logger.info(f"[JSON UPLOAD] Parallel insert complete", job_id=job_id)
+
+             # Sequential merge (table 0→4) using RPC
+             total_merged = 0
+             for staging_idx in range(NUM_STAGING_TABLES):
+                 try:
+                     merged = await _perform_rpc_merge(db, auction_site, job_id, staging_idx, cleanup_type)
+                     total_merged += merged
+                     logger.info(f"[JSON UPLOAD] Merged table {staging_idx}", job_id=job_id, count=merged)
+                 except Exception as merge_err:
+                     logger.error(f"[JSON UPLOAD] Merge failed for table {staging_idx}", job_id=job_id, error=str(merge_err))
+                     raise
+
+             logger.info(f"[JSON UPLOAD MERGE] {job_id}", merged=total_merged, total=total_records)
 
         # Final update
         end_mem = process.memory_info().rss / 1024 / 1024 if 'process' in locals() and process else None
-        logger.info(f"[JSON UPLOAD COMPLETE] {job_id}", total=total_records, merged=merged_count, end_memory_mb=end_mem)
-        await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=total_records, inserted_count=merged_count, completed=True )
+        logger.info(f"[JSON UPLOAD COMPLETE] {job_id}", total=total_records, merged=total_merged, end_memory_mb=end_mem)
+        await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=total_records, inserted_count=total_merged, completed=True )
         
     except Exception as e:
         import traceback
