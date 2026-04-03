@@ -264,7 +264,7 @@ async def _perform_python_chunked_merge(db, auction_site: str, job_id: str, offe
 async def process_csv_upload_async( job_id: str, csv_content: str, filename: str, auction_site: str, offering_type: Optional[str] = None, is_file: bool = False ):
     """
     Background task to process CSV upload with progress tracking using streaming
-    
+
     Args:
         job_id: Unique job identifier
         csv_content: CSV file content as string OR file path if is_file=True
@@ -272,16 +272,28 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
         auction_site: Auction site source
         is_file: Whether csv_content is a file path
     """
+    # Optional memory tracking (psutil may not be installed)
+    try:
+        import psutil
+        import os
+        process = psutil.Process(os.getpid())
+        start_mem = process.memory_info().rss / 1024 / 1024  # MB
+        logger.info(f"[CSV UPLOAD START] {job_id}", filename=filename, auction_site=auction_site, start_memory_mb=start_mem, offering_type=offering_type)
+    except ImportError:
+        logger.info(f"[CSV UPLOAD START] {job_id}", filename=filename, auction_site=auction_site, offering_type=offering_type)
+        start_mem = None
+
     db = get_database()
     auctions_service = AuctionsService()
-    
+
     try:
         # Check if another upload is running and mark as queued if so
         if _upload_status_lock.locked():
             logger.info("Another upload is in progress, queuing job", job_id=job_id)
             try:
                 await db.update_csv_upload_progress(job_id=job_id, status='queued', current_stage='waiting_for_lock')
-            except: pass
+            except Exception as e:
+                logger.error(f"[CSV UPLOAD] Failed to update queued status: {e}", job_id=job_id)
 
         async with _upload_status_lock:
             # 1. Count Total Lines (approx) for progress tracking
@@ -594,44 +606,66 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                  raise merge_err
 
             # 5. Success
+            end_mem = process.memory_info().rss / 1024 / 1024 if 'process' in locals() and process else None
+            logger.info(f"[CSV UPLOAD COMPLETE] {job_id}", processed=processed_count, skipped=skipped_count, merged=merged_count, end_memory_mb=end_mem)
             await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=processed_count, skipped_count=skipped_count, completed=True )
-        
+
     except Exception as e:
-        logger.error("An unexpected error occurred during CSV processing", job_id=job_id, error=str(e), exc_info=True)
-        await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=f"An unexpected error occurred: {str(e)}" )
+        import traceback
+        error_detail = traceback.format_exc()
+        logger.error(f"[CSV UPLOAD FAILED] {job_id}", error=str(e), traceback=error_detail[:2000])
+        await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=f"Failed: {str(e)[:500]}" )
 
 
 async def process_json_upload_async( job_id: str, json_content: str, filename: str, auction_site: str, offering_type: Optional[str] = None, is_file: bool = False ):
     """
     Background task to process JSON upload with progress tracking
     """
+    # Optional memory tracking
+    try:
+        import psutil
+        import os
+        process = psutil.Process(os.getpid())
+        start_mem = process.memory_info().rss / 1024 / 1024
+        logger.info(f"[JSON UPLOAD START] {job_id}", filename=filename, auction_site=auction_site, offering_type=offering_type, start_memory_mb=start_mem)
+    except ImportError:
+        logger.info(f"[JSON UPLOAD START] {job_id}", filename=filename, auction_site=auction_site, offering_type=offering_type)
+        start_mem = None
+
     db = get_database()
     auctions_service = AuctionsService()
-    
+
     try:
         # Check if another upload is running and mark as queued if so
         if _upload_status_lock.locked():
-            logger.info("Another upload is in progress, queuing job", job_id=job_id)
+            logger.info("[JSON UPLOAD] Another upload is in progress, queuing job", job_id=job_id)
             try:
                 await db.update_csv_upload_progress(job_id=job_id, status='queued', current_stage='waiting_for_lock')
-            except: pass
+            except Exception as e:
+                logger.error(f"[JSON UPLOAD] Failed to update queued status: {e}", job_id=job_id)
 
         async with _upload_status_lock:
             # Update status to parsing
             await db.update_csv_upload_progress( job_id=job_id, status='parsing', current_stage='parsing' )
             
             # Parse JSON using auctions service
-            logger.info("Parsing JSON content", job_id=job_id, auction_site=auction_site, filename=filename, is_file=is_file)
-            auction_inputs = auctions_service.load_auctions_from_json(json_content, auction_site, filename, is_file=is_file)
-            
+            logger.info(f"[JSON UPLOAD] Starting JSON parse", job_id=job_id, auction_site=auction_site, filename=filename, is_file=is_file)
+            try:
+                auction_inputs = auctions_service.load_auctions_from_json(json_content, auction_site, filename, is_file=is_file)
+            except Exception as parse_err:
+                logger.error(f"[JSON UPLOAD PARSE ERROR] {job_id}", error=str(parse_err), auction_site=auction_site)
+                await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=f"JSON parse error: {str(parse_err)[:500]}" )
+                return
+
             if not auction_inputs:
                 error_msg = f"JSON file is empty or contains no valid auction records. Auction site: {auction_site}, Filename: {filename}"
-                logger.error(error_msg, job_id=job_id, auction_site=auction_site, filename=filename)
+                logger.error(f"[JSON UPLOAD] {error_msg}", job_id=job_id)
                 await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg )
                 return
-            
+
             total_records = len(auction_inputs)
-            
+            logger.info(f"[JSON UPLOAD] Parsed successfully", job_id=job_id, total_records=total_records)
+
             # Update status to processing
             await db.update_csv_upload_progress( job_id=job_id, status='processing', total_records=total_records, current_stage='scoring' )
         
@@ -697,16 +731,24 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                     await asyncio.sleep(0)
             except Exception as e:
                 skipped_count += 1
+                # Log first 5 errors for debugging
+                if skipped_count <= 5:
+                    logger.warning(f"[JSON UPLOAD] Scoring error for item {idx}", domain=auction_input.domain if hasattr(auction_input, 'domain') else 'unknown', error=str(e))
                 continue
-            
+
             # Keep event loop responsive for health checks
             if (idx + 1) % 500 == 0:
                 await asyncio.sleep(0.01)
-                
+
+            # Log progress every 5000 records for large files
+            if (idx + 1) % 5000 == 0:
+                logger.info(f"[JSON UPLOAD] Scoring progress", job_id=job_id, processed=idx+1, total=total_records, passed=passed_count, failed=failed_count)
+
             if (idx + 1) % 1000 == 0:
                 await db.update_csv_upload_progress( job_id=job_id, processed_records=idx + 1, skipped_count=skipped_count, current_stage='scoring' )
 
         # Update stage
+        logger.info(f"[JSON UPLOAD] Scoring complete", job_id=job_id, total=total_records, passed=passed_count, failed=failed_count, skipped=skipped_count, ready_for_staging=len(auction_dicts))
         await db.update_csv_upload_progress( job_id=job_id, processed_records=len(auction_dicts), skipped_count=skipped_count, current_stage='loading_staging' )
 
         # Loading and Merging (simplified logic)
@@ -758,14 +800,18 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
              inserted_count = merged_count
              deleted_count = 0  # logged inside _perform_python_chunked_merge
 
-             result = { 'inserted': inserted_count, 'updated': 0, 'skipped': 0, 'total': total_records, 'deleted': deleted_count }
+             logger.info(f"[JSON UPLOAD MERGE] {job_id}", merged=merged_count, total=total_records)
 
         # Final update
+        end_mem = process.memory_info().rss / 1024 / 1024 if 'process' in locals() and process else None
+        logger.info(f"[JSON UPLOAD COMPLETE] {job_id}", total=total_records, merged=merged_count, end_memory_mb=end_mem)
         await db.update_csv_upload_progress( job_id=job_id, status='completed', current_stage='completed', processed_records=total_records, completed=True )
         
     except Exception as e:
-        error_msg = f"Failed to process JSON upload: {str(e)}"
-        await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=error_msg )
+        import traceback
+        error_detail = traceback.format_exc()
+        logger.error(f"[JSON UPLOAD FAILED] {job_id}", error=str(e), traceback=error_detail[:2000])
+        await db.update_csv_upload_progress( job_id=job_id, status='failed', error_message=f"Failed: {str(e)[:500]}" )
 
 
 
@@ -2353,18 +2399,19 @@ async def trigger_force_refresh( payload: Dict[str, Any] = Body(...), background
         filters = payload.get("filters", payload)
         sort_by = payload.get("sort_by", "expiration_date")
         sort_order = payload.get("sort_order", "asc")
-        prioritized_domains = payload.get("prioritized_domains", [])  # New parameter
+        prioritized_domains = payload.get("prioritized_domains", [])
+        only_displayed = payload.get("only_displayed", False)
 
         # Extract user ID before passing to background task
         user_id = current_user.id
 
         # Create a progress job (will be updated once domains are found)
         job_id = await ProgressTracker.create_job( user_id=str(user_id), job_type="force_refresh", total_items=1000,
-            metadata={"filters": filters, "force": True, "prioritized_count": len(prioritized_domains)} )
+            metadata={"filters": filters, "force": True, "prioritized_count": len(prioritized_domains), "only_displayed": only_displayed} )
 
         # Start processing in background and return immediately
         background_tasks.add_task( service.process_marketplace_refresh, user_id=user_id, filters=filters, force=True,
-            job_id=job_id, sort_by=sort_by, sort_order=sort_order, prioritized_domains=prioritized_domains )
+            job_id=job_id, sort_by=sort_by, sort_order=sort_order, prioritized_domains=prioritized_domains, only_displayed=only_displayed )
 
         return { "success": True, "in_progress": True, "job_id": job_id,
             "message": f"Force Refresh started — processing up to 1,000 domains in the background ({len(prioritized_domains)} prioritized)." }

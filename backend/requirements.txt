@@ -43,4 +43,7 @@ redis>=5.0.0
 # Logging
 structlog>=23.0.0
 
+# System monitoring (optional but useful for debugging memory issues)
+psutil>=5.9.0
+
 # Production dependencies only
