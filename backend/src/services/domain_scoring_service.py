@@ -270,14 +270,14 @@ class DomainScoringService:
         sv = (pos_score + irs_score) / 2.0
         return min(100.0, max(0.0, sv))
     
-    def score_domain(self, domain: NamecheapDomain) -> ScoredDomain:
+    def score_domain(self, domain: NamecheapDomain, fast_mode: bool = False) -> ScoredDomain:
         """Score a single domain"""
         # Stage 1: Filtering
-        passed, reason = self._stage1_filter(domain)
-        
+        passed, reason = self._stage1_filter(domain, fast_mode=fast_mode)
+
         if not passed:
             return ScoredDomain( domain=domain, filter_status='FAIL', filter_reason=reason, total_meaning_score=None, age_score=None, lexical_frequency_score=None, semantic_value_score=None, rank=None )
-        
+
         # Stage 2: Scoring
         age_score = self._calculate_age_score(domain)
         lfs_score = self._calculate_lexical_frequency_score(domain)
