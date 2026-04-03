@@ -4,8 +4,11 @@ Health check API routes
 
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
+from dataclasses import dataclass
+from typing import Optional
 import structlog
 import asyncio
+import time
 
 from models.domain_analysis import HealthResponse
 from services.database import get_database, init_database
@@ -16,17 +19,62 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
-async def check_service_with_timeout(service_name: str, check_func, timeout: float = 2.0):
-    """Check a service with a timeout"""
-    try:
-        await asyncio.wait_for(check_func(), timeout=timeout)
-        return 'healthy'
-    except asyncio.TimeoutError:
-        logger.warning(f"{service_name} health check timed out after {timeout}s")
-        return 'degraded'
-    except Exception as e:
-        logger.warning(f"{service_name} health check failed", error=str(e))
-        return 'unhealthy'
+@dataclass
+class CachedHealth:
+    """Cached health check result with TTL"""
+    status: str
+    services: dict
+    timestamp: datetime
+    expires_at: float
+
+
+# Simple in-memory cache with 15-second TTL
+_health_cache: Optional[CachedHealth] = None
+_CACHE_TTL_SECONDS = 15
+
+
+def _is_cache_valid() -> bool:
+    """Check if cached health check is still valid"""
+    global _health_cache
+    if _health_cache is None:
+        return False
+    return time.time() < _health_cache.expires_at
+
+
+def _get_cached_health() -> Optional[CachedHealth]:
+    """Get cached health if valid"""
+    if _is_cache_valid():
+        return _health_cache
+    return None
+
+
+def _set_cached_health(status: str, services: dict) -> None:
+    """Cache health check result"""
+    global _health_cache
+    _health_cache = CachedHealth(
+        status=status,
+        services=services,
+        timestamp=datetime.utcnow(),
+        expires_at=time.time() + _CACHE_TTL_SECONDS
+    )
+
+
+async def check_service_with_timeout(service_name: str, check_func, timeout: float = 5.0, retries: int = 1):
+    """Check a service with timeout and optional retry for transient failures"""
+    last_error = None
+    for attempt in range(retries + 1):
+        try:
+            result = await asyncio.wait_for(check_func(), timeout=timeout)
+            return 'healthy' if result else 'degraded'
+        except asyncio.TimeoutError:
+            last_error = f"timed out after {timeout}s"
+            if attempt < retries:
+                await asyncio.sleep(0.5)  # Brief pause before retry
+        except Exception as e:
+            last_error = str(e)
+
+    logger.warning(f"{service_name} health check failed: {last_error}")
+    return 'degraded'
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -34,46 +82,49 @@ async def health_check():
     """
     Health check endpoint
     Returns the status of the application and all external services
-    Optimized with timeouts to prevent slow responses
+    Optimized with caching (15s TTL) and timeouts to prevent slow responses
     """
+    # Check cache first
+    cached = _get_cached_health()
+    if cached:
+        return HealthResponse(
+            status=cached.status,
+            services=cached.services,
+            timestamp=cached.timestamp
+        )
+
     try:
         services_status = {}
-        
-        # ) Check database connection (with timeout
+
+        # 1) Check database connection (single query, longer timeout)
         try:
-            # Verify URL configuration first
             from utils.config import get_settings
             settings = get_settings()
             supabase_url = settings.SUPABASE_URL.rstrip('/') if settings.SUPABASE_URL else None
             if not supabase_url:
                 services_status['database'] = 'unhealthy'
                 logger.error("SUPABASE_URL is not set in environment variables")
-            
-            # Try to get or initialize database
+
             try:
                 db = get_database()
             except RuntimeError:
-                # If not initialized, try to initialize it now
                 try:
                     db = await init_database()
                 except Exception as init_error:
                     logger.debug("init_database failed, trying new instance", error=str(init_error))
                     from services.database import DatabaseService
                     db = DatabaseService()
-            
+
             if db.client is None:
                 services_status['database'] = 'unhealthy'
                 logger.warning("Database client not initialized")
             else:
-                # ) Use a wrapper with timeout for the actual database check
                 async def db_check():
-                    # Test with secrets table
-                    await (await db._get_client()).table('secrets').select('id').limit(1).execute()
-                    # Test reports table
+                    # Single query to check database connectivity
                     await (await db._get_client()).table('reports').select('id').limit(1).execute()
                     return True
 
-                db_status = await check_service_with_timeout('database', db_check, timeout=3.0)
+                db_status = await check_service_with_timeout('database', db_check, timeout=8.0, retries=1)
                 services_status['database'] = db_status
 
         except Exception as e:
@@ -81,28 +132,30 @@ async def health_check():
             error_msg = str(e)
             logger.warning("Database health check failed", error=error_msg, error_type=error_type, exc_info=True)
             services_status['database'] = 'unhealthy'
-        
+
         # 2) Check external APIs with timeouts (run in parallel for speed)
         async def check_dataforseo():
+            # Only verify credentials exist, no HTTP call needed
             service = DataForSEOService()
-            return await service.health_check()
-        
+            credentials = await service._get_credentials()
+            return credentials is not None
+
         async def check_wayback():
             service = WaybackMachineService()
             return await service.health_check()
-        
+
         async def check_llm():
             service = LLMService()
-            return await service.health_check()
-        
-        # Run external API checks in parallel with shorter timeouts
-        # Shorter timeouts (3-5s) ensure we respond before Docker/Coolify timeouts (usually 10s)
+            provider, api_key, _ = await service._get_provider_and_key()
+            return provider is not None and api_key is not None
+
+        # Run external API checks in parallel with reasonable timeouts
         dataforseo_status, wayback_status, llm_status = await asyncio.gather(
-            check_service_with_timeout('DataForSEO', check_dataforseo, timeout=3.0),
-            check_service_with_timeout('Wayback Machine', check_wayback, timeout=5.0),
-            check_service_with_timeout('LLM', check_llm, timeout=3.0)
+            check_service_with_timeout('DataForSEO', check_dataforseo, timeout=5.0, retries=1),
+            check_service_with_timeout('Wayback Machine', check_wayback, timeout=8.0, retries=1),
+            check_service_with_timeout('LLM', check_llm, timeout=5.0, retries=1)
         )
-        
+
         services_status['dataforseo'] = dataforseo_status
         services_status['wayback_machine'] = wayback_status
         services_status['llm'] = llm_status
@@ -116,7 +169,10 @@ async def health_check():
                 overall_status = 'degraded'
         else:
             overall_status = 'unhealthy'
-        
+
+        # Cache the result for future requests
+        _set_cached_health(overall_status, services_status)
+
         return HealthResponse(
             status=overall_status,
             services=services_status,
