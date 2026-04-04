@@ -101,10 +101,10 @@ async def _perform_rpc_merge(db, auction_site: str, job_id: str, staging_suffix:
 
     try:
         result = await client.rpc('merge_auctions_delta_from_staging', {
-            'p_job_id': job_id,
             'p_auction_site': auction_site,
-            'p_staging_table_suffix': staging_suffix,
-            'p_offering_type': offering_type
+            'p_job_id': job_id,
+            'p_offering_type': offering_type,
+            'p_staging_table_suffix': staging_suffix
         }).execute()
 
         if result.data:
@@ -1660,6 +1660,50 @@ async def mark_job_as_failed( job_id: str, request: Optional[Dict[str, Any]] = B
     except Exception as e:
         logger.error("Failed to mark job as failed", job_id=job_id, error=str(e))
         raise HTTPException(status_code=500, detail=f"Failed to mark job as failed: {str(e)}")
+
+
+@router.post("/auctions/upload-progress/{job_id}/reset")
+async def reset_stuck_upload(job_id: str):
+    """
+    Fully reset a stuck or failed upload job for safe re-run.
+
+    This:
+    1. Calls cleanup_stuck_upload() SQL function to:
+       - Delete unrecovered auction records (to_delete=TRUE) for the job's site
+       - Clear all staging tables (auctions_staging + _0 through _4) for this job_id
+    2. Resets the csv_upload_progress record to status=pending
+
+    Safe to call multiple times — idempotent.
+    """
+    try:
+        db = get_database()
+        client = await db._get_client()
+
+        # Call the atomic cleanup function
+        result = await client.rpc('cleanup_stuck_upload', {'p_job_id': job_id}).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail=f"cleanup_stuck_upload returned no data for job {job_id}")
+
+        cleanup_result = result.data[0] if isinstance(result.data, list) else result.data
+
+        if not cleanup_result.get('success'):
+            raise HTTPException(status_code=400, detail=cleanup_result.get('error', 'Cleanup failed'))
+
+        logger.info("Reset stuck upload", job_id=job_id, cleanup=cleanup_result)
+        return {
+            "success": True,
+            "message": f"Upload {job_id} fully reset and ready for re-run",
+            "job_id": job_id,
+            "deleted_auctions": cleanup_result.get('deleted_auctions', 0),
+            "cleaned_staging": cleanup_result.get('cleaned_staging', [])
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to reset stuck upload", job_id=job_id, error=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to reset upload: {str(e)}")
 
 
 @router.post("/auctions/trigger-analysis")
