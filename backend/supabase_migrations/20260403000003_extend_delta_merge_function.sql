@@ -59,7 +59,7 @@ BEGIN
                 source_data = COALESCE(EXCLUDED.source_data, auctions.source_data),
                 first_seen = COALESCE(EXCLUDED.first_seen, auctions.first_seen),
                 to_delete = FALSE, updated_at = NOW()
-            RETURNING auctions.domain, auctions.auction_site, auctions.expiration_date, auctions.start_date, auctions.current_bid, auctions.link::VARCHAR, auctions.offer_type, auctions.source_data, auctions.first_seen
+            RETURNING auctions.domain, auctions.auction_site, auctions.expiration_date, auctions.start_date, auctions.current_bid, auctions.link::VARCHAR, COALESCE(EXCLUDED.offer_type, auctions.offer_type)::VARCHAR, auctions.source_data, auctions.first_seen
         )
         SELECT inserted.domain, inserted.auction_site, inserted.expiration_date, inserted.start_date, inserted.current_bid, inserted.link, inserted.offer_type, inserted.source_data, inserted.first_seen, TRUE::BOOLEAN AS is_new FROM inserted'',
         v_staging_table

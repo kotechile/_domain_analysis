@@ -167,6 +167,7 @@ class DomainScoringService:
         # 2. Try spaCy as a heavy fallback - SKIP if in fast_mode
         if not fast_mode and self.nlp:
             try:
+                # Optimized: Only join if we have multiple tokens (which shouldn't happen here as it's a domain)
                 doc = self.nlp(domain_name)
                 # Extract tokens that are alphabetic
                 tokens = [token.text for token in doc if token.is_alpha]
@@ -228,11 +229,11 @@ class DomainScoringService:
         
         return sum(scores) / len(scores) if scores else 0.0
     
-    def _calculate_semantic_value(self, domain: NamecheapDomain) -> float:
+    def _calculate_semantic_value(self, domain: NamecheapDomain, fast_mode: bool = False) -> float:
         """Calculate Semantic Value (POS + Industry Relevance)"""
         domain_name = domain.name.lower()
         name_part, _ = self._extract_domain_parts(domain_name)
-        tokens = self._tokenize_domain(name_part)
+        tokens = self._tokenize_domain(name_part, fast_mode=fast_mode)
         
         if not tokens:
             return 0.0
@@ -240,8 +241,8 @@ class DomainScoringService:
         pos_score = 0.0
         irs_score = 0.0
         
-        # POS tagging
-        if self.nlp:
+        # POS tagging - ONLY IF NOT IN FAST MODE
+        if not fast_mode and self.nlp:
             try:
                 doc = self.nlp(' '.join(tokens))
                 for token in doc:
@@ -252,19 +253,24 @@ class DomainScoringService:
                         pos_score += 20.0
                     elif pos == 'ADJ':  # Adjective
                         pos_score += 15.0
+                
+                if tokens:
+                    pos_score = pos_score / len(tokens)
             except Exception as e:
                 logger.warning("POS tagging failed", domain=domain.name, error=str(e))
+        else:
+            # Simple heuristic score for fast mode
+            # Nouns (fallback) - give a base score if it's alphanumeric
+            pos_score = 15.0
         
-        # Industry Relevance Score
+        # Industry Relevance Score - ALWAYS RUN (it's fast)
         for token in tokens:
             if token.lower() in self.industry_keywords:
                 irs_score += 20.0
         
-        # Average and normalize
-        token_count = len(tokens)
-        if token_count > 0:
-            pos_score = pos_score / token_count
-            irs_score = irs_score / token_count
+        # Average
+        if tokens:
+            irs_score = irs_score / len(tokens)
         
         # Combine: average of POS and IRS, then normalize to 0-100
         sv = (pos_score + irs_score) / 2.0
@@ -281,12 +287,12 @@ class DomainScoringService:
         # Stage 2: Scoring
         age_score = self._calculate_age_score(domain)
         lfs_score = self._calculate_lexical_frequency_score(domain)
-        sv_score = self._calculate_semantic_value(domain)
+        sv_score = self._calculate_semantic_value(domain, fast_mode=fast_mode)
         
-        # Total Meaning Score
+        # Total Meaning Score - Weighted average
         total_score = (age_score * 0.40) + (lfs_score * 0.30) + (sv_score * 0.30)
         
-        return ScoredDomain( domain=domain, filter_status='PASS', filter_reason=None, total_meaning_score=round(total_score, 2), age_score=round(age_score, 2), lexical_frequency_score=round(lfs_score, 2), semantic_value_score=round(sv_score, 2), rank=None ) # Will be set after sorting
+        return ScoredDomain( domain=domain, filter_status='PASS', filter_reason=None, total_meaning_score=round(total_score, 2), age_score=round(age_score, 2), lexical_frequency_score=round(lfs_score, 2), semantic_value_score=round(sv_score, 2), rank=None )
     
     def score_domains(self, domains: List[NamecheapDomain]) -> List[ScoredDomain]:
         """

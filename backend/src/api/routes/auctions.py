@@ -394,35 +394,37 @@ async def _score_new_domains_after_merge(db, auction_site: str, scoring_service,
     Score only NEW domains that were just inserted (score is NULL).
     Existing domains kept their previous score.
 
-    OPTIMIZED: Uses batch SELECT and batch UPDATE to minimize SSL connections.
+    OPTIMIZED: Uses batch SELECT and batch UPSERT to minimize network latency.
     """
     logger.info("Starting post-merge scoring for new domains", job_id=job_id, auction_site=auction_site, fast_mode=fast_mode)
 
     total_scored = 0
-    BATCH_SIZE = 200  # Fetch and score in batches
-    MAX_UPDATE_BATCH = 50  # Smaller batches for DB updates to avoid SSL issues
+    BATCH_SIZE = 500  # Fetch more records per batch
+    UPSERT_BATCH_SIZE = 100  # Upsert in chunks to avoid request size limits
 
     while True:
         # Fetch unprocessed/new domains (score is NULL)
-        result = await (await db._get_client()).table('auctions').select(
-            'domain', 'expiration_date', 'start_date'
-        ).eq('auction_site', auction_site).is_('score', None).limit(BATCH_SIZE).execute()
+        try:
+            result = await (await db._get_client()).table('auctions').select(
+                'domain', 'expiration_date', 'start_date', 'offer_type'
+            ).eq('auction_site', auction_site).is_('score', None).limit(BATCH_SIZE).execute()
+        except Exception as e:
+            logger.error("Failed to fetch domains for scoring", error=str(e))
+            break
 
         if not result.data:
             break
 
         domains_to_score = result.data
-        logger.info("Found domains needing scoring", job_id=job_id, count=len(domains_to_score), total_scored=total_scored)
+        logger.info(f"Scoring batch of {len(domains_to_score)} domains (Total so far: {total_scored})", job_id=job_id)
 
-        # Score all domains in the batch first
-        scored_domains = []
+        # Score all domains in the batch
+        batch_updates = []
         for record in domains_to_score:
             try:
-                domain_name = record['domain']
-
-                # Create NamecheapDomain for scoring
+                # Create NamecheapDomain for scoring service
                 namecheap_domain = NamecheapDomain(
-                    name=domain_name,
+                    name=record['domain'],
                     registered_date=None,
                     url=None,
                     start_date=record.get('start_date'),
@@ -430,39 +432,45 @@ async def _score_new_domains_after_merge(db, auction_site: str, scoring_service,
                     price=None
                 )
 
-                # Score the domain
+                # Score the domain (using fast_mode if enabled)
                 scored = scoring_service.score_domain(namecheap_domain, fast_mode=fast_mode)
-                score_value = scored.total_meaning_score if scored.total_meaning_score is not None else None
+                score_value = scored.total_meaning_score if scored.total_meaning_score is not None else 0.0
 
-                scored_domains.append({
-                    'domain': domain_name,
+                # Prepare upsert record
+                # MUST include unique constraint columns: domain, auction_site, expiration_date
+                batch_updates.append({
+                    'domain': record['domain'],
+                    'auction_site': auction_site,
+                    'expiration_date': record['expiration_date'],
                     'score': score_value,
-                    'expiration_date': record.get('expiration_date')
+                    'processed': True,
+                    'updated_at': datetime.now().isoformat()
                 })
 
             except Exception as e:
-                logger.warning("Failed to score domain during post-merge", domain=record.get('domain'), error=str(e))
-                # Still include with None score so we don't get stuck
-                scored_domains.append({
-                    'domain': record.get('domain'),
-                    'score': None,
-                    'expiration_date': record.get('expiration_date')
+                logger.warning(f"Failed to score domain {record.get('domain')}", error=str(e))
+                # Still add to batch with 0 score to mark as processed
+                batch_updates.append({
+                    'domain': record['domain'],
+                    'auction_site': auction_site,
+                    'expiration_date': record['expiration_date'],
+                    'score': 0.0,
+                    'processed': True
                 })
 
-        # Batch update - use smaller sub-batches to avoid SSL issues
-        for i in range(0, len(scored_domains), MAX_UPDATE_BATCH):
-            sub_batch = scored_domains[i:i + MAX_UPDATE_BATCH]
+        # Perform BATCH UPSERT in smaller chunks
+        for i in range(0, len(batch_updates), UPSERT_BATCH_SIZE):
+            sub_batch = batch_updates[i:i + UPSERT_BATCH_SIZE]
             try:
-                # Update each domain individually but in small batches
-                for sd in sub_batch:
-                    await (await db._get_client()).table('auctions').update({
-                        'score': sd['score'],
-                        'processed': True
-                    }).eq('domain', sd['domain']).eq('auction_site', auction_site).eq('expiration_date', sd['expiration_date']).execute()
-                    total_scored += 1
+                # Use UPSERT to update existing records based on unique constraint
+                await (await db._get_client()).table('auctions').upsert(
+                    sub_batch,
+                    on_conflict='domain,auction_site,expiration_date'
+                ).execute()
+                total_scored += len(sub_batch)
             except Exception as e:
-                logger.warning("Batch update failed, falling back to individual updates", error=str(e))
-                # Fallback to individual updates
+                logger.warning(f"Batch upsert failed for sub-batch {i}, falling back to individual updates", error=str(e))
+                # Fallback to individual updates if something is wrong with the batch
                 for sd in sub_batch:
                     try:
                         await (await db._get_client()).table('auctions').update({
@@ -473,10 +481,7 @@ async def _score_new_domains_after_merge(db, auction_site: str, scoring_service,
                     except Exception:
                         pass
 
-            # Small delay between batches to let SSL settle
-            await asyncio.sleep(0.5)
-
-        # Update progress periodically
+        # Update progress periodically in the database
         try:
             await db.update_csv_upload_progress(
                 job_id=job_id,
@@ -484,10 +489,26 @@ async def _score_new_domains_after_merge(db, auction_site: str, scoring_service,
                 current_stage='scoring_new',
                 processed_records=total_scored
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to update progress in DB", error=str(e))
+
+        # Small yield to event loop
+        await asyncio.sleep(0.1)
 
     logger.info("Post-merge scoring complete", job_id=job_id, auction_site=auction_site, total_scored=total_scored)
+    
+    # Final progress update
+    try:
+        await db.update_csv_upload_progress(
+            job_id=job_id,
+            status='completed',
+            current_stage='finished',
+            progress_percentage='100.00',
+            completed_at=datetime.now().isoformat()
+        )
+    except Exception:
+        pass
+        
     return total_scored
 
 

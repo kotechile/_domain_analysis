@@ -52,10 +52,25 @@ class DatabaseService:
             
             # Monkey-patch the httpx client if needed for SSL verification
             if not verify_ssl:
-                if hasattr(self.client, 'postgrest') and hasattr(self.client.postgrest, 'session'):
-                    self.client.postgrest.session.verify = False
-                if hasattr(self.client, 'realtime') and hasattr(self.client.realtime, 'session'):
-                    self.client.realtime.session.verify = False
+                # Handle both sync (session) and async (_client) versions of the client
+                if hasattr(self.client, 'postgrest'):
+                    if hasattr(self.client.postgrest, 'session'):
+                        self.client.postgrest.session.verify = False
+                    elif hasattr(self.client.postgrest, '_client'):
+                        self.client.postgrest._client.verify = False
+                
+                if hasattr(self.client, 'realtime'):
+                    if hasattr(self.client.realtime, 'session'):
+                        self.client.realtime.session.verify = False
+                    elif hasattr(self.client.realtime, '_client'):
+                        self.client.realtime._client.verify = False
+
+                # Also handle storage client
+                if hasattr(self.client, 'storage'):
+                    if hasattr(self.client.storage, 'session'):
+                        self.client.storage.session.verify = False
+                    elif hasattr(self.client.storage, '_client'):
+                        self.client.storage._client.verify = False
 
             logger.info("Supabase Async client initialized successfully")
             return self.client
