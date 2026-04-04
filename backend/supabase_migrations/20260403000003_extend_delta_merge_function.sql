@@ -6,6 +6,8 @@ DROP FUNCTION IF EXISTS merge_auctions_delta_from_staging(UUID, VARCHAR, INTEGER
 
 -- Recreate with fixed ambiguous column reference
 -- Key fix: DELETE FROM auctions WHERE auctions.auction_site = p_auction_site
+-- Also fix: auctions.offer_type = p_offering_type to avoid ambiguity
+-- Also fix: auctions.link::VARCHAR cast to match return type
 CREATE FUNCTION merge_auctions_delta_from_staging(
     p_job_id UUID,
     p_auction_site VARCHAR,
@@ -37,9 +39,9 @@ BEGIN
     END IF;
 
     IF p_auction_site IN (''godaddy'', ''namesilo'') THEN
-        UPDATE auctions SET to_delete = TRUE WHERE auction_site = p_auction_site AND to_delete = FALSE;
+        UPDATE auctions SET to_delete = TRUE WHERE auctions.auction_site = p_auction_site AND to_delete = FALSE;
     ELSE
-        UPDATE auctions SET to_delete = TRUE WHERE auction_site = p_auction_site AND (offer_type = p_offering_type OR p_offering_type IS NULL) AND to_delete = FALSE;
+        UPDATE auctions SET to_delete = TRUE WHERE auctions.auction_site = p_auction_site AND (auctions.offer_type = p_offering_type OR p_offering_type IS NULL) AND to_delete = FALSE;
     END IF;
 
     RETURN QUERY EXECUTE format(
@@ -57,7 +59,7 @@ BEGIN
                 source_data = COALESCE(EXCLUDED.source_data, auctions.source_data),
                 first_seen = COALESCE(EXCLUDED.first_seen, auctions.first_seen),
                 to_delete = FALSE, updated_at = NOW()
-            RETURNING auctions.domain, auctions.auction_site, auctions.expiration_date, auctions.start_date, auctions.current_bid, auctions.link, auctions.offer_type, auctions.source_data, auctions.first_seen
+            RETURNING auctions.domain, auctions.auction_site, auctions.expiration_date, auctions.start_date, auctions.current_bid, auctions.link::VARCHAR, auctions.offer_type, auctions.source_data, auctions.first_seen
         )
         SELECT inserted.domain, inserted.auction_site, inserted.expiration_date, inserted.start_date, inserted.current_bid, inserted.link, inserted.offer_type, inserted.source_data, inserted.first_seen, TRUE::BOOLEAN AS is_new FROM inserted'',
         v_staging_table
