@@ -1597,6 +1597,75 @@ async def process_from_storage( bucket: str = Body(..., description="Supabase st
         raise HTTPException(status_code=500, detail=f"Failed to initiate file processing: {error_msg}")
 
 
+@router.post("/auctions/unlock-pipeline")
+async def unlock_pipeline():
+    """
+    Emergency endpoint to reset the global upload lock and fail any stuck jobs.
+    Use this if the pipeline is permanently stuck in 'waiting_for_lock'.
+    """
+    global _upload_status_lock
+    try:
+        # 1. Create a new lock to bypass any stuck waiters
+        _upload_status_lock = asyncio.Lock()
+        
+        # 2. Mark any active jobs as failed in the database
+        db = get_database()
+        active_jobs = await ( await db._get_client() ).table('csv_upload_progress').select('job_id').in_('status', ['queued', 'parsing', 'processing']).execute()
+        
+        count = 0
+        if active_jobs.data:
+            for job in active_jobs.data:
+                await db.update_csv_upload_progress( job_id=job['job_id'], status='failed', error_message="Pipeline manually unlocked - job cancelled." )
+                count += 1
+                
+        logger.info("Pipeline manually unlocked", reset_jobs=count)
+        return { "success": True, "message": f"Pipeline unlocked. {count} stuck jobs marked as failed." }
+        
+    except Exception as e:
+        logger.error("Failed to unlock pipeline", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/auctions/retry-job/{job_id}")
+async def retry_auction_job(job_id: str):
+    """
+    Retry an existing upload job by pulling the file from storage again.
+    This works for both CSV and JSON if they were successfully uploaded to storage.
+    """
+    try:
+        db = get_database()
+        progress = await db.get_csv_upload_progress(job_id)
+        
+        if not progress:
+            raise HTTPException(status_code=404, detail="Job not found")
+            
+        filename = progress.get('filename')
+        auction_site = progress.get('auction_site')
+        offering_type = progress.get('offering_type', 'auction')
+        
+        if not filename:
+            raise HTTPException(status_code=400, detail="Job record missing filename")
+
+        # Reset progress in DB
+        await db.update_csv_upload_progress( job_id=job_id, status='queued', current_stage='retrying', progress_percentage=0, error_message=None )
+        
+        # Trigger processing from storage
+        # We assume the bucket is 'auction-csvs' and path is the filename as per upload_csv_to_storage
+        bucket = "auction-csvs"
+        path = filename 
+        
+        asyncio.create_task( process_file_from_storage_async( job_id=job_id, bucket=bucket, path=path, filename=filename, auction_site=auction_site, offering_type=offering_type ) )
+        
+        logger.info("Triggered retry for job", job_id=job_id, filename=filename)
+        return { "success": True, "message": "Retry started in background.", "job_id": job_id }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to retry job", job_id=job_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/auctions/upload-progress/latest-active")
 async def get_latest_active_upload_progress():
     """

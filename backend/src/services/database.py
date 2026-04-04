@@ -2283,8 +2283,10 @@ class DatabaseService:
             if not client:
                 raise Exception("Supabase client not available")
             
-            result = await ( client.table('csv_upload_progress').select('*').not_.eq('status', 'completed').not_.eq('status', 'failed').order('started_at', desc=True).limit(1).execute() )
+            result = await ( client.table('csv_upload_progress').select('*').not_.eq('status', 'completed').not_.eq('status', 'failed').order('started_at', desc=False).limit(5).execute() )
             
+            logger.info("Latest active jobs query results", count=len(result.data), jobs=[{"job_id": j['job_id'], "started_at": j['started_at'], "status": j['status']} for j in result.data])
+
             if result.data and len(result.data) > 0:
                 return result.data[0]
             else:
