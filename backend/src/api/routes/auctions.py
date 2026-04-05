@@ -480,7 +480,8 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
             # Parse and stream to staging
             iterator = auctions_service.load_auctions_from_csv(csv_content, auction_site, filename, is_file=is_file)
 
-            BATCH_SIZE = 5000
+            # Reduced batch size for better stability with 1M+ record files
+            BATCH_SIZE = 2500
             batch_records = []
             total_parsed = 0
             total_skipped = 0
@@ -520,13 +521,16 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                         await _insert_to_staging(db, batch_records, job_id)
                         batch_records = []
 
-                        if total_parsed % 10000 == 0:
+                        # More frequent heartbeats for large files
+                        if total_parsed % 5000 == 0:
                             await db.update_csv_upload_progress(
                                 job_id=job_id,
                                 status='processing',
                                 current_stage='parsing',
                                 processed_records=total_parsed
                             )
+                            # Yield to event loop for a moment
+                            await asyncio.sleep(0.01)
 
                 except Exception as e:
                     total_skipped += 1
