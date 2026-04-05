@@ -41,7 +41,7 @@ BEGIN
             link,
             p_offering_type,
             source_data,
-            COALESCE(first_seen, NOW()),
+            COALESCE(first_seen::timestamptz, NOW()),
             p_import_batch_id,
             NOW()
         FROM auctions_import
