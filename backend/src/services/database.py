@@ -50,27 +50,32 @@ class DatabaseService:
             
             self.client = await create_client( self.settings.SUPABASE_URL, key, options=options )
             
-            # Monkey-patch the httpx client if needed for SSL verification
+            # Robustly handle SSL verification bypass
             if not verify_ssl:
-                # Handle both sync (session) and async (_client) versions of the client
-                if hasattr(self.client, 'postgrest'):
-                    if hasattr(self.client.postgrest, 'session'):
-                        self.client.postgrest.session.verify = False
-                    elif hasattr(self.client.postgrest, '_client'):
-                        self.client.postgrest._client.verify = False
+                logger.warning("SUPABASE_VERIFY_SSL is False: Bypassing SSL verification for Supabase client")
                 
-                if hasattr(self.client, 'realtime'):
-                    if hasattr(self.client.realtime, 'session'):
-                        self.client.realtime.session.verify = False
-                    elif hasattr(self.client.realtime, '_client'):
-                        self.client.realtime._client.verify = False
+                # Helper to patch httpx clients
+                def patch_client(c):
+                    if hasattr(c, '_client') and hasattr(c._client, 'verify'):
+                        c._client.verify = False
+                    if hasattr(c, 'session') and hasattr(c.session, 'verify'):
+                        c.session.verify = False
 
-                # Also handle storage client
+                # Patch Postgrest
+                if hasattr(self.client, 'postgrest'):
+                    patch_client(self.client.postgrest)
+                
+                # Patch Auth/GoTrue
+                if hasattr(self.client, 'auth'):
+                    patch_client(self.client.auth)
+                
+                # Patch Storage
                 if hasattr(self.client, 'storage'):
-                    if hasattr(self.client.storage, 'session'):
-                        self.client.storage.session.verify = False
-                    elif hasattr(self.client.storage, '_client'):
-                        self.client.storage._client.verify = False
+                    patch_client(self.client.storage)
+                
+                # Patch Realtime
+                if hasattr(self.client, 'realtime'):
+                    patch_client(self.client.realtime)
 
             logger.info("Supabase Async client initialized successfully")
             return self.client

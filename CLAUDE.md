@@ -204,11 +204,53 @@ ng serve --port 4200
 - `domain_name`, `api_source`, `json_data`, `expires_at`
 
 **auctions**: Domain auction listings
-- `domain`, `price`, `auction_end_time`, `source` (godaddy/namesilo/namecheap)
-- `total_meaning_score`, `is_preferred`, `is_premium`
+- `domain` (PK), `auction_site`, `expiration_date` (composite PK)
+- `current_bid`, `link`, `offer_type` (auction/buy_now/backorder)
+- `score` (meaning score), `processed`, `preferred`, `has_statistics`
+- `source_data` (JSONB), `first_seen`, `to_delete` (cleanup flag)
+- `last_import_batch_id`, `last_import_timestamp` (new tracking columns)
+
+**auctions_import**: Staging table for atomic imports
+- `domain`, `auction_site`, `expiration_date`
+- `import_batch_id` (links to upload job)
+- `source_data`, `first_seen`, `offer_type`
+- `last_import_batch_id` - Tracks which import added/updated this record
+
+**auctions_import**: Staging table for bulk imports (single table, atomic import)
+- `domain`, `auction_site`, `expiration_date`, `current_bid`, `source_data`
+- `import_batch_id` - Groups records from same upload
+- `import_timestamp` - When record was staged
 
 **credits**: User credit tracking
 - `user_id`, `balance`, `total_used`, `last_updated`
+
+### Auction Import System (2026-04-04 Update)
+
+**Architecture:**
+```
+N8N Workflow "Download and Process Auction Files" downloads vendor CSVs/JSONs
+    ↓
+Uploads to Supabase Storage (auction-csvs bucket)
+    ↓
+Signals backend via webhook POST /auctions/process-existing-upload
+    ↓
+Backend: Parse → auctions_import (staging) → import_auctions_batch() SQL function
+    ↓
+Atomic SQL Transaction:
+  1. UPSERT new/changed auctions
+  2. DELETE stale auctions (not in current import)
+  3. Preserve existing scores and statistics
+    ↓
+Score only NEW domains (score IS NULL)
+```
+
+**Key SQL Functions:**
+- `import_auctions_batch(p_import_batch_id, p_auction_site, p_offering_type)` - Atomic import
+- `get_new_domains_for_scoring(p_import_batch_id, p_limit)` - Returns domains needing scoring
+
+**Performance:** 5,000-10,000 domains/sec (single atomic transaction)
+
+**See also:** `AUCTION_IMPORT_REFACTOR.md` for detailed technical documentation
 
 ---
 
@@ -227,6 +269,38 @@ ng serve --port 4200
 ### Database Migrations
 - Apply via Supabase Dashboard SQL Editor
 - Store migration files in `backend/supabase_migrations/`
+
+### Auction File Import System
+
+**Purpose**: Import CSV/JSON files from domain auction sites (GoDaddy, Namecheap, NameSilo) into the `auctions` table.
+
+**Architecture** (Performance-Optimized - April 2026):
+```
+N8N Workflow → Backend API → auctions_import (staging) → SQL import_auctions_batch() → auctions (main)
+```
+
+**Key Components**:
+1. **Staging Table**: `auctions_import` (single table, not 5 parallel tables)
+2. **Atomic Import Function**: `import_auctions_batch()` - single transaction
+   - UPSERT new/changed records
+   - DELETE stale records (not in current import)
+   - PRESERVE existing statistics and scores
+3. **Post-Import Scoring**: Only domains with NULL score get scored
+
+**API Endpoints**:
+- `POST /api/v1/auctions/upload-csv` - Upload CSV/JSON file
+- `POST /api/v1/auctions/process-existing-upload` - Process file already in storage
+- `POST /api/v1/auctions/trigger-processing-async` - Fire-and-forget processing
+- `GET /api/v1/auctions/upload-progress/{job_id}` - Check upload status
+
+**Performance**: 5,000-10,000 domains/sec (10-20x faster than old system)
+
+**SQL Functions**:
+- `import_auctions_batch(p_import_batch_id, p_auction_site, p_offering_type)` - Atomic import
+- `get_new_domains_for_scoring(p_import_batch_id, p_limit)` - Get domains needing scoring
+- `cleanup_old_import_batches(p_older_than_hours)` - Periodic cleanup
+
+**For detailed documentation**: See `AUCTION_IMPORT_REFACTOR.md`
 
 ### Deploying Changes
 1. Commit and push to GitHub
