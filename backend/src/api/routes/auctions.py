@@ -194,8 +194,12 @@ async def _score_new_domains_after_import(db, import_batch_id: str, scoring_serv
     client = await db._get_client()
     total_scored = 0
     batch_size = 1000
+    UPSERT_BATCH_SIZE = 100
 
     try:
+        from services.csv_parser_service import CSVParserService
+        parser = CSVParserService()
+        
         while True:
             # Get batch of new domains from this import
             result = await client.rpc('get_new_domains_for_scoring', {
@@ -207,35 +211,81 @@ async def _score_new_domains_after_import(db, import_batch_id: str, scoring_serv
                 break
 
             new_domains = result.data
+            batch_updates = []
 
-            # Score in parallel batches
-            from services.csv_parser_service import CSVParserService
-            parser = CSVParserService()
-
-            # Score domains
-            scored_count = 0
+            # Prepare records
             for domain_record in new_domains:
                 try:
                     # Parse domain to get scoring data
                     parsed = parser.parse_single_domain(domain_record['domain'])
-                    if parsed and hasattr(parsed, 'total_meaning_score'):
-                        score = parsed.total_meaning_score
+                    if parsed and hasattr(parsed, 'total_meaning_score') and parsed.total_meaning_score is not None:
+                        score = float(parsed.total_meaning_score)
                     else:
-                        score = 0
+                        score = 0.0
 
-                    # Update the score
-                    await client.table('auctions').update({
+                    # MUST include unique constraint columns: domain, auction_site, expiration_date
+                    batch_updates.append({
+                        'domain': domain_record['domain'],
+                        'auction_site': domain_record['auction_site'],
+                        'expiration_date': domain_record['expiration_date'],
                         'score': score,
-                        'processed': True
-                    }).eq('domain', domain_record['domain']).eq('auction_site', domain_record['auction_site']).eq('expiration_date', domain_record['expiration_date']).execute()
-
-                    scored_count += 1
+                        'processed': True,
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    })
 
                 except Exception as e:
                     logger.warning("Failed to score domain", domain=domain_record.get('domain'), error=str(e))
+                    batch_updates.append({
+                        'domain': domain_record['domain'],
+                        'auction_site': domain_record['auction_site'],
+                        'expiration_date': domain_record['expiration_date'],
+                        'score': 0.0,
+                        'processed': True
+                    })
+
+            # Perform BATCH UPSERT in smaller chunks
+            scored_count = 0
+            for i in range(0, len(batch_updates), UPSERT_BATCH_SIZE):
+                sub_batch = batch_updates[i:i + UPSERT_BATCH_SIZE]
+                try:
+                    # Use UPSERT to update existing records based on unique constraint
+                    await client.table('auctions').upsert(
+                        sub_batch,
+                        on_conflict='domain,auction_site,expiration_date'
+                    ).execute()
+                    scored_count += len(sub_batch)
+                except Exception as e:
+                    logger.warning(f"Batch upsert failed for sub-batch {i}, falling back to individual updates", error=str(e))
+                    for sd in sub_batch:
+                        try:
+                            query = client.table('auctions').update({
+                                'score': sd['score'],
+                                'processed': True
+                            }).eq('domain', sd['domain']).eq('auction_site', sd['auction_site'])
+                            
+                            if sd['expiration_date'] is not None:
+                                query = query.eq('expiration_date', sd['expiration_date'])
+                            else:
+                                query = query.is_('expiration_date', 'null')
+                                
+                            await query.execute()
+                            scored_count += 1
+                        except Exception:
+                            pass
 
             total_scored += scored_count
             logger.info("Scored batch", import_batch_id=import_batch_id, batch_scored=scored_count, total_scored=total_scored)
+
+            # Update progress periodically in the database
+            try:
+                await db.update_csv_upload_progress(
+                    job_id=import_batch_id,
+                    status='processing',
+                    current_stage='scoring',
+                    processed_records=total_scored
+                )
+            except Exception as e:
+                logger.warning("Failed to update progress in DB", error=str(e))
 
             # Yield control
             await asyncio.sleep(0.01)
