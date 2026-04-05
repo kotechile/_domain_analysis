@@ -93,11 +93,15 @@ class CSVParserService:
             name_col = find_col(['name', 'Name'])
             start_date_col = find_col(['startDate', 'start_date', 'Start Date'])
             
+            # Check if this is a "Buy Now" format (no start date, has price/permalink)
+            # Or if the filename explicitly says so
             is_buy_now_format = (domain_col and permalink_col and not name_col and not start_date_col) or \
-                               (filename and 'buy_now' in filename.lower())
+                               (filename and 'buy_now' in filename.lower()) or \
+                               (domain_col and find_col(['price', 'Price']) and not find_col(['endDate', 'End Date']))
             
             if is_buy_now_format:
-                yield from self._process_namecheap_buy_now(reader, domain_col or 'domain', find_col(['price', 'Price']))
+                logger.info("Detected Namecheap Buy Now format", filename=filename)
+                yield from self._process_namecheap_buy_now(reader, domain_col or 'domain', find_col(['price', 'Price']) or 'price')
             else:
                 yield from self._process_namecheap_market_sales(reader, name_col or 'name')
             

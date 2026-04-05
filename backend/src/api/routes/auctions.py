@@ -490,10 +490,13 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                 try:
                     auction = auction_input.to_auction()
 
-                    # Namecheap filter: skip if > 2 weeks future
+                    # Namecheap filter: skip if > 2 weeks future, BUT keep Buy Now domains
+                    # Buy Now domains use a dummy date in 2099
                     if is_namecheap and auction.expiration_date:
                         two_weeks = datetime.now(timezone.utc) + timedelta(days=14)
-                        if auction.expiration_date > two_weeks:
+                        is_far_future = auction.expiration_date.year > 2050
+                        
+                        if not is_far_future and auction.expiration_date > two_weeks:
                             total_skipped += 1
                             continue
 
