@@ -17,8 +17,8 @@ AS $$
 BEGIN
     RETURN QUERY
     SELECT
-        a.domain,
-        a.auction_site,
+        a.domain::TEXT,
+        a.auction_site::VARCHAR,
         a.expiration_date
     FROM auctions a
     WHERE a.last_import_batch_id = p_import_batch_id
