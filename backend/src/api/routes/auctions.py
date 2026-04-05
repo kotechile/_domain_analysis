@@ -543,6 +543,14 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
         raise HTTPException(status_code=500, detail=f"Failed to trigger processing: {str(e)}")
 
 
+class StorageProcessingRequest(BaseModel):
+    storage_path: str
+    filename: str
+    auction_site: str
+    offering_type: Optional[str] = 'auction'
+    bucket: Optional[str] = "auction-csvs"
+
+
 @router.post("/auctions/trigger-processing-async")
 async def trigger_processing_async( request: StorageProcessingRequest ):
     """
