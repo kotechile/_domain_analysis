@@ -497,10 +497,10 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
             if not import_result.get('success'):
                 raise Exception(f"Import failed: {import_result.get('error')}")
 
-            inserted = import_result.get('inserted', 0)
-            updated = import_result.get('updated', 0)
-            deleted = import_result.get('deleted', 0)
-            new_domains = import_result.get('new_domains', 0)
+            inserted = import_result.get('inserted') or 0
+            updated = import_result.get('updated') or 0
+            deleted = import_result.get('deleted') or 0
+            new_domains = import_result.get('new_domains') or 0
 
             logger.info("Atomic import complete",
                        job_id=job_id,
@@ -841,10 +841,10 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
             if not import_result.get('success'):
                 raise Exception(f"Import failed: {import_result.get('error')}")
 
-            inserted = import_result.get('inserted', 0)
-            updated = import_result.get('updated', 0)
-            deleted = import_result.get('deleted', 0)
-            new_domains = import_result.get('new_domains', 0)
+            inserted = import_result.get('inserted') or 0
+            updated = import_result.get('updated') or 0
+            deleted = import_result.get('deleted') or 0
+            new_domains = import_result.get('new_domains') or 0
 
             logger.info("Atomic import complete",
                        job_id=job_id,
