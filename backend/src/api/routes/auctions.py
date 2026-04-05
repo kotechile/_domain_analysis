@@ -52,6 +52,7 @@ async def _insert_to_staging(db, records: List[Dict], import_batch_id: str, batc
     """
     Bulk insert records to staging table in batches.
     Optimized for large imports (5,000-10,000 domains/sec).
+    Handles duplicate domains within the same batch by using upsert.
     """
     if not records:
         return 0
@@ -63,13 +64,29 @@ async def _insert_to_staging(db, records: List[Dict], import_batch_id: str, batc
     for record in records:
         record['import_batch_id'] = import_batch_id
 
-    # Insert in batches
-    for i in range(0, len(records), batch_size):
-        batch = records[i:i + batch_size]
+    # Deduplicate within the batch - keep last occurrence
+    seen = {}
+    for record in records:
+        key = (record.get('domain'), record.get('auction_site'))
+        seen[key] = record
+    deduped_records = list(seen.values())
+
+    if len(deduped_records) < len(records):
+        logger.info("Deduplicated records in batch",
+                    original=len(records),
+                    deduplicated=len(deduped_records))
+
+    # Insert in batches using upsert to handle any remaining conflicts
+    for i in range(0, len(deduped_records), batch_size):
+        batch = deduped_records[i:i + batch_size]
 
         for attempt in range(3):
             try:
-                await client.table(STAGING_TABLE).insert(batch).execute()
+                # Use upsert with on_conflict to handle duplicates gracefully
+                await client.table(STAGING_TABLE).upsert(
+                    batch,
+                    on_conflict='import_batch_id,domain,auction_site'
+                ).execute()
                 total_inserted += len(batch)
                 break
             except Exception as e:
@@ -79,7 +96,7 @@ async def _insert_to_staging(db, records: List[Dict], import_batch_id: str, batc
                 await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
 
         # Brief yield to event loop
-        if i + batch_size < len(records):
+        if i + batch_size < len(deduped_records):
             await asyncio.sleep(0.001)
 
     return total_inserted
