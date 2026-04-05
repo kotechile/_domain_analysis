@@ -450,7 +450,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
     scoring_service = DomainScoringService()
 
     try:
-        async with _upload_status_lock:
+        if True: # Removed lock to allow parallel processing
             # Update status
             await db.update_csv_upload_progress(
                 job_id=job_id,
@@ -582,12 +582,13 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                 inserted_count=inserted,
                 completed=True
             )
-
             logger.info(f"[CSV UPLOAD COMPLETE] {job_id}",
                        parsed=total_parsed,
                        inserted=inserted,
                        updated=updated,
                        deleted=deleted)
+        else:
+            pass # End of virtual lock block
 
     except Exception as e:
         logger.error(f"[CSV UPLOAD FAILED] {job_id}", error=str(e))
@@ -814,7 +815,7 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
     scoring_service = DomainScoringService()
 
     try:
-        async with _upload_status_lock:
+        if True: # Removed lock to allow parallel processing
             # Update status
             await db.update_csv_upload_progress(
                 job_id=job_id,
@@ -925,12 +926,13 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                 inserted_count=inserted,
                 completed=True
             )
-
             logger.info(f"[JSON UPLOAD COMPLETE] {job_id}",
                        parsed=total_parsed,
                        inserted=inserted,
                        updated=updated,
                        deleted=deleted)
+        else:
+            pass # End of virtual lock block
 
     except Exception as e:
         logger.error(f"[JSON UPLOAD FAILED] {job_id}", error=str(e))
