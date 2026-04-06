@@ -251,7 +251,7 @@ async def _score_new_domains_after_import(db, import_batch_id: str, scoring_serv
                     # Use UPSERT to update existing records based on unique constraint
                     await client.table('auctions').upsert(
                         sub_batch,
-                        on_conflict='domain,auction_site,expiration_date'
+                        on_conflict='domain,auction_site'
                     ).execute()
                     scored_count += len(sub_batch)
                 except Exception as e:
@@ -511,19 +511,22 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
 
                     # Safely extract first_seen and handle empty strings
                     first_seen_val = auction.source_data.get('registeredDate') if auction.source_data else None
-                    if first_seen_val == '' or first_seen_val == ' ':
-                        first_seen_val = None
+
+                    def _clean_ts(ts):
+                        if not ts: return None
+                        if isinstance(ts, str) and ts.strip() == '': return None
+                        return ts
 
                     record = {
                         'domain': auction.domain,
                         'auction_site': auction.auction_site,
-                        'expiration_date': auction.expiration_date.isoformat() if auction.expiration_date else None,
-                        'start_date': auction.start_date.isoformat() if auction.start_date else None,
+                        'expiration_date': _clean_ts(auction.expiration_date.isoformat() if auction.expiration_date else None),
+                        'start_date': _clean_ts(auction.start_date.isoformat() if auction.start_date else None),
                         'current_bid': auction.current_bid,
                         'link': auction.link,
                         'offer_type': get_offer_type(auction.source_data or {}, filename),
                         'source_data': auction.source_data,
-                        'first_seen': first_seen_val,
+                        'first_seen': _clean_ts(first_seen_val),
                         'import_batch_id': job_id
                     }
 
@@ -886,17 +889,25 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                             record_offer_type = 'buy_now'
                         elif auction_type.lower() == 'bid':
                             record_offer_type = 'auction'
+                    
+                    # Safely extract first_seen and handle empty strings
+                    first_seen_val = auction.source_data.get('registeredDate') if auction.source_data else None
+
+                    def _clean_ts(ts):
+                        if not ts: return None
+                        if isinstance(ts, str) and ts.strip() == '': return None
+                        return ts
 
                     record = {
                         'domain': auction.domain,
                         'auction_site': auction.auction_site,
-                        'expiration_date': auction.expiration_date.isoformat() if auction.expiration_date else None,
-                        'start_date': auction.start_date.isoformat() if auction.start_date else None,
+                        'expiration_date': _clean_ts(auction.expiration_date.isoformat() if auction.expiration_date else None),
+                        'start_date': _clean_ts(auction.start_date.isoformat() if auction.start_date else None),
                         'current_bid': auction.current_bid,
                         'link': auction.link,
                         'offer_type': record_offer_type,
                         'source_data': auction.source_data,
-                        'first_seen': first_seen_val,
+                        'first_seen': _clean_ts(first_seen_val),
                         'import_batch_id': job_id
                     }
 

@@ -1928,7 +1928,7 @@ class DatabaseService:
             
             # Supabase Storage API: remove accepts a list of paths
             # returns a list of deleted objects
-            response = client.storage.from_(bucket).remove([path])
+            response = await client.storage.from_(bucket).remove([path])
             
             if response and len(response) > 0:
                 logger.info("Deleted file from storage successfully", bucket=bucket, path=path)
