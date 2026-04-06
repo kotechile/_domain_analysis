@@ -450,7 +450,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
     scoring_service = DomainScoringService()
 
     try:
-        if True: # Removed lock to allow parallel processing
+        async with _upload_status_lock:
             # Update status
             await db.update_csv_upload_progress(
                 job_id=job_id,
@@ -482,9 +482,17 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
 
             # Reduced batch size for better stability with 1M+ record files
             BATCH_SIZE = 2500
+            CHUNK_MAX_RECORDS = 50000
+            
             batch_records = []
             total_parsed = 0
             total_skipped = 0
+            chunk_parsed = 0
+            
+            total_inserted = 0
+            total_updated = 0
+            total_deleted = 0
+            
             is_namecheap = auction_site.lower() == 'namecheap'
 
             for auction_input in iterator:
@@ -516,6 +524,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
 
                     batch_records.append(record)
                     total_parsed += 1
+                    chunk_parsed += 1
 
                     if len(batch_records) >= BATCH_SIZE:
                         await _insert_to_staging(db, batch_records, job_id)
@@ -532,52 +541,68 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                             # Yield to event loop for a moment
                             await asyncio.sleep(0.01)
 
+                    if chunk_parsed >= CHUNK_MAX_RECORDS:
+                        # Process the chunk right away
+                        if batch_records:
+                            await _insert_to_staging(db, batch_records, job_id)
+                            batch_records = []
+                        
+                        logger.info("Processing chunk", job_id=job_id, chunk_records=chunk_parsed, total_parsed=total_parsed)
+                        
+                        await db.update_csv_upload_progress(
+                            job_id=job_id, status='processing', current_stage='importing', processed_records=total_parsed
+                        )
+                        import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
+                        if import_result.get('success'):
+                            total_inserted += (import_result.get('inserted') or 0)
+                            total_updated += (import_result.get('updated') or 0)
+                            total_deleted += (import_result.get('deleted') or 0)
+                            new_domains = import_result.get('new_domains') or 0
+                            
+                            if new_domains > 0:
+                                await db.update_csv_upload_progress(
+                                    job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed
+                                )
+                                await _score_new_domains_after_import(
+                                    db, job_id, scoring_service, fast_mode=(auction_site.lower() == 'namecheap')
+                                )
+                        
+                        # clear staging for the next chunk
+                        await _clear_staging_for_batch(db, job_id)
+                        chunk_parsed = 0
+
                 except Exception as e:
                     total_skipped += 1
                     logger.debug("Failed to process record", error=str(e))
                     continue
 
-            if batch_records:
-                await _insert_to_staging(db, batch_records, job_id)
-
-            logger.info("Parsing complete", job_id=job_id, parsed=total_parsed, skipped=total_skipped)
-
-            # ATOMIC IMPORT: Single SQL transaction
-            await db.update_csv_upload_progress(
-                job_id=job_id,
-                status='processing',
-                current_stage='importing'
-            )
-
-            import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
-
-            if not import_result.get('success'):
-                raise Exception(f"Import failed: {import_result.get('error')}")
-
-            inserted = import_result.get('inserted') or 0
-            updated = import_result.get('updated') or 0
-            deleted = import_result.get('deleted') or 0
-            new_domains = import_result.get('new_domains') or 0
-
-            logger.info("Atomic import complete",
-                       job_id=job_id,
-                       inserted=inserted,
-                       updated=updated,
-                       deleted=deleted,
-                       new_domains=new_domains)
-
-            # Score new domains
-            if new_domains > 0:
+            # End of loop, process remaining chunk
+            if batch_records or chunk_parsed > 0:
+                if batch_records:
+                    await _insert_to_staging(db, batch_records, job_id)
+                
+                logger.info("Processing final chunk", job_id=job_id, chunk_records=chunk_parsed, total_parsed=total_parsed)
                 await db.update_csv_upload_progress(
-                    job_id=job_id,
-                    status='processing',
-                    current_stage='scoring'
+                    job_id=job_id, status='processing', current_stage='importing', processed_records=total_parsed
                 )
+                import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
+                if import_result.get('success'):
+                    total_inserted += (import_result.get('inserted') or 0)
+                    total_updated += (import_result.get('updated') or 0)
+                    total_deleted += (import_result.get('deleted') or 0)
+                    new_domains = import_result.get('new_domains') or 0
+                    
+                    if new_domains > 0:
+                        await db.update_csv_upload_progress(
+                            job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed
+                        )
+                        await _score_new_domains_after_import(
+                            db, job_id, scoring_service, fast_mode=(auction_site.lower() == 'namecheap')
+                        )
+                # clear staging 
+                await _clear_staging_for_batch(db, job_id)
 
-                scored = await _score_new_domains_after_import(
-                    db, job_id, scoring_service, fast_mode=(auction_site.lower() == 'namecheap')
-                )
-                logger.info("Scoring complete", job_id=job_id, scored=scored)
+            logger.info("Parsing and import complete", job_id=job_id, parsed=total_parsed, skipped=total_skipped)
 
             # Complete
             await db.update_csv_upload_progress(
@@ -586,16 +611,14 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                 current_stage='completed',
                 processed_records=total_parsed,
                 skipped_count=total_skipped,
-                inserted_count=inserted,
+                inserted_count=total_inserted,
                 completed=True
             )
             logger.info(f"[CSV UPLOAD COMPLETE] {job_id}",
                        parsed=total_parsed,
-                       inserted=inserted,
-                       updated=updated,
-                       deleted=deleted)
-        else:
-            pass # End of virtual lock block
+                       inserted=total_inserted,
+                       updated=total_updated,
+                       deleted=total_deleted)
 
     except Exception as e:
         logger.error(f"[CSV UPLOAD FAILED] {job_id}", error=str(e))
@@ -606,16 +629,6 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
         )
         raise
 
-
-
-        logger.info("Triggered processing for existing storage file", filename=request.filename, job_id=job_id, storage_path=request.storage_path)
-
-        # Return immediately - the background task runs after response is sent
-        return { "success": True, "message": "Processing started in background.", "job_id": job_id, "filename": request.filename }
-
-    except Exception as e:
-        logger.error("Failed to trigger storage processing", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Failed to trigger processing: {str(e)}")
 
 
 class StorageProcessingRequest(BaseModel):
@@ -822,7 +835,7 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
     scoring_service = DomainScoringService()
 
     try:
-        if True: # Removed lock to allow parallel processing
+        async with _upload_status_lock:
             # Update status
             await db.update_csv_upload_progress(
                 job_id=job_id,
@@ -840,9 +853,17 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                 raise ValueError(f"JSON file is empty or contains no valid auction records")
 
             # Convert to staging records
+            BATCH_SIZE = 5000
+            CHUNK_MAX_RECORDS = 50000
+            
             batch_records = []
             total_parsed = 0
             total_skipped = 0
+            chunk_parsed = 0
+            
+            total_inserted = 0
+            total_updated = 0
+            total_deleted = 0
 
             for auction_input in auction_inputs:
                 try:
@@ -872,56 +893,85 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
 
                     batch_records.append(record)
                     total_parsed += 1
+                    chunk_parsed += 1
 
-                    if len(batch_records) >= 5000:
+                    if len(batch_records) >= BATCH_SIZE:
                         await _insert_to_staging(db, batch_records, job_id)
                         batch_records = []
+
+                        # More frequent heartbeats for large files
+                        if total_parsed % 5000 == 0:
+                            await db.update_csv_upload_progress(
+                                job_id=job_id,
+                                status='processing',
+                                current_stage='parsing',
+                                processed_records=total_parsed
+                            )
+                            # Yield to event loop for a moment
+                            await asyncio.sleep(0.01)
+
+                    if chunk_parsed >= CHUNK_MAX_RECORDS:
+                        # Process the chunk right away
+                        if batch_records:
+                            await _insert_to_staging(db, batch_records, job_id)
+                            batch_records = []
+                        
+                        logger.info("Processing JSON chunk", job_id=job_id, chunk_records=chunk_parsed, total_parsed=total_parsed)
+                        
+                        await db.update_csv_upload_progress(
+                            job_id=job_id, status='processing', current_stage='importing', processed_records=total_parsed
+                        )
+                        import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
+                        if import_result.get('success'):
+                            total_inserted += (import_result.get('inserted') or 0)
+                            total_updated += (import_result.get('updated') or 0)
+                            total_deleted += (import_result.get('deleted') or 0)
+                            new_domains = import_result.get('new_domains') or 0
+                            
+                            if new_domains > 0:
+                                await db.update_csv_upload_progress(
+                                    job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed
+                                )
+                                await _score_new_domains_after_import(
+                                    db, job_id, scoring_service, fast_mode=False
+                                )
+                        
+                        # clear staging for the next chunk
+                        await _clear_staging_for_batch(db, job_id)
+                        chunk_parsed = 0
 
                 except Exception as e:
                     total_skipped += 1
                     logger.debug("Failed to process JSON record", error=str(e))
                     continue
 
-            if batch_records:
-                await _insert_to_staging(db, batch_records, job_id)
-
-            logger.info("JSON parsing complete", job_id=job_id, parsed=total_parsed, skipped=total_skipped)
-
-            # Atomic import
-            await db.update_csv_upload_progress(
-                job_id=job_id,
-                status='processing',
-                current_stage='importing'
-            )
-
-            import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
-
-            if not import_result.get('success'):
-                raise Exception(f"Import failed: {import_result.get('error')}")
-
-            inserted = import_result.get('inserted') or 0
-            updated = import_result.get('updated') or 0
-            deleted = import_result.get('deleted') or 0
-            new_domains = import_result.get('new_domains') or 0
-
-            logger.info("Atomic import complete",
-                       job_id=job_id,
-                       inserted=inserted,
-                       updated=updated,
-                       deleted=deleted)
-
-            # Score new domains
-            if new_domains > 0:
+            # End of loop, process remaining chunk
+            if batch_records or chunk_parsed > 0:
+                if batch_records:
+                    await _insert_to_staging(db, batch_records, job_id)
+                
+                logger.info("Processing final JSON chunk", job_id=job_id, chunk_records=chunk_parsed, total_parsed=total_parsed)
                 await db.update_csv_upload_progress(
-                    job_id=job_id,
-                    status='processing',
-                    current_stage='scoring'
+                    job_id=job_id, status='processing', current_stage='importing', processed_records=total_parsed
                 )
+                import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
+                if import_result.get('success'):
+                    total_inserted += (import_result.get('inserted') or 0)
+                    total_updated += (import_result.get('updated') or 0)
+                    total_deleted += (import_result.get('deleted') or 0)
+                    new_domains = import_result.get('new_domains') or 0
+                    
+                    if new_domains > 0:
+                        await db.update_csv_upload_progress(
+                            job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed
+                        )
+                        await _score_new_domains_after_import(
+                            db, job_id, scoring_service, fast_mode=False
+                        )
+                # clear staging 
+                await _clear_staging_for_batch(db, job_id)
 
-                scored = await _score_new_domains_after_import(
-                    db, job_id, scoring_service, fast_mode=False
-                )
-                logger.info("Scoring complete", job_id=job_id, scored=scored)
+            logger.info("JSON parsing and import complete", job_id=job_id, parsed=total_parsed, skipped=total_skipped)
 
             # Complete
             await db.update_csv_upload_progress(
@@ -930,16 +980,14 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                 current_stage='completed',
                 processed_records=total_parsed,
                 skipped_count=total_skipped,
-                inserted_count=inserted,
+                inserted_count=total_inserted,
                 completed=True
             )
             logger.info(f"[JSON UPLOAD COMPLETE] {job_id}",
                        parsed=total_parsed,
-                       inserted=inserted,
-                       updated=updated,
-                       deleted=deleted)
-        else:
-            pass # End of virtual lock block
+                       inserted=total_inserted,
+                       updated=total_updated,
+                       deleted=total_deleted)
 
     except Exception as e:
         logger.error(f"[JSON UPLOAD FAILED] {job_id}", error=str(e))
