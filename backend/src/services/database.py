@@ -1163,34 +1163,33 @@ class DatabaseService:
     
     async def delete_expired_auctions(self) -> int:
         """
-        Delete auctions with expiration_date in the past
-        
-        Returns:
-            Number of records deleted
+        Delete auctions with expiration_date in the past in batches
         """
         client = await self._get_client()
         try:
             if not client:
                 raise Exception("Supabase client not available")
             
-            # ) Call the optimized RPC function which deletes in chunks (limit 10k
-            result = await client.rpc('delete_expired_auctions', {}).execute()
+            total_deleted = 0
             
-            # ) Verify result format (RPC returns integer directly or in data
-            deleted_count = result.data if result.data is not None else 0
-            
-            logger.info("Deleted expired auctions", count=deleted_count)
-            return deleted_count
+            # Loop the batch RPC until it deletes less than the limit (10000)
+            while True:
+                result = await client.rpc('delete_expired_auctions_batch', {}).execute()
+                batch_count = result.data if result.data is not None else 0
+                total_deleted += batch_count
+                
+                if batch_count < 10000:
+                    break
+                    
+                # To prevent blocking the event loop on huge backlogs
+                import asyncio
+                await asyncio.sleep(0.01)
+                
+            logger.info("Deleted expired auctions safely", count=total_deleted)
+            return total_deleted
             
         except Exception as e:
-            logger.error("Failed to delete expired auctions", error=str(e))
-            # Don't raise error to prevent breaking the calling process
-            return 0
-            
-        except Exception as e:
-            logger.error("Failed to delete expired auctions", error=str(e))
-            # Don't raise - deletion of expired records is not critical
-            # Return 0 to indicate no records were deleted
+            logger.error("Failed to delete expired auctions", error=str(e), exc_info=True)
             return 0
     
     async def get_preferred_auctions_without_stats(self, limit: int = 1000) -> List[Dict[str, Any]]:
