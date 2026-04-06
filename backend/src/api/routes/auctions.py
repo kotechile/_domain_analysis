@@ -193,8 +193,8 @@ async def _score_new_domains_after_import(db, import_batch_id: str, scoring_serv
 
     client = await db._get_client()
     total_scored = 0
-    batch_size = 1000
-    UPSERT_BATCH_SIZE = 100
+    batch_size = 5000
+    UPSERT_BATCH_SIZE = 1000
 
     try:
         from services.csv_parser_service import CSVParserService
