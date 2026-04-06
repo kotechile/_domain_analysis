@@ -102,12 +102,12 @@ async def _insert_to_staging(db, records: List[Dict], import_batch_id: str, batc
     return total_inserted
 
 
-async def _perform_atomic_import(db, auction_site: str, import_batch_id: str, offering_type: str = None) -> Dict:
+async def _perform_atomic_import(db, auction_site: str, import_batch_id: str, offering_type: str = None, cleanup_stale: bool = False) -> Dict:
     """
-    Perform atomic import: UPSERT new, UPDATE existing, DELETE stale.
-    Single RPC call - all happens in one database transaction.
+    Perform atomic import: UPSERT new, UPDATE existing.
+    Cleanup (DELETE) stale records only if cleanup_stale is True (usually on final chunk).
     """
-    logger.info("Starting atomic import", import_batch_id=import_batch_id, auction_site=auction_site)
+    logger.info("Starting atomic import", import_batch_id=import_batch_id, auction_site=auction_site, cleanup_stale=cleanup_stale)
 
     client = await db._get_client()
 
@@ -115,7 +115,8 @@ async def _perform_atomic_import(db, auction_site: str, import_batch_id: str, of
         result = await client.rpc('import_auctions_batch', {
             'p_import_batch_id': import_batch_id,
             'p_auction_site': auction_site,
-            'p_offering_type': offering_type
+            'p_offering_type': offering_type,
+            'p_cleanup_stale': cleanup_stale
         }).execute()
 
         if result.data:
@@ -562,7 +563,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                         )
                         
                         try:
-                            import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
+                            import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type, cleanup_stale=False)
                             if import_result.get('success'):
                                 total_inserted += (import_result.get('inserted') or 0)
                                 total_updated += (import_result.get('updated') or 0)
@@ -597,7 +598,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                 await db.update_csv_upload_progress(
                     job_id=job_id, status='processing', current_stage='importing', processed_records=total_parsed
                 )
-                import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
+                import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type, cleanup_stale=True)
                 if import_result.get('success'):
                     total_inserted += (import_result.get('inserted') or 0)
                     total_updated += (import_result.get('updated') or 0)
@@ -942,7 +943,7 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                             job_id=job_id, status='processing', current_stage='importing', processed_records=total_parsed
                         )
                         try:
-                            import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
+                            import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type, cleanup_stale=False)
                             if import_result.get('success'):
                                 total_inserted += (import_result.get('inserted') or 0)
                                 total_updated += (import_result.get('updated') or 0)
@@ -977,7 +978,7 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                 await db.update_csv_upload_progress(
                     job_id=job_id, status='processing', current_stage='importing', processed_records=total_parsed
                 )
-                import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
+                import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type, cleanup_stale=True)
                 if import_result.get('success'):
                     total_inserted += (import_result.get('inserted') or 0)
                     total_updated += (import_result.get('updated') or 0)
