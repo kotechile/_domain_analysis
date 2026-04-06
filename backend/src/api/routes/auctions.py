@@ -509,6 +509,11 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                             total_skipped += 1
                             continue
 
+                    # Safely extract first_seen and handle empty strings
+                    first_seen_val = auction.source_data.get('registeredDate') if auction.source_data else None
+                    if first_seen_val == '' or first_seen_val == ' ':
+                        first_seen_val = None
+
                     record = {
                         'domain': auction.domain,
                         'auction_site': auction.auction_site,
@@ -518,7 +523,7 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                         'link': auction.link,
                         'offer_type': get_offer_type(auction.source_data or {}, filename),
                         'source_data': auction.source_data,
-                        'first_seen': auction.source_data.get('registeredDate') if auction.source_data else None,
+                        'first_seen': first_seen_val,
                         'import_batch_id': job_id
                     }
 
@@ -552,24 +557,28 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                         await db.update_csv_upload_progress(
                             job_id=job_id, status='processing', current_stage='importing', processed_records=total_parsed
                         )
-                        import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
-                        if import_result.get('success'):
-                            total_inserted += (import_result.get('inserted') or 0)
-                            total_updated += (import_result.get('updated') or 0)
-                            total_deleted += (import_result.get('deleted') or 0)
-                            new_domains = import_result.get('new_domains') or 0
-                            
-                            if new_domains > 0:
-                                await db.update_csv_upload_progress(
-                                    job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed
-                                )
-                                await _score_new_domains_after_import(
-                                    db, job_id, scoring_service, fast_mode=(auction_site.lower() == 'namecheap')
-                                )
                         
-                        # clear staging for the next chunk
-                        await _clear_staging_for_batch(db, job_id)
-                        chunk_parsed = 0
+                        try:
+                            import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
+                            if import_result.get('success'):
+                                total_inserted += (import_result.get('inserted') or 0)
+                                total_updated += (import_result.get('updated') or 0)
+                                total_deleted += (import_result.get('deleted') or 0)
+                                new_domains = import_result.get('new_domains') or 0
+                                
+                                if new_domains > 0:
+                                    await db.update_csv_upload_progress(
+                                        job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed
+                                    )
+                                    await _score_new_domains_after_import(
+                                        db, job_id, scoring_service, fast_mode=(auction_site.lower() == 'namecheap')
+                                    )
+                        except Exception as import_err:
+                            logger.error(f"Chunk import failed, but continuing", error=str(import_err))
+                        finally:
+                            # ALLWAYS clear staging and reset counter for the next chunk, even if it failed!
+                            await _clear_staging_for_batch(db, job_id)
+                            chunk_parsed = 0
 
                 except Exception as e:
                     total_skipped += 1
@@ -887,7 +896,7 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                         'link': auction.link,
                         'offer_type': record_offer_type,
                         'source_data': auction.source_data,
-                        'first_seen': auction.source_data.get('registeredDate') if auction.source_data else None,
+                        'first_seen': first_seen_val,
                         'import_batch_id': job_id
                     }
 
@@ -921,24 +930,27 @@ async def process_json_upload_async( job_id: str, json_content: str, filename: s
                         await db.update_csv_upload_progress(
                             job_id=job_id, status='processing', current_stage='importing', processed_records=total_parsed
                         )
-                        import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
-                        if import_result.get('success'):
-                            total_inserted += (import_result.get('inserted') or 0)
-                            total_updated += (import_result.get('updated') or 0)
-                            total_deleted += (import_result.get('deleted') or 0)
-                            new_domains = import_result.get('new_domains') or 0
-                            
-                            if new_domains > 0:
-                                await db.update_csv_upload_progress(
-                                    job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed
-                                )
-                                await _score_new_domains_after_import(
-                                    db, job_id, scoring_service, fast_mode=False
-                                )
-                        
-                        # clear staging for the next chunk
-                        await _clear_staging_for_batch(db, job_id)
-                        chunk_parsed = 0
+                        try:
+                            import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type)
+                            if import_result.get('success'):
+                                total_inserted += (import_result.get('inserted') or 0)
+                                total_updated += (import_result.get('updated') or 0)
+                                total_deleted += (import_result.get('deleted') or 0)
+                                new_domains = import_result.get('new_domains') or 0
+                                
+                                if new_domains > 0:
+                                    await db.update_csv_upload_progress(
+                                        job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed
+                                    )
+                                    await _score_new_domains_after_import(
+                                        db, job_id, scoring_service, fast_mode=False
+                                    )
+                        except Exception as import_err:
+                            logger.error("JSON Chunk import failed, but continuing", error=str(import_err))
+                        finally:
+                            # ALLWAYS clear staging and reset counter for the next chunk, even if it failed!
+                            await _clear_staging_for_batch(db, job_id)
+                            chunk_parsed = 0
 
                 except Exception as e:
                     total_skipped += 1
