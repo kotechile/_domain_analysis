@@ -219,10 +219,9 @@ async def _score_new_domains_after_import(db, import_batch_id: str, scoring_serv
                 try:
                     # Parse domain to get scoring data
                     parsed = parser.parse_single_domain(domain_record['domain'])
+                    score = None
                     if parsed and hasattr(parsed, 'total_meaning_score') and parsed.total_meaning_score is not None:
                         score = float(parsed.total_meaning_score)
-                    else:
-                        score = 0.0
 
                     # MUST include unique constraint columns: domain, auction_site, expiration_date
                     batch_updates.append({
@@ -240,7 +239,7 @@ async def _score_new_domains_after_import(db, import_batch_id: str, scoring_serv
                         'domain': domain_record['domain'],
                         'auction_site': domain_record['auction_site'],
                         'expiration_date': domain_record['expiration_date'],
-                        'score': 0.0,
+                        'score': None,
                         'processed': True
                     })
 
