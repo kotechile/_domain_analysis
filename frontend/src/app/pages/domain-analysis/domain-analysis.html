@@ -44,9 +44,8 @@
                     <div class="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
                     <span>Analyzing…</span>
                     } @else {
-                    <i-lucide [name]="analysisForm.get('mode')?.value === 'dual' ? Sparkles : Zap"
-                        class="w-4 h-4"></i-lucide>
-                    <span>{{ analysisForm.get('mode')?.value === 'dual' ? 'Deep Analysis' : 'Quick Check' }}</span>
+                    <i-lucide [name]="Sparkles" class="w-4 h-4"></i-lucide>
+                    <span>Deep Analysis</span>
                     }
                 </button>
             </div>
@@ -58,28 +57,6 @@
                 <span>{{ error() }}</span>
             </div>
             }
-
-            <!-- Mode Toggles — slim, below search -->
-            <div class="mt-4 flex justify-center gap-2">
-                <button type="button" (click)="setMode('dual')"
-                    class="px-4 py-2 rounded-lg text-xs font-semibold transition-all"
-                    [ngStyle]="{'background': analysisForm.get('mode')?.value === 'dual' ? 'var(--accent-color)' : 'transparent',
-                               'color': analysisForm.get('mode')?.value === 'dual' ? 'white' : 'var(--text-color)',
-                               'opacity': analysisForm.get('mode')?.value === 'dual' ? '1' : '0.4',
-                               'border': '1px solid',
-                               'border-color': analysisForm.get('mode')?.value === 'dual' ? 'var(--accent-color)' : 'transparent'}">
-                    ✦ Full SEO + AI Audit
-                </button>
-                <button type="button" (click)="setMode('legacy')"
-                    class="px-4 py-2 rounded-lg text-xs font-semibold transition-all"
-                    [ngStyle]="{'background': analysisForm.get('mode')?.value === 'legacy' ? 'var(--accent-color)' : 'transparent',
-                               'color': analysisForm.get('mode')?.value === 'legacy' ? 'white' : 'var(--text-color)',
-                               'opacity': analysisForm.get('mode')?.value === 'legacy' ? '1' : '0.4',
-                               'border': '1px solid',
-                               'border-color': analysisForm.get('mode')?.value === 'legacy' ? 'var(--accent-color)' : 'transparent'}">
-                    ⚡ Metrics Only
-                </button>
-            </div>
         </form>
 
         <!-- Minimal Feature Hints — text only, no cards -->

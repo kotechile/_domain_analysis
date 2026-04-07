@@ -11,13 +11,13 @@
                 </h1>
             </div>
             <p class="text-sm font-bold opacity-40 uppercase tracking-widest" style="color: var(--text-color)">
-                YOUR PREVIOUS DEEP AUDITS & SCAN RESULTS
+                YOUR RECENT DOMAIN ANALYSES
             </p>
         </div>
         
         <div class="flex items-center gap-3">
             <button (click)="fetchReports()" class="btn-primary flex items-center space-x-2">
-                <i-lucide [name]="Trash2" class="w-4 h-4"></i-lucide>
+                <i-lucide [name]="RotateCcw" class="w-4 h-4"></i-lucide>
                 <span>Refresh List</span>
             </button>
         </div>
@@ -99,8 +99,13 @@
                             <!-- Button Action -->
                             <td class="text-right">
                                 <div class="flex items-center justify-end space-x-3 pr-4">
-                                    <button class="p-2 rounded-xl bg-white/5 hover:bg-white/10 group-hover:bg-indigo-500/20 transition-all group-hover:scale-110">
+                                    <button class="p-2 rounded-xl bg-white/5 hover:bg-white/10 group-hover:bg-indigo-500/20 transition-all group-hover:scale-110" [routerLink]="['/reports', report.domain_name]">
                                         <i-lucide [name]="ArrowRight" class="w-4 h-4 text-indigo-500"></i-lucide>
+                                    </button>
+                                    <button (click)="deleteReport(report.domain_name, $event)" 
+                                            class="p-2 rounded-xl bg-white/5 hover:bg-red-500/20 text-red-400 group-hover:opacity-100 transition-all"
+                                            title="Delete Report">
+                                        <i-lucide [name]="Trash2" class="w-4 h-4"></i-lucide>
                                     </button>
                                 </div>
                             </td>

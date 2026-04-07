@@ -120,7 +120,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
     class Config:
-        env_file = ".env"
+        env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
         env_file_encoding = "utf-8"
         case_sensitive = True
         extra = "ignore"   # ) Ignore extra environment variables (like REACT_APP_*

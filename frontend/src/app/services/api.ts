@@ -44,6 +44,10 @@ export class ApiService {
     return this.http.get<Models.ReportResponse>(`${this.baseUrl}/reports/${domain}`);
   }
 
+  deleteReport(domain: string): Observable<{ success: boolean; message: string }> {
+    return this.http.delete<{ success: boolean; message: string }>(`${this.baseUrl}/reports/${domain}`);
+  }
+
   getAnalysisProgress(domain: string): Observable<Models.ProgressResponse> {
     return this.http.get<Models.ProgressResponse>(`${this.baseUrl}/reports/${domain}/progress`);
   }

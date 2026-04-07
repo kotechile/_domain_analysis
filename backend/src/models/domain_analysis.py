@@ -254,6 +254,7 @@ class ProgressInfo(BaseModel):
 class DomainAnalysisReport(BaseModel):
     """Complete domain analysis report"""
     domain_name: str
+    user_id: Optional[str] = None
     analysis_timestamp: datetime = Field(default_factory=datetime.utcnow)
     status: AnalysisStatus = AnalysisStatus.PENDING
     data_for_seo_metrics: Optional[DataForSEOMetrics] = None

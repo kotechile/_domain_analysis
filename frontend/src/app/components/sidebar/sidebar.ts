@@ -38,7 +38,7 @@ import { CreditService } from '../../services/credit';
     }
     
     .sidebar-footer {
-      @apply absolute bottom-0 left-0 w-full p-6 border-t border-opacity-5;
+      @apply p-6 border-t border-opacity-5 mt-auto;
       border-color: var(--border-color);
     }
   `]
@@ -61,8 +61,6 @@ export class SidebarComponent {
     { path: '/', label: 'Deep Analysis', icon: BrainCircuit },
     { path: '/reports', label: 'Recent Scans', icon: History },
     { path: '/marketplace', label: 'Marketplace', icon: Table },
-    { path: '/import', label: 'Import Dashboard', icon: Activity },
-    { path: '/billing', label: 'Billing & Credits', icon: CreditCard },
-    { path: '/themes', label: 'Settings & UI', icon: Settings }
+    { path: '/billing', label: 'Billing & Credits', icon: CreditCard }
   ];
 }

@@ -1,6 +1,6 @@
-<div class="h-full flex flex-col pt-8 pb-32">
+<div class="h-full flex flex-col pt-8">
     <!-- Premium Logo Section -->
-    <div class="logo-section flex items-center space-x-3 group cursor-pointer" routerLink="/">
+    <div class="logo-section flex items-center space-x-3 group cursor-pointer shrink-0" routerLink="/">
         <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform group-hover:rotate-12 duration-500"
             style="background: linear-gradient(135deg, var(--accent-color) 0%, #4f46e5 100%)">
             <i-lucide [name]="LayoutDashboard" class="w-6 h-6"></i-lucide>
@@ -12,8 +12,8 @@
         </div>
     </div>
 
-    <!-- Main Navigation Sections -->
-    <div class="space-y-10 px-2">
+    <!-- Main Navigation Sections - Scrollable -->
+    <div class="flex-grow overflow-y-auto space-y-10 px-2 py-4 custom-scrollbar">
         <div class="space-y-1">
             <span class="px-7 text-[10px] font-black uppercase tracking-[0.2em] opacity-30 mb-4 block"
                 style="color: var(--text-color)">Main Platform</span>
@@ -22,29 +22,16 @@
                 class="nav-item group">
                 <i-lucide [name]="item.icon"
                     class="w-5 h-5 opacity-60 group-hover:scale-110 transition-transform"></i-lucide>
-                <span class="flex-grow">{{ item.label }}</span>
+                <span class="flex-grow text-xs">{{ item.label }}</span>
                 <i-lucide [name]="ChevronRight"
                     class="w-3.5 h-3.5 opacity-0 group-[.active]:opacity-100 transition-all"></i-lucide>
             </a>
             }
         </div>
-
-        <div class="space-y-1">
-            <span class="px-7 text-[10px] font-black uppercase tracking-[0.2em] opacity-30 mb-4 block"
-                style="color: var(--text-color)">Quick Assets</span>
-            <a class="nav-item opacity-20 cursor-not-allowed">
-                <i-lucide [name]="History" class="w-5 h-5"></i-lucide>
-                <span>Recent Scouts</span>
-            </a>
-            <a class="nav-item opacity-20 cursor-not-allowed">
-                <i-lucide [name]="CreditCard" class="w-5 h-5"></i-lucide>
-                <span>Balance Management</span>
-            </a>
-        </div>
     </div>
 
     <!-- Sidebar Bottom Section -->
-    <div class="sidebar-footer">
+    <div class="sidebar-footer shrink-0">
         <div class="p-4 rounded-2xl space-y-3"
             style="background: rgba(var(--accent-color-rgb, 13, 110, 253), 0.05); border: 1px solid rgba(var(--accent-color-rgb, 13, 110, 253), 0.1)">
             <div class="flex items-center space-x-2">

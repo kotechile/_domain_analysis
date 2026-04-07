@@ -2,7 +2,7 @@ import { Component, inject, signal, OnInit, effect } from '@angular/core';
 import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../services/api';
-import { LucideAngularModule, Search, History, Filter, ArrowRight, ExternalLink, Trash2, BrainCircuit, Zap, CheckCircle, Clock } from 'lucide-angular';
+import { LucideAngularModule, Search, History, Filter, ArrowRight, ExternalLink, Trash2, BrainCircuit, Zap, CheckCircle, Clock, RotateCcw } from 'lucide-angular';
 import { firstValueFrom } from 'rxjs';
 import { DomainAnalysisReport } from '../../models/domain.model';
 
@@ -52,6 +52,7 @@ export class ReportsListComponent implements OnInit {
   readonly Zap = Zap;
   readonly CheckCircle = CheckCircle;
   readonly Clock = Clock;
+  readonly RotateCcw = RotateCcw;
 
   // State
   reports = signal<DomainAnalysisReport[]>([]);
@@ -91,6 +92,22 @@ export class ReportsListComponent implements OnInit {
       case 'in_progress': return 'status-progress';
       case 'failed': return 'status-failed';
       default: return 'status-pending';
+    }
+  }
+
+  async deleteReport(domain: string, event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    if (confirm(`Are you sure you want to delete the report for ${domain}?`)) {
+      try {
+        await firstValueFrom(this.api.deleteReport(domain));
+        // Refresh the list
+        await this.fetchReports();
+      } catch (err) {
+        console.error('Failed to delete report:', err);
+        // Error handling is already scoped to the catch block
+      }
     }
   }
 

@@ -105,15 +105,26 @@ async def get_domain_history(domain: str, current_user = Depends(get_current_use
 
 
 @router.get("/reports", response_model=List[DomainAnalysisReport])
-async def list_reports( limit: int = Query(10, ge=1, le=100), offset: int = Query(0, ge=0), status: Optional[str] = Query(None) ):
+async def list_reports( 
+    limit: int = Query(10, ge=1, le=100), 
+    offset: int = Query(0, ge=0), 
+    status: Optional[str] = Query(None),
+    current_user = Depends(get_current_user)
+):
     """
-    List domain analysis reports with pagination
+    List domain analysis reports with pagination, filtered by current user
     """
     try:
         db = get_database()
+        user_id = current_user['id'] if current_user and 'id' in current_user else None
         
-        # ) Build query - only select necessary fields to improve performance (avoid fetching heavy JSONB fields like historical_data
-        query = (await db._get_client()).table('reports').select( 'id, domain_name, status, analysis_timestamp, processing_time_seconds, error_message, analysis_phase, analysis_mode, data_for_seo_metrics, detailed_data_available, created_at' )
+        # Build query
+        query = (await db._get_client()).table('reports').select( 
+            'id, domain_name, status, analysis_timestamp, processing_time_seconds, error_message, analysis_phase, analysis_mode, data_for_seo_metrics, detailed_data_available, created_at, user_id' 
+        )
+        
+        if user_id:
+            query = query.eq('user_id', user_id)
         
         if status:
             query = query.eq('status', status)
@@ -627,7 +638,7 @@ async def export_report_pdf(domain: str):
 
 
 @router.delete("/reports/{domain}")
-async def delete_report(domain: str):
+async def delete_report(domain: str, current_user = Depends(get_current_user)):
     """
     Delete a domain analysis and all related records
     This will remove:
@@ -644,6 +655,10 @@ async def delete_report(domain: str):
         report = await db.get_report(domain)
         if not report:
             raise HTTPException(status_code=404, detail="Report not found")
+            
+        # Ownership check
+        if report.user_id and str(report.user_id) != str(current_user.get('id')):
+            raise HTTPException(status_code=403, detail="You do not have permission to delete this report")
         
         # Delete all related records
         logger.info("Calling delete_domain_analysis method", domain=domain)

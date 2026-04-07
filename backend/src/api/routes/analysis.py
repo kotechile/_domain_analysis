@@ -2,7 +2,7 @@
 Domain analysis API routes
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from middleware.auth_middleware import get_current_user
 from typing import Optional
 import structlog
@@ -48,33 +48,45 @@ async def analyze_domain( request: DomainAnalysisRequest, background_tasks: Back
         # Determine action and cost
         # Map LEGACY mode to ai_domain_summary, DUAL/ASYNC to deep_content_analysis
         action_name = "ai_domain_summary" if request.mode == AnalysisMode.LEGACY else "deep_content_analysis"
+        logger.info("Calculating cost", action=action_name, user_id=str(current_user.id))
         cost = await pricing_service.calculate_action_cost(action_name)
         
         # Check balance
+        logger.info("Checking balance", user_id=str(current_user.id), cost=cost)
         balance = await credits_service.get_balance(current_user.id)
         if balance < cost:
-            raise HTTPException( status_code=402, detail=f"Insufficient credits. This analysis requires {cost} credits but you only have {balance}." )
+            logger.warning("Insufficient credits", user_id=str(current_user.id), balance=balance, cost=cost)
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=f"Insufficient credits. Analysis cost: {cost}, Balance: {balance}"
+            )
             
         # Deduct credits
-        description = f"Domain analysis for {request.domain} ({'Summary' if action_name == 'ai_domain_summary' else 'Deep'})"
+        logger.info("Deducting credits", user_id=str(current_user.id), cost=cost)
+        description = f"AI Domain Analysis: {request.domain} ({request.mode.value})"
         success = await credits_service.deduct_credits(current_user.id, cost, description, f"analysis_{request.domain}")
-        
         if not success:
+            logger.error("Credit deduction failed", user_id=str(current_user.id))
             raise HTTPException(status_code=402, detail="Insufficient credits or credit deduction failed")
 
         if existing_report:
-            # Update existing report to pending
+            # Update existing report fields to pending
             existing_report.status = AnalysisStatus.PENDING
-            existing_report.analysis_mode = request.mode
+            existing_report.analysis_phase = AnalysisPhase.ESSENTIAL
             existing_report.analysis_timestamp = datetime.utcnow()
             existing_report.error_message = None
             existing_report.processing_time_seconds = None
-            report_id = await db.save_report(existing_report)
+            # Update the record
+            await db.save_report(existing_report)
+            report_id = existing_report.id if hasattr(existing_report, 'id') else request.domain
         else:
-            # Create initial report record
-            report = DomainAnalysisReport( domain_name=request.domain, status=AnalysisStatus.PENDING, analysis_mode=request.mode )
-            
-            # Save initial report
+            # Create a new report
+            report = DomainAnalysisReport(
+                domain_name=request.domain,
+                status=AnalysisStatus.PENDING,
+                analysis_phase=AnalysisPhase.ESSENTIAL,
+                analysis_timestamp=datetime.utcnow()
+            )
             report_id = await db.save_report(report)
         
         # Start background analysis

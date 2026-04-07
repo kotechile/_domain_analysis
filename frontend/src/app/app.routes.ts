@@ -15,9 +15,9 @@ export const routes: Routes = [
     { path: 'auth/callback', component: AuthCallbackComponent },
     { path: '', component: DomainAnalysisComponent, canActivate: [AuthGuard] },
     { path: 'marketplace', component: MarketplaceComponent, canActivate: [AuthGuard] },
-    { path: 'import', component: ImportComponent, canActivate: [AuthGuard] },
+    // { path: 'import', component: ImportComponent, canActivate: [AuthGuard] },
     { path: 'reports', component: ReportsListComponent, canActivate: [AuthGuard] },
     { path: 'reports/:domain', component: ReportDetailComponent, canActivate: [AuthGuard] },
     { path: 'billing', component: BillingComponent, canActivate: [AuthGuard] },
-    { path: 'themes', component: ThemeShowcaseComponent, canActivate: [AuthGuard] }
+    // { path: 'themes', component: ThemeShowcaseComponent, canActivate: [AuthGuard] }
 ];

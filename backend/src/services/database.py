@@ -176,6 +176,13 @@ class DatabaseService:
             "CREATE INDEX IF NOT EXISTS idx_csv_upload_progress_job_id ON csv_upload_progress(job_id);",
             "CREATE INDEX IF NOT EXISTS idx_csv_upload_progress_status ON csv_upload_progress(status);",
             
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS total_credits_spent DECIMAL(10,2) DEFAULT 0;",
+            
+            # Reports table user_id
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);",
+            "ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_domain_name_key;",
+            "ALTER TABLE reports ADD CONSTRAINT reports_domain_name_user_id_key UNIQUE (domain_name, user_id);",
+            
             # Ensure auctions table has newer columns
             "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS link VARCHAR(1000);",
             "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS score DECIMAL(10,2);",
@@ -230,7 +237,23 @@ class DatabaseService:
                 if hasattr(report_data['wayback_machine_summary']['last_capture_date'], 'isoformat'):
                     report_data['wayback_machine_summary']['last_capture_date'] = report_data['wayback_machine_summary']['last_capture_date'].isoformat()
             
-            result = await client.table('reports').upsert({ 'domain_name': report.domain_name, 'analysis_timestamp': report_data['analysis_timestamp'], 'status': report.status.value, 'data_for_seo_metrics': report_data.get('data_for_seo_metrics'), 'wayback_machine_summary': report_data.get('wayback_machine_summary'), 'llm_analysis': report_data.get('llm_analysis'), 'historical_data': report.historical_data.model_dump(mode='json') if report.historical_data else None, 'raw_data_links': report_data.get('raw_data_links'), 'detailed_data_available': report_data.get('detailed_data_available'), 'analysis_phase': report_data.get('analysis_phase'), 'progress_data': report.progress_data.dict() if report.progress_data else None, 'processing_time_seconds': report.processing_time_seconds, 'error_message': report.error_message, 'updated_at': datetime.utcnow().isoformat() }, on_conflict= 'domain_name').execute()
+            result = await client.table('reports').upsert({ 
+                'domain_name': report.domain_name, 
+                'user_id': report.user_id,
+                'analysis_timestamp': report_data['analysis_timestamp'], 
+                'status': report.status.value, 
+                'data_for_seo_metrics': report_data.get('data_for_seo_metrics'), 
+                'wayback_machine_summary': report_data.get('wayback_machine_summary'), 
+                'llm_analysis': report_data.get('llm_analysis'), 
+                'historical_data': report.historical_data.model_dump(mode='json') if report.historical_data else None, 
+                'raw_data_links': report_data.get('raw_data_links'), 
+                'detailed_data_available': report_data.get('detailed_data_available'), 
+                'analysis_phase': report_data.get('analysis_phase'), 
+                'progress_data': report.progress_data.dict() if report.progress_data else None, 
+                'processing_time_seconds': report.processing_time_seconds, 
+                'error_message': report.error_message, 
+                'updated_at': datetime.utcnow().isoformat() 
+            }, on_conflict= 'domain_name, user_id').execute()
             
             report_id = result.data[0]['id'] if result.data else None
             logger.info("Report saved successfully", domain=report.domain_name, report_id=report_id)
@@ -1429,8 +1452,8 @@ class DatabaseService:
             # Always filter out records marked for deletion
             query = client.table('auctions').select('*').eq('to_delete', False)
 
-            # Always require score > 0 so we only work on domains we've evaluated
-            query = query.gt('score', 0)
+            # Always require score is not null so we only work on domains we've evaluated
+            query = query.not_.is_('score', 'null')
 
             # Apply user-facing filters
             if filters:
@@ -1483,15 +1506,27 @@ class DatabaseService:
             else:
                 # Fill Gaps mode: use RPC for efficient SQL filtering
                 # Build filter conditions for the SQL function
-                where_conditions = ["to_delete = FALSE", "score > 0"]
+                where_conditions = ["to_delete = FALSE"]
+                
+                # Default behavior: find scored domains unless specified otherwise (scored=False)
+                if not filters or filters.get('scored') is not False:
+                    where_conditions.append("score IS NOT NULL")
 
                 if filters:
+                    if filters.get('scored') is False:
+                         where_conditions.append("score IS NULL")
+                    
                     if filters.get('preferred') is not None:
                         where_conditions.append(f"preferred = {str(filters['preferred']).lower()}")
                     if filters.get('auction_site'):
-                        where_conditions.append(f"auction_site = '{filters['auction_site']}'")
+                        # Normalize auction site (lowercase, no spaces, e.g., 'Go Daddy' -> 'godaddy')
+                        site = str(filters['auction_site']).lower().replace(' ', '')
+                        where_conditions.append(f"auction_site = '{site}'")
+                    if filters.get('offering_type'):
+                        where_conditions.append(f"offer_type = '{filters['offering_type'].lower().strip()}'")
                     if filters.get('search'):
                         where_conditions.append(f"domain ILIKE '%{filters['search']}%'")
+
                     if filters.get('tld'):
                         tld = filters['tld']
                         if not tld.startswith('.'):

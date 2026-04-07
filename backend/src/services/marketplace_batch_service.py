@@ -143,8 +143,24 @@ class MarketplaceBatchService:
                     f.write("No candidates found - EXITING\n")
                 return
 
-            # 3. Deduct credits
-            # Robust user_id conversion to ensure UUID objects when strings arrive
+            # 4. Costs and credit deduction
+            from services.pricing_service import PricingService
+            pricing_service = PricingService()
+            
+            # Calculate dynamic cost based on ACTUAL domains found
+            # 'stats_sync' action is used for tiered domain metrics
+            # If force=True, we use 'force_refresh_1k' as a base but still scale it
+            cost = await pricing_service.calculate_action_cost('stats_sync', len(domain_names))
+            
+            # If force=True, we might want to charge more or use a different action
+            if force:
+                # Force refresh is 3x more expensive than gap filling
+                cost = cost * 3.0
+            
+            # Round cost to 2 decimal places for credits
+            cost = round(max(0.01, float(cost)), 2)
+
+            # Robust user_id conversion
             from uuid import UUID
             user_id_obj = user_id
             if isinstance(user_id, str):
@@ -154,17 +170,30 @@ class MarketplaceBatchService:
                     with open(DEBUG_LOG, 'a') as f:
                         f.write(f"Could not convert {user_id} to UUID, using as is\n")
 
-            success = await self.credits_service.deduct_credits( user_id=user_id_obj, amount=cost, description=description, reference_id=ref_id )
+            # Ensure user has a credit record (this also handles new users)
+            try:
+                await self.credits_service.get_balance(user_id_obj)
+            except Exception as cr_err:
+                logger.warning("Failed to check/init credit balance", user_id=str(user_id), error=str(cr_err))
+
+            success = await self.credits_service.deduct_credits( 
+                user_id=user_id_obj, 
+                amount=cost, 
+                description=description, 
+                reference_id=ref_id,
+                dollar_amount=cost * 0.001 # Estimate 
+            )
 
             if not success:
                 logger.error(f"[Background] Insufficient credits", user_id=str(user_id), required=cost)
                 if job_id:
-                    await ProgressTracker.complete_job( job_id, success=False, message="Insufficient credits" )
+                    await ProgressTracker.complete_job( job_id, success=False, message=f"Insufficient credits. Requires {cost} credits." )
                 with open(DEBUG_LOG, 'a') as f:
-                    f.write("Insufficient credits - EXITING\n")
+                    f.write(f"Insufficient credits (Required {cost}) - EXITING\n")
                 return
 
             logger.info(f"[Background] Credits deducted successfully", user_id=str(user_id), cost=cost)
+
 
             # 4. Trigger N8N
             import asyncio

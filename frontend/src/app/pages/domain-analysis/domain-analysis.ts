@@ -4,7 +4,7 @@ import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../services/api';
 import { CreditService } from '../../services/credit';
-import { LucideAngularModule, Search, Zap, ShieldCheck, History, TrendingUp, Sparkles, AlertCircle } from 'lucide-angular';
+import { LucideAngularModule, Search, ShieldCheck, History, TrendingUp, Sparkles, AlertCircle } from 'lucide-angular';
 import { firstValueFrom } from 'rxjs';
 
 @Component({
@@ -37,7 +37,6 @@ export class DomainAnalysisComponent {
 
   // Icons
   readonly Search = Search;
-  readonly Zap = Zap;
   readonly ShieldCheck = ShieldCheck;
   readonly History = History;
   readonly TrendingUp = TrendingUp;
@@ -83,7 +82,5 @@ export class DomainAnalysisComponent {
     }
   }
 
-  setMode(mode: 'dual' | 'legacy') {
-    this.analysisForm.patchValue({ mode });
-  }
+
 }
