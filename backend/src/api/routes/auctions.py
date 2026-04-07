@@ -565,14 +565,19 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                         try:
                             import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type, cleanup_stale=False)
                             if import_result.get('success'):
-                                total_inserted += (import_result.get('inserted') or 0)
-                                total_updated += (import_result.get('updated') or 0)
-                                total_deleted += (import_result.get('deleted') or 0)
-                                new_domains = import_result.get('new_domains') or 0
+                                # Map correctly following the new SQL return names
+                                # Fallback to old names if migration hasn't fully propagated yet
+                                new_domains_count = import_result.get('new_count') or import_result.get('new_domains') or 0
+                                updated_domains_count = import_result.get('updated_count') or import_result.get('updated') or 0
                                 
-                                if new_domains > 0:
+                                total_inserted += new_domains_count
+                                total_updated += updated_domains_count
+                                total_deleted += (import_result.get('deleted_count') or import_result.get('deleted') or 0)
+                                
+                                if new_domains_count > 0:
                                     await db.update_csv_upload_progress(
-                                        job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed
+                                        job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed,
+                                        inserted_count=total_inserted, updated_count=total_updated
                                     )
                                     await _score_new_domains_after_import(
                                         db, job_id, scoring_service, fast_mode=(auction_site.lower() == 'namecheap')
@@ -600,14 +605,18 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                 )
                 import_result = await _perform_atomic_import(db, auction_site, job_id, offering_type, cleanup_stale=True)
                 if import_result.get('success'):
-                    total_inserted += (import_result.get('inserted') or 0)
-                    total_updated += (import_result.get('updated') or 0)
-                    total_deleted += (import_result.get('deleted') or 0)
-                    new_domains = import_result.get('new_domains') or 0
+                    # Map correctly following the new SQL return names
+                    new_domains_count = import_result.get('new_count') or import_result.get('new_domains') or 0
+                    updated_domains_count = import_result.get('updated_count') or import_result.get('updated') or 0
                     
-                    if new_domains > 0:
+                    total_inserted += new_domains_count
+                    total_updated += updated_domains_count
+                    total_deleted += (import_result.get('deleted_count') or import_result.get('deleted') or 0)
+                    
+                    if new_domains_count > 0:
                         await db.update_csv_upload_progress(
-                            job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed
+                            job_id=job_id, status='processing', current_stage='scoring', processed_records=total_parsed,
+                            inserted_count=total_inserted, updated_count=total_updated
                         )
                         await _score_new_domains_after_import(
                             db, job_id, scoring_service, fast_mode=(auction_site.lower() == 'namecheap')
@@ -625,13 +634,16 @@ async def process_csv_upload_async( job_id: str, csv_content: str, filename: str
                 processed_records=total_parsed,
                 skipped_count=total_skipped,
                 inserted_count=total_inserted,
+                updated_count=total_updated,
+                deleted_expired_count=total_deleted,
                 completed=True
             )
             logger.info(f"[CSV UPLOAD COMPLETE] {job_id}",
                        parsed=total_parsed,
                        inserted=total_inserted,
                        updated=total_updated,
-                       deleted=total_deleted)
+                       deleted=total_deleted,
+                       skipped_parsing=total_skipped)
 
     except Exception as e:
         logger.error(f"[CSV UPLOAD FAILED] {job_id}", error=str(e))
