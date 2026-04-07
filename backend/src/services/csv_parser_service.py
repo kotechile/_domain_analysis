@@ -234,6 +234,87 @@ class CSVParserService:
                 except Exception: continue
         except Exception: raise
 
+    def parse_single_domain(self, domain_name: str) -> Any:
+        """
+        Calculates a heuristic 'meaning' score for a domain string.
+        Rule 1: TLD Quality (Max 25)
+        Rule 2: Name Length (Max 30)
+        Rule 3: Character Composition (Max 25)
+        Rule 4: Readability (Max 20)
+        """
+        from types import SimpleNamespace
+        
+        domain_name = domain_name.lower().strip()
+        if not domain_name:
+            return SimpleNamespace(total_meaning_score=0.0)
+
+        # Extract name and TLD
+        name_part = domain_name
+        tld_part = ""
+        if '.' in domain_name:
+            parts = domain_name.rsplit('.', 1)
+            name_part = parts[0]
+            tld_part = '.' + parts[1]
+
+        # 1. TLD Quality (Max 25)
+        tld_score = 0
+        if tld_part == '.com':
+            tld_score = 25
+        elif tld_part in ['.ai', '.io', '.org', '.net', '.co']:
+            tld_score = 15
+        elif tld_part in ['.app', '.dev', '.us', '.uk']:
+            tld_score = 10
+        elif tld_part in ['.info', '.biz']:
+            tld_score = 5
+        
+        # 2. Name Length (Max 30)
+        name_len = len(name_part)
+        len_score = 0
+        if 1 <= name_len <= 4:
+            len_score = 30
+        elif 5 <= name_len <= 8:
+            len_score = 25
+        elif 9 <= name_len <= 12:
+            len_score = 15
+        elif 13 <= name_len <= 16:
+            len_score = 5
+        
+        # 3. Character Composition (Max 25)
+        comp_score = 25
+        if '-' in name_part:
+            comp_score -= 15
+        if any(char.isdigit() for char in name_part):
+            comp_score -= 15
+        if re.search(r'(.)\1\1', name_part): # 3 consecutive identical characters
+            comp_score -= 10
+        comp_score = max(0, comp_score)
+
+        # 4. Readability / Pronounceability (Max 20)
+        vowels = set('aeiouy')
+        vowel_count = sum(1 for char in name_part if char in vowels)
+        read_score = 0
+        
+        if name_len > 0:
+            v_ratio = vowel_count / name_len
+            if 0.3 <= v_ratio <= 0.5:
+                read_score = 20
+            elif 0.2 <= v_ratio <= 0.29 or 0.51 <= v_ratio <= 0.6:
+                read_score = 10
+        
+        # Bonus exception for short strings (acronyms)
+        if 0 < name_len <= 4:
+            read_score = max(read_score, 15)
+
+        total_score = tld_score + len_score + comp_score + read_score
+        
+        return SimpleNamespace(
+            total_meaning_score=float(total_score),
+            tld_score=tld_score,
+            length_score=len_score,
+            comp_score=comp_score,
+            readability_score=read_score
+        )
+
     def _parse_date(self, date_str: str) -> Optional[datetime]:
         if not date_str or date_str.strip() == '': return None
         try:
