@@ -4,6 +4,7 @@ N8N Service for triggering workflows and handling integration
 
 import httpx
 import uuid
+import asyncio
 from typing import Dict, Any, Optional, List
 import structlog
 from datetime import datetime
