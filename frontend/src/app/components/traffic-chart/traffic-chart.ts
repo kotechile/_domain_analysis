@@ -1,14 +1,17 @@
-import { Component, Input, OnInit, OnDestroy, AfterViewInit, ElementRef, ViewChild } from '@angular/core';
+import { Component, Input, OnInit, OnDestroy, AfterViewInit, ElementRef, ViewChild, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Chart, ChartConfiguration, ChartData, ChartType } from 'chart.js';
+import { Chart, ChartConfiguration, ChartData, ChartType, registerables } from 'chart.js';
 import { HistoricalMetricPoint } from '../../models/domain.model';
+
+// Register Chart.js components
+Chart.register(...registerables);
 
 @Component({
   selector: 'app-traffic-chart',
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="w-full h-full">
+    <div class="w-full h-full min-h-[300px]">
       <canvas #chartCanvas></canvas>
     </div>
   `,
@@ -18,7 +21,7 @@ import { HistoricalMetricPoint } from '../../models/domain.model';
     }
   `]
 })
-export class TrafficChartComponent implements OnInit, AfterViewInit, OnDestroy {
+export class TrafficChartComponent implements OnInit, AfterViewInit, OnChanges, OnDestroy {
   @ViewChild('chartCanvas') chartCanvas!: ElementRef<HTMLCanvasElement>;
   @Input() trafficData: HistoricalMetricPoint[] = [];
   @Input() title: string = 'Organic Traffic History';
@@ -27,8 +30,15 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnInit() {}
 
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['trafficData'] && !changes['trafficData'].firstChange) {
+      this.createChart();
+    }
+  }
+
   ngAfterViewInit() {
-    this.createChart();
+    // Small delay to ensure container size is calculated
+    setTimeout(() => this.createChart(), 0);
   }
 
   ngOnDestroy() {
@@ -45,6 +55,11 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnDestroy {
     const ctx = this.chartCanvas.nativeElement.getContext('2d');
     if (!ctx) return;
 
+    // Destroy existing chart
+    if (this.chart) {
+      this.chart.destroy();
+    }
+
     // Sort data by date
     const sortedData = [...this.trafficData].sort((a, b) =>
       new Date(a.date).getTime() - new Date(b.date).getTime()
@@ -59,10 +74,18 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnDestroy {
     const data = sortedData.map(point => point.value);
 
     // Get computed accent color from CSS variable
-    const accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim();
-    const accentRgb = getComputedStyle(document.documentElement).getPropertyValue('--accent-color-rgb').trim();
+    const rootStyle = getComputedStyle(document.documentElement);
+    const accentColor = rootStyle.getPropertyValue('--accent-color').trim() || '#475569';
+    let accentRgb = rootStyle.getPropertyValue('--accent-color-rgb').trim();
+    
+    // Handle space-separated RGB values (e.g. "71 85 105") and convert to comma-separated
+    if (accentRgb && !accentRgb.includes(',')) {
+      accentRgb = accentRgb.split(' ').join(', ');
+    } else if (!accentRgb) {
+      accentRgb = '71, 85, 105'; // Default fallback
+    }
 
-    // Create gradient using the RGB values
+    // Create gradient
     const gradient = ctx.createLinearGradient(0, 0, 0, 300);
     gradient.addColorStop(0, `rgba(${accentRgb}, 0.3)`);
     gradient.addColorStop(1, `rgba(${accentRgb}, 0.0)`);
@@ -112,10 +135,10 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnDestroy {
             },
           },
           tooltip: {
-            backgroundColor: 'var(--card-bg)',
-            titleColor: 'var(--text-color)',
-            bodyColor: 'var(--text-color)',
-            borderColor: 'var(--border-color)',
+            backgroundColor: 'rgba(30, 41, 59, 0.9)', // Muted dark background
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            borderColor: 'rgba(255, 255, 255, 0.1)',
             borderWidth: 1,
             padding: 12,
             displayColors: false,
@@ -171,9 +194,6 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnDestroy {
   // Update chart when data changes
   updateChart(trafficData: HistoricalMetricPoint[]) {
     this.trafficData = trafficData;
-    if (this.chart) {
-      this.chart.destroy();
-    }
     this.createChart();
   }
 }

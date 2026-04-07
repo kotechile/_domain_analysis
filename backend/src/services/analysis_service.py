@@ -117,7 +117,26 @@ class AnalysisService:
             historical_data = await self.get_or_fetch_historical_data(domain)
             if historical_data:
                 report.historical_data = historical_data
-                # report is saved inside get_or_fetch_historical_data, but we keep it in memory
+                
+                # Update main metrics if missing or zero using the latest historical point
+                if historical_data.rank_overview:
+                    # Sync Organic Traffic (Latest)
+                    if (report.data_for_seo_metrics.organic_traffic_est is None or report.data_for_seo_metrics.organic_traffic_est == 0) and historical_data.rank_overview.organic_traffic:
+                        # Sort by date to be sure we get the latest
+                        sorted_points = sorted(historical_data.rank_overview.organic_traffic, key=lambda x: x.date)
+                        latest_traffic = sorted_points[-1].value
+                        if latest_traffic > 0:
+                            report.data_for_seo_metrics.organic_traffic_est = latest_traffic
+                            logger.info("Updated main traffic metric from historical data", domain=domain, traffic=latest_traffic)
+                    
+                    # Sync Global Keyword Count (if 0)
+                    if (report.data_for_seo_metrics.total_keywords is None or report.data_for_seo_metrics.total_keywords == 0) and historical_data.rank_overview.organic_keywords_count:
+                        sorted_points = sorted(historical_data.rank_overview.organic_keywords_count, key=lambda x: x.date)
+                        latest_keywords = sorted_points[-1].value
+                        if latest_keywords > 0:
+                            report.data_for_seo_metrics.total_keywords = int(latest_keywords)
+                            logger.info("Updated main keyword count from historical data", domain=domain, keywords=latest_keywords)
+            
             progress_tracker.complete_operation("historical_data")
             await self._update_progress_data(report, "Historical data collection completed", [], progress_tracker)
             
@@ -767,10 +786,13 @@ class AnalysisService:
                     continue
                 
                 organic_keywords_count.append(HistoricalMetricPoint( date=date_str, value=float(metrics.get("count", 0)) ))
-                organic_traffic.append(HistoricalMetricPoint( date=date_str, value=float(metrics.get("etv", 0)) )) # etv often proxy for traffic or traffic value, checking docs... # Wait, 'etv' is Estimated Traffic Value. 'pos_*' are counts. # DataForSEO `historical_rank_overview` gives `metrics.organic.count` (keywords count and `etv` (traffic value cost). # Actually, usually they provide `organic.is_lost` etc. # Let's assume 'etv' is value, and we might not have direct traffic count here, but often 'etv' is used. # The user said "metrics.organic.count" (keywords) and "estimated organic/paid traffic". # Let's check traffic estimation endpoint for actual traffic volume. )
-                # Actually, `historical_rank_overview` mainly gives keyword counts. # `etv` is usually traffic cost. # `organic_traffic` might be better from `traffic_analytics`. # Populate rank overview
-            rank_overview = HistoricalRankOverview( organic_keywords_count=organic_keywords_count, # Assuming etv for now, but traffic analytics is better for traffic
-                organic_traffic_value=[HistoricalMetricPoint(date=i.date, value=i.value) for i in organic_traffic], raw_items=items )
+                organic_traffic.append(HistoricalMetricPoint( date=date_str, value=float(metrics.get("etv", 0)) ))
+            rank_overview = HistoricalRankOverview(
+                organic_keywords_count=organic_keywords_count,
+                organic_traffic=organic_traffic, # Use 'etv' as initial organic traffic estimate
+                organic_traffic_value=[HistoricalMetricPoint(date=i.date, value=i.value) for i in organic_traffic], 
+                raw_items=items 
+            )
 
         # ) Handle bulk traffic data (more granular historical volume
         if bulk_traffic_data and bulk_traffic_data.get("metrics"):

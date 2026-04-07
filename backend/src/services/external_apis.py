@@ -471,7 +471,19 @@ class DataForSEOService:
             referring_domains_info = []
             if backlinks.get("items"):
                 for item in backlinks["items"][:100]:  # Top 100
-                    referring_domains_info.append({ "domain": item.get("domain", ""), "domain_rank": item.get("domain_rank", 0), "anchor_text": item.get("anchor", ""), "backlinks_count": item.get("backlinks_count", 0), "first_seen": item.get("first_seen", ""), "last_seen": item.get("last_seen", "") })
+                    raw_rank = item.get("domain_rank", 0)
+                    # DataForSEO rank is on 0-1000 scale, normalize to 0-100
+                    normalized_rank = round(raw_rank / 10.0, 1) if raw_rank > 100 else float(raw_rank)
+                    
+                    referring_domains_info.append({ 
+                        "domain": item.get("domain", ""), 
+                        "domain_rank": normalized_rank, 
+                        "anchor_text": item.get("anchor", ""), 
+                        "backlinks_count": item.get("backlinks_count", 0), 
+                        "backlink_spam_score": item.get("backlink_spam_score", 0),
+                        "first_seen": item.get("first_seen", ""), 
+                        "last_seen": item.get("last_seen", "") 
+                    })
             
             # Extract keywords info from new structure
             organic_keywords = []
