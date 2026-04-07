@@ -173,14 +173,19 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnChanges, 
             },
             ticks: {
               color: 'rgba(128, 128, 128, 0.5)',
+              maxTicksLimit: 8,
               font: {
                 size: 10,
               },
               callback: (value) => {
                 const num = Number(value);
-                if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-                if (num >= 1000) return (num / 1000).toFixed(0) + 'K';
-                return num.toString();
+                if (num >= 1000000) {
+                  return (num / 1000000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + 'M';
+                }
+                if (num >= 1000) {
+                  return (num / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + 'K';
+                }
+                return num.toLocaleString();
               },
             },
           },
