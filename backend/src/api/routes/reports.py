@@ -116,18 +116,19 @@ async def list_reports(
     """
     try:
         db = get_database()
-        user_id = current_user['id'] if current_user and 'id' in current_user else None
+        user_id = current_user.get('id')
+        if not user_id:
+            # If no user ID (unauthorized), return empty list or raise
+            return []
         
         # Build query
         query = (await db._get_client()).table('reports').select( 
             'id, domain_name, status, analysis_timestamp, processing_time_seconds, error_message, analysis_phase, analysis_mode, data_for_seo_metrics, detailed_data_available, created_at, user_id' 
-        )
-        
-        if user_id:
-            query = query.eq('user_id', user_id)
+        ).eq('user_id', user_id)
         
         if status:
             query = query.eq('status', status)
+
         
         # Add pagination
         query = query.order('created_at', desc=True).range(offset, offset + limit - 1)

@@ -1352,9 +1352,13 @@ class DatabaseService:
                     query = query.eq('has_statistics', filters['has_statistics'])
                 if filters.get('scored') is not None:
                     if filters['scored']:
-                        query = query.not_.is_('score', 'null')
+                        # Scored Only should mean score > 0, since 0.0 is the default/unscored value
+                        query = query.gt('score', 0)
                     else:
-                        query = query.is_('score', 'null')
+                        # Not scored means score is 0 or null
+                        # PostgREST OR syntax is a bit complex, but usually we can just check for 0
+                        query = query.eq('score', 0)
+
                 if filters.get('min_rank') is not None:
                     query = query.gte('ranking', filters['min_rank'])
                 if filters.get('max_rank') is not None:
@@ -1377,8 +1381,9 @@ class DatabaseService:
                 sort_by = 'expiration_date'
             
             if sort_by == 'score':
-                # Filter out NULL scores only when sorting by score to keep the list clean
-                query = query.not_.is_('score', 'null')
+                # Filter out default/unscored (0.0) values when sorting by score
+                query = query.gt('score', 0)
+
 
             if order == 'desc':
                 query = query.order(sort_by, desc=True).order('domain', desc=True)
