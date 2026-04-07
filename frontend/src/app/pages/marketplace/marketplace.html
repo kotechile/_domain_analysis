@@ -202,7 +202,7 @@
 
             <!-- Score Range -->
             <div class="space-y-4">
-                <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">AI Score Gravity</span>
+                <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">Brand Score Range</span>
                 <div class="flex items-center space-x-3">
                     <input type="number" placeholder="Min" [ngModel]="minScore()"
                         (ngModelChange)="minScore.set($event); offset.set(0)"
@@ -258,7 +258,7 @@
                                 [class.sort-active]="sortBy() === 'domain'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0" title="AI Score"
+                    <th tabindex="0" title="Brand Score: A heuristic assessment based on TLD, length, and readability (does not include SEO metrics)."
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('score')" (keydown.enter)="toggleSort('score')">
                         <div class="flex items-center justify-center space-x-2">
@@ -418,13 +418,13 @@
                             </div>
                         </div>
                     </td>
-                    <!-- AI Score -->
+                    <!-- Brand Score -->
                     <td class="text-center">
                         <div class="flex flex-col items-center gap-0.5">
                             <span class="text-lg font-bold tabular-nums" [ngClass]="getScoreClass(item.score)">
                                 {{ item.score || '–' }}
                             </span>
-                            <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">Score</span>
+                            <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">Brand</span>
                         </div>
                     </td>
                     <!-- Current Bid -->
