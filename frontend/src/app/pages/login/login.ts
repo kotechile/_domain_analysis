@@ -77,8 +77,8 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
                 [class.error]="loginForm.get('email')?.invalid && loginForm.get('email')?.touched">
               <label class="floating-label">Email Address</label>
             </div>
-            @if (loginForm.get('email')?.invalid && loginForm.get('email')?.touched) {
-              <span class="error-text">Please enter a valid email</span>
+            @if (loginForm.get('email')?.invalid && (loginForm.get('email')?.touched || loginForm.get('email')?.dirty)) {
+              <span class="error-text">{{ getEmailErrorMessage() }}</span>
             }
           </div>
 
@@ -100,8 +100,8 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
                 <i-lucide [name]="showPassword() ? EyeOff : Eye" class="toggle-icon"></i-lucide>
               </button>
             </div>
-            @if (loginForm.get('password')?.invalid && loginForm.get('password')?.touched) {
-              <span class="error-text">Password is required</span>
+            @if (loginForm.get('password')?.invalid && (loginForm.get('password')?.touched || loginForm.get('password')?.dirty)) {
+              <span class="error-text">{{ getPasswordErrorMessage() }}</span>
             }
           </div>
 
@@ -109,7 +109,7 @@ import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide
           <button
             type="submit"
             class="submit-btn"
-            [disabled]="loginForm.invalid || loading()"
+            [disabled]="loading()"
             [class.loading]="loading() && authMode() === 'email'">
             @if (loading() && authMode() === 'email') {
               <div class="spinner"></div>
@@ -576,6 +576,23 @@ export class LoginComponent {
     this.isSignUpMode.update(v => !v);
     this.errorMessage.set('');
     this.successMessage.set('');
+  }
+
+  getEmailErrorMessage() {
+    const control = this.loginForm.get('email');
+    if (control?.hasError('required')) return 'Email is required';
+    if (control?.hasError('email')) return 'Please enter a valid email address';
+    return 'Invalid email';
+  }
+
+  getPasswordErrorMessage() {
+    const control = this.loginForm.get('password');
+    if (control?.hasError('required')) return 'Password is required';
+    if (control?.hasError('minlength')) {
+      const requiredLength = control.errors?.['minlength']?.requiredLength;
+      return `Minimum ${requiredLength} characters required`;
+    }
+    return 'Invalid password';
   }
 
   async loginWithGoogle() {
