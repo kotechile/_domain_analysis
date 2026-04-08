@@ -578,6 +578,25 @@ class N8NService:
         except Exception as e:
             logger.error("N8N bulk spam score workflow trigger failed", domain_count=len(domains), error=str(e))
             return None
+
+    async def trigger_marketplace_metrics_workflows(self, domains: List[str], include_traffic: bool = False) -> Dict[str, Any]:
+        """
+        Trigger the direct marketplace metric workflows for a set of domains.
+
+        This is the marketplace-facing path and intentionally does not use the
+        summary workflow. It relies on direct rank, backlinks, and spam score
+        callbacks, with traffic optional.
+        """
+        results: Dict[str, Any] = {}
+
+        if include_traffic:
+            results["traffic"] = await self.trigger_bulk_traffic_batch_workflow(domains)
+
+        results["rank"] = await self.trigger_bulk_rank_workflow(domains)
+        results["backlinks"] = await self.trigger_bulk_backlinks_workflow(domains)
+        results["spam_score"] = await self.trigger_bulk_spam_score_workflow(domains)
+
+        return results
     
     async def trigger_truncate_auctions_workflow(self) -> Optional[Dict[str, Any]]:
         """

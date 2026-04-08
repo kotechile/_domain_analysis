@@ -212,17 +212,8 @@ class MarketplaceBatchService:
                 batch_num = i // batch_size + 1
                 batch = domain_names[i:i + batch_size]
                 try:
-                    # Trigger direct rank data for DR/rank-related columns.
-                    logger.info(f"[Background] Triggering Rank for batch {batch_num}", domain_count=len(batch))
-                    await self.n8n_service.trigger_bulk_rank_workflow(batch)
-
-                    # Trigger direct backlinks stats for BL/RD.
-                    logger.info(f"[Background] Triggering Backlinks for batch {batch_num}", domain_count=len(batch))
-                    await self.n8n_service.trigger_bulk_backlinks_workflow(batch)
-
-                    # Trigger spam score separately since page summary does not populate it.
-                    logger.info(f"[Background] Triggering Spam Score for batch {batch_num}", domain_count=len(batch))
-                    await self.n8n_service.trigger_bulk_spam_score_workflow(batch)
+                    logger.info(f"[Background] Triggering direct marketplace metrics for batch {batch_num}", domain_count=len(batch))
+                    await self.n8n_service.trigger_marketplace_metrics_workflows(batch, include_traffic=False)
 
                     processed_count += len(batch)
                     
@@ -287,7 +278,7 @@ class MarketplaceBatchService:
             return {"success": False, "error": "Insufficient credits"}
             
         # 3. Trigger N8N
-        await self.n8n_service.trigger_bulk_page_summary_workflow([domain])
+        await self.n8n_service.trigger_marketplace_metrics_workflows([domain], include_traffic=False)
         
         # 4. Record History
         try:

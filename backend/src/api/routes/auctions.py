@@ -1459,15 +1459,14 @@ async def reset_stuck_upload(job_id: str):
 
 
 @router.post("/auctions/trigger-analysis")
-async def trigger_auctions_analysis( limit: int = Query(100, description="Maximum number of unique domains to trigger (DataForSEO limit: 100 unique domains per request)", ge=1, le=100), current_user = Depends(get_current_user) ):
+async def trigger_auctions_analysis( limit: int = Query(1000, description="Maximum number of domains to trigger (direct metric workflows limit: 1000 domains)", ge=1, le=1000), current_user = Depends(get_current_user) ):
     """
-    Trigger DataForSEO analysis for scored domains without page_statistics
+    Trigger direct DataForSEO metrics for scored domains without page_statistics
     
     This will:
-    1. Get up to 100 most recent scored domains without page_statistics (ordered by created_at DESC)
-       Note: DataForSEO bulk_pages_summary API allows up to 1000 total targets, but only 100 unique domains
-    2. Trigger DataForSEO bulk page summary via n8n webhook
-    3. Webhook will update page_statistics field in auctions table
+    1. Get up to 1000 scored domains without page_statistics
+    2. Trigger direct rank, backlinks, and spam score workflows via n8n
+    3. Webhooks will update page_statistics fields in auctions table
     4. Return list of triggered domains
     """
     try:
@@ -1501,16 +1500,16 @@ async def trigger_auctions_analysis( limit: int = Query(100, description="Maximu
             raise HTTPException( status_code=402, detail=f"Insufficient credits. This action requires {total_cost} credits." )
         # ------------------------------
         
-        # Trigger DataForSEO analysis via N8N webhook
+        # Trigger direct DataForSEO metrics via N8N webhook
         n8n_service = N8NService()
-        n8n_result = n8n_service.trigger_bulk_page_summary_workflow(domain_names)
+        n8n_result = await n8n_service.trigger_marketplace_metrics_workflows(domain_names, include_traffic=False)
         
-        if n8n_result:
+        if all(n8n_result.values()):
             triggered_count = len(domain_names)
-            logger.info("Triggered N8N workflow for bulk page summary", triggered=triggered_count, request_id=n8n_result.get('request_id'))
+            logger.info("Triggered direct N8N marketplace metrics", triggered=triggered_count)
             
             return { "success": True, "message": f"Triggered analysis for {triggered_count} domains", "triggered_count": triggered_count, "skipped_count": 0, "triggered_domains": domain_names[:100],  # Return first 100 for display
-                "request_id": n8n_result.get('request_id') }
+                "request_ids": {key: value.get("request_id") for key, value in n8n_result.items() if value} }
         else:
             logger.warning("Failed to trigger N8N workflow", domains=len(domain_names))
             return { "success": False, "message": "Failed to trigger N8N workflow", "triggered_count": 0, "skipped_count": len(domain_names), "triggered_domains": [] }
@@ -2168,13 +2167,13 @@ async def process_dataforseo_queue():
         
         logger.info("Processing DataForSEO queue", domain_count=len(domains))
         
-        # Trigger DataForSEO analysis via N8N
+        # Trigger direct DataForSEO metrics via N8N
         n8n_service = N8NService()
-        n8n_result = await n8n_service.trigger_bulk_page_summary_workflow(domains)
+        n8n_result = await n8n_service.trigger_marketplace_metrics_workflows(domains, include_traffic=False)
         
-        if n8n_result:
-            logger.info("Triggered N8N workflow for queued domains", domain_count=len(domains), request_id=n8n_result.get('request_id'))
-            # Note: Queue items will be marked as 'completed' by the n8n webhook callback
+        if all(n8n_result.values()):
+            logger.info("Triggered direct N8N marketplace metrics for queued domains", domain_count=len(domains))
+            # Note: Queue items will be marked as 'completed' by the n8n webhook callbacks
             # when page_statistics are updated in the auctions table
         else:
             # Mark as failed if N8N trigger failed
