@@ -16,6 +16,12 @@
         </div>
         
         <div class="flex items-center gap-3">
+            @if (selectedDomains().size > 0) {
+            <button (click)="bulkDelete()" class="px-5 py-2.5 rounded-xl font-bold text-sm text-white flex items-center space-x-2 transition-all hover:scale-105 active:scale-95 shadow-lg" style="background: #ef4444">
+                <i-lucide [name]="Trash2" class="w-4 h-4"></i-lucide>
+                <span>Delete {{ selectedDomains().size }} Selected</span>
+            </button>
+            }
             <button (click)="fetchReports()" class="btn-primary flex items-center space-x-2">
                 <i-lucide [name]="RotateCcw" class="w-4 h-4"></i-lucide>
                 <span>Refresh List</span>
@@ -28,6 +34,12 @@
         <table class="w-full">
             <thead>
                 <tr>
+                    <th class="w-12 pl-6 pr-0">
+                        <input type="checkbox" 
+                               class="rounded border-white/20 bg-black/20 text-indigo-500 focus:ring-indigo-500/50 cursor-pointer"
+                               [checked]="isAllSelected()"
+                               (change)="toggleAll($event)">
+                    </th>
                     <th>Domain</th>
                     <th>Date & Time</th>
                     <th>Audit Type</th>
@@ -40,7 +52,7 @@
                 @if (loading()) {
                     @for (i of [1,2,3,4,5]; track $index) {
                         <tr class="animate-pulse">
-                            @for (j of [1,2,3,4,5,6]; track $index) {
+                            @for (j of [1,2,3,4,5,6,7]; track $index) {
                                 <td class="px-6 py-5 border-t border-opacity-5">
                                     <div class="h-4 bg-white/5 rounded-md w-24"></div>
                                 </td>
@@ -50,6 +62,14 @@
                 } @else if (reports().length > 0) {
                     @for (report of reports(); track report.domain_name) {
                         <tr [routerLink]="['/reports', report.domain_name]" class="cursor-pointer group">
+                            <!-- Checkbox -->
+                            <td class="pl-6 pr-0" (click)="$event.stopPropagation()">
+                                <input type="checkbox"
+                                       class="rounded border-white/20 bg-black/20 text-indigo-500 focus:ring-indigo-500/50 cursor-pointer"
+                                       [checked]="selectedDomains().has(report.domain_name)"
+                                       (change)="toggleSelection(report.domain_name, $event)">
+                            </td>
+                            
                             <!-- Domain Name -->
                             <td>
                                 <div class="flex items-center space-x-3">
@@ -113,7 +133,7 @@
                     }
                 } @else {
                     <tr>
-                        <td colspan="6" class="py-20 text-center space-y-6 opacity-30">
+                        <td colspan="7" class="py-20 text-center space-y-6 opacity-30">
                             <i-lucide [name]="Search" class="w-12 h-12 mx-auto mb-4 stroke-1"></i-lucide>
                             <p class="font-black uppercase tracking-[0.3em] text-xs">No reports found.</p>
                             <a routerLink="/" class="text-indigo-500 uppercase text-[10px] border-b border-indigo-500 font-black">Scan a domain now</a>

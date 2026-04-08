@@ -1,4 +1,4 @@
-import { Component, inject, signal, OnInit, effect } from '@angular/core';
+import { Component, inject, signal, OnInit, effect, computed } from '@angular/core';
 import { CommonModule, DatePipe, TitleCasePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../services/api';
@@ -58,6 +58,14 @@ export class ReportsListComponent implements OnInit {
   reports = signal<DomainAnalysisReport[]>([]);
   loading = signal(true);
   error = signal<string | null>(null);
+  selectedDomains = signal<Set<string>>(new Set());
+  
+  // Computed
+  isAllSelected = computed(() => {
+    const currentReports = this.reports();
+    const selected = this.selectedDomains();
+    return currentReports.length > 0 && currentReports.every(r => selected.has(r.domain_name));
+  });
   
   // Pagination
   limit = signal(15);
@@ -102,11 +110,56 @@ export class ReportsListComponent implements OnInit {
     if (confirm(`Are you sure you want to delete the report for ${domain}?`)) {
       try {
         await firstValueFrom(this.api.deleteReport(domain));
+        // Remove from selection if present
+        this.selectedDomains.update(set => {
+          const newSet = new Set(set);
+          newSet.delete(domain);
+          return newSet;
+        });
         // Refresh the list
         await this.fetchReports();
       } catch (err) {
         console.error('Failed to delete report:', err);
         // Error handling is already scoped to the catch block
+      }
+    }
+  }
+
+  toggleSelection(domain: string, event: Event) {
+    event.stopPropagation(); // prevent row click
+    const checkbox = event.target as HTMLInputElement;
+    this.selectedDomains.update(set => {
+      const newSet = new Set(set);
+      if (checkbox.checked) newSet.add(domain);
+      else newSet.delete(domain);
+      return newSet;
+    });
+  }
+
+  toggleAll(event: Event) {
+    const checkbox = event.target as HTMLInputElement;
+    this.selectedDomains.update(set => {
+      const newSet = new Set(set);
+      this.reports().forEach(r => {
+        if (checkbox.checked) newSet.add(r.domain_name);
+        else newSet.delete(r.domain_name);
+      });
+      return newSet;
+    });
+  }
+
+  async bulkDelete() {
+    const domainsToDelete = Array.from(this.selectedDomains());
+    if (domainsToDelete.length === 0) return;
+    
+    if (confirm(`Are you sure you want to delete ${domainsToDelete.length} selected reports?`)) {
+      try {
+        await Promise.all(domainsToDelete.map(domain => firstValueFrom(this.api.deleteReport(domain))));
+        this.selectedDomains.set(new Set()); // Clear selection
+        await this.fetchReports(); // Refresh list
+      } catch (err) {
+        console.error('Failed to bulk delete reports:', err);
+        this.error.set('Failed to delete some or all selected reports.');
       }
     }
   }
