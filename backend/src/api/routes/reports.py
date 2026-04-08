@@ -15,10 +15,6 @@ from services.external_apis import DataForSEOService
 from services.pdf_service import PDFService
 from services.analysis_service import AnalysisService
 from services.report_display_service import (
-    build_backlinks_display,
-    build_display_payload,
-    build_keywords_display,
-    build_referring_domains_display,
     shape_backlink_items,
     shape_keyword_items,
     shape_referring_domain_items,
@@ -146,9 +142,6 @@ async def get_report_details(
             limit: int,
             offset: int,
             relational_shaper,
-            json_builder,
-            *,
-            raw_backlinks_for_refdomains: Optional[Any] = None,
         ) -> dict:
             if not include:
                 return empty_section()
@@ -170,30 +163,7 @@ async def get_report_details(
                     "items": relational_shaper(relational_result["items"]),
                 }
 
-            detailed_data = await db.get_detailed_data(domain, data_type)
-            if not detailed_data:
-                if raw_backlinks_for_refdomains is not None and raw_backlinks_for_refdomains:
-                    return json_builder(
-                        [],
-                        raw_backlinks_for_refdomains,
-                        limit=limit,
-                        offset=offset,
-                    )
-                return empty_section()
-
-            if raw_backlinks_for_refdomains is not None:
-                return json_builder(
-                    detailed_data.json_data.get("items", []),
-                    raw_backlinks_for_refdomains,
-                    limit=limit,
-                    offset=offset,
-                )
-
-            return json_builder(
-                detailed_data.json_data.get("items", []),
-                limit=limit,
-                offset=offset,
-            )
+            return empty_section()
 
         keywords_result = await resolve_section(
             DetailedDataType.KEYWORDS,
@@ -201,7 +171,6 @@ async def get_report_details(
             keywords_limit,
             keywords_offset,
             shape_keyword_items,
-            build_keywords_display,
         )
         backlinks_result = await resolve_section(
             DetailedDataType.BACKLINKS,
@@ -209,7 +178,6 @@ async def get_report_details(
             backlinks_limit,
             backlinks_offset,
             shape_backlink_items,
-            build_backlinks_display,
         )
         if include_referring_domains:
             referring_domains_result = {
@@ -223,31 +191,12 @@ async def get_report_details(
                         "total_count": derived_result["total_count"],
                         "items": shape_referring_domain_items(derived_result["items"]),
                     }
-                else:
-                    backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
-                    backlinks_json = backlinks_data.json_data.get("items", []) if backlinks_data else None
-                    if backlinks_json:
-                        referring_domains_result = build_referring_domains_display(
-                            [],
-                            backlinks_json,
-                            limit=backlinks_limit,
-                            offset=backlinks_offset,
-                        )
             except Exception as rel_error:
                 logger.warning(
-                    "Falling back to backlinks JSONB for referring domains after derived read failed",
+                    "Relational read failed for referring domains",
                     domain=domain,
                     error=str(rel_error),
                 )
-                backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
-                backlinks_json = backlinks_data.json_data.get("items", []) if backlinks_data else None
-                if backlinks_json:
-                    referring_domains_result = build_referring_domains_display(
-                        [],
-                        backlinks_json,
-                        limit=backlinks_limit,
-                        offset=backlinks_offset,
-                    )
         else:
             referring_domains_result = empty_section()
 
@@ -425,55 +374,19 @@ async def get_domain_keywords( domain: str, limit: int = Query(100, ge=1, le=100
     try:
         db, _ = await _get_owned_report_or_404(domain, current_user)
         
-        # Get detailed keywords data from database
         from models.domain_analysis import DetailedDataType
-        detailed_data = await db.get_detailed_data(domain, DetailedDataType.KEYWORDS)
-        
-        if not detailed_data:
+        keyword_result = await db.get_detailed_items(domain, DetailedDataType.KEYWORDS, limit, offset)
+
+        if not keyword_result["items"]:
             raise HTTPException(status_code=404, detail="Keywords data not available")
-        
-        # Extract keywords from the saved data
-        keywords = detailed_data.json_data.get("items", [])
-        
-        # Validate that we actually have keywords
-        if not keywords or len(keywords) == 0:
-            raise HTTPException(status_code=404, detail="No keywords data available for this domain")
-        
-        # Filter out sample/test keywords
-        domain_lower = domain.lower().replace('www.', '')
-        valid_keywords = []
-        
-        for keyword in keywords:
-            serp_item = keyword.get("ranked_serp_element", {}).get("serp_item", {})
-            url = serp_item.get("url", "")
-            keyword_text = keyword.get("keyword_data", {}).get("keyword", "")
-            
-            # Skip if URL is empty
-            if not url:
-                continue
-            
-            url_lower = url.lower()
-            
-            # Filter out sample/test data from DataForSEO
-            if any(test_domain in url_lower for test_domain in [ 'dataforseo.com', 'example.com', 'test.com', 'sample.com', 'demo.com'
-            ]):
-                logger.debug("Filtered out sample keyword", domain=domain, keyword=keyword_text, url=url)
-                continue
-            
-            valid_keywords.append(keyword)
-        
-        # If no valid keywords after filtering, return 404
-        if not valid_keywords:
-            logger.warning("No valid keywords after filtering sample data", domain=domain, original_count=len(keywords))
-            raise HTTPException(status_code=404, detail="No valid keywords data available for this domain (sample data filtered out)")
-        
-        # Use actual count of valid keywords
-        total_count = len(valid_keywords)
-        
-        # Apply pagination to valid keywords
-        paginated_keywords = valid_keywords[offset:offset + limit]
-        
-        return { "domain": domain, "total_count": total_count, "limit": limit, "offset": offset, "keywords": paginated_keywords }
+
+        return {
+            "domain": domain,
+            "total_count": keyword_result["total_count"],
+            "limit": limit,
+            "offset": offset,
+            "keywords": shape_keyword_items(keyword_result["items"]),
+        }
         
     except HTTPException:
         raise
@@ -490,17 +403,15 @@ async def export_domain_keywords(domain: str, current_user = Depends(get_current
     try:
         db, _ = await _get_owned_report_or_404(domain, current_user)
         
-        # Get detailed keywords data from database
         from models.domain_analysis import DetailedDataType
-        detailed_data = await db.get_detailed_data(domain, DetailedDataType.KEYWORDS)
-        
-        if not detailed_data:
+        keyword_result = await db.get_detailed_items(domain, DetailedDataType.KEYWORDS, 100000, 0)
+
+        if not keyword_result["items"]:
             raise HTTPException(status_code=404, detail="Keywords data not available")
-        
-        # Extract all keywords from the saved data
-        keywords = detailed_data.json_data.get("items", [])
-        
-        return { "domain": domain, "total_count": len(keywords), "keywords": keywords }
+
+        keywords = shape_keyword_items(keyword_result["items"])
+
+        return { "domain": domain, "total_count": keyword_result["total_count"], "keywords": keywords }
         
     except HTTPException:
         raise
@@ -517,27 +428,19 @@ async def get_domain_backlinks( domain: str, limit: int = Query(100, ge=1, le=10
     try:
         db, _ = await _get_owned_report_or_404(domain, current_user)
         
-        # Get detailed backlinks data from database
         from models.domain_analysis import DetailedDataType
-        detailed_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
-        
-        if not detailed_data:
+        backlink_result = await db.get_detailed_items(domain, DetailedDataType.BACKLINKS, limit, offset)
+
+        if not backlink_result["items"]:
             raise HTTPException(status_code=404, detail="Backlinks data not available")
-        
-        # Extract backlinks from the saved data
-        raw_backlinks = detailed_data.json_data.get("items", [])
-        # Use the actual count from the detailed data, not the summary metrics
-        total_count = len(raw_backlinks)
-        
-        # Map DataForSEO response to frontend interface
-        mapped_backlinks = []
-        for item in raw_backlinks:
-            mapped_backlinks.append({ "domain": item.get("domain_from", ""), "domain_rank": item.get("domain_from_rank", 0), "anchor_text": item.get("anchor", ""), "backlinks_count": item.get("links_count", 0), "first_seen": item.get("first_seen", ""), "last_seen": item.get("last_seen", "") })
-        
-        # Apply pagination
-        paginated_backlinks = mapped_backlinks[offset:offset + limit]
-        
-        return { "domain": domain, "total_count": total_count, "limit": limit, "offset": offset, "backlinks": paginated_backlinks }
+
+        return {
+            "domain": domain,
+            "total_count": backlink_result["total_count"],
+            "limit": limit,
+            "offset": offset,
+            "backlinks": shape_backlink_items(backlink_result["items"]),
+        }
         
     except HTTPException:
         raise
@@ -554,24 +457,15 @@ async def export_domain_backlinks(domain: str, current_user = Depends(get_curren
     try:
         db, _ = await _get_owned_report_or_404(domain, current_user)
         
-        # Get detailed backlinks data from database
         from models.domain_analysis import DetailedDataType
-        detailed_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
-        
-        if not detailed_data:
+        backlink_result = await db.get_detailed_items(domain, DetailedDataType.BACKLINKS, 100000, 0)
+
+        if not backlink_result["items"]:
             raise HTTPException(status_code=404, detail="Backlinks data not available")
-        
-        # Extract all backlinks from the saved data
-        raw_backlinks = detailed_data.json_data.get("items", [])
-        
-        # Map DataForSEO response to frontend interface with comprehensive data
-        mapped_backlinks = []
-        for item in raw_backlinks:
-            mapped_backlinks.append({ "domain": item.get("domain_from", ""), "domain_rank": item.get("domain_from_rank", 0), "anchor_text": item.get("anchor", ""), "backlinks_count": item.get("links_count", 0), "first_seen": item.get("first_seen", ""), "last_seen": item.get("last_seen", ""), # Additional comprehensive fields from DataForSEO
-                "url_from": item.get("url_from", ""), "url_to": item.get("url_to", ""), "link_type": item.get("type", ""), "link_attributes": item.get("attributes", ""), "page_from_title": item.get("page_from_title", ""), "page_from_rank": item.get("page_from_rank", 0), "page_from_internal_links_count": item.get("page_from_internal_links", 0), "page_from_external_links_count": item.get("page_from_external_links", 0), "page_from_rank_absolute": item.get("rank", 0), # Additional useful fields
-                "dofollow": item.get("dofollow", False), "is_new": item.get("is_new", False), "is_lost": item.get("is_lost", False), "is_broken": item.get("is_broken", False), "url_from_https": item.get("url_from_https", False), "url_to_https": item.get("url_to_https", False), "page_from_status_code": item.get("page_from_status_code", 0), "url_to_status_code": item.get("url_to_status_code", 0), "backlink_spam_score": item.get("backlink_spam_score", 0), "url_to_spam_score": item.get("url_to_spam_score", 0), "page_from_size": item.get("page_from_size", 0), "page_from_encoding": item.get("page_from_encoding", ""), "page_from_language": item.get("page_from_language", ""), "domain_from_ip": item.get("domain_from_ip", ""), "domain_from_country": item.get("domain_from_country", ""), "domain_from_platform_type": item.get("domain_from_platform_type", []), "semantic_location": item.get("semantic_location", ""), "alt": item.get("alt", ""), "image_url": item.get("image_url", ""), "text_pre": item.get("text_pre", ""), "text_post": item.get("text_post", ""), "tld_from": item.get("tld_from", ""), "domain_to": item.get("domain_to", ""), "is_indirect_link": item.get("is_indirect_link", False), "indirect_link_path": item.get("indirect_link_path", ""), "url_to_redirect_target": item.get("url_to_redirect_target", ""), "prev_seen": item.get("prev_seen", ""), "group_count": item.get("group_count", 0), "original": item.get("original", False), "item_type": item.get("item_type", ""), "domain_from_is_ip": item.get("domain_from_is_ip", False) })
-        
-        return { "domain": domain, "total_count": len(mapped_backlinks), "backlinks": mapped_backlinks }
+
+        mapped_backlinks = shape_backlink_items(backlink_result["items"])
+
+        return { "domain": domain, "total_count": backlink_result["total_count"], "backlinks": mapped_backlinks }
         
     except HTTPException:
         raise
@@ -606,19 +500,19 @@ async def reanalyze_domain_ai( domain: str, request: dict ):
         from services.database import DetailedDataType
         
         if include_backlinks:
-            backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
-            if backlinks_data:
-                additional_data["backlinks"] = backlinks_data.json_data.get("items", [])
+            backlinks_result = await db.get_detailed_items(domain, DetailedDataType.BACKLINKS, 100000, 0)
+            if backlinks_result["items"]:
+                additional_data["backlinks"] = shape_backlink_items(backlinks_result["items"])
         
         if include_keywords:
-            keywords_data = await db.get_detailed_data(domain, DetailedDataType.KEYWORDS)
-            if keywords_data:
-                additional_data["keywords"] = keywords_data.json_data.get("items", [])
+            keywords_result = await db.get_detailed_items(domain, DetailedDataType.KEYWORDS, 100000, 0)
+            if keywords_result["items"]:
+                additional_data["keywords"] = shape_keyword_items(keywords_result["items"])
         
         if include_referring_domains:
-            referring_domains_data = await db.get_detailed_data(domain, DetailedDataType.REFERRING_DOMAINS)
-            if referring_domains_data:
-                additional_data["referring_domains"] = referring_domains_data.json_data.get("items", [])
+            referring_domains_result = await db.get_derived_referring_domains(domain, 100000, 0)
+            if referring_domains_result["items"]:
+                additional_data["referring_domains"] = shape_referring_domain_items(referring_domains_result["items"])
         
         # Get existing data in the format expected by enhanced LLM service
         existing_data = { "domain": domain, "essential_metrics": { "domain_rating": report.data_for_seo_metrics.domain_rating_dr if report.data_for_seo_metrics else 0,  # This is actually DataForSEO domain rank
