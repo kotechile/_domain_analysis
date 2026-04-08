@@ -92,6 +92,8 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
   private router = inject(Router);
+  private filtersHydrated = false;
+  private fetchTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Icons
   readonly Search = Search;
@@ -169,43 +171,66 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
   constructor() {
     effect(() => {
-      const from = this.expirationFromDate();
-      const to = this.expirationToDate();
+      this.searchQuery();
+      this.sortBy();
+      this.sortOrder();
+      this.preferredOnly();
+      this.scoredOnly();
+      this.statisticsOnly();
+      this.minScore();
+      this.maxScore();
+      this.selectedPlatforms();
+      this.offeringType();
+      this.expirationFromDate();
+      this.expirationToDate();
+      this.limit();
+      this.offset();
 
-      if (!from || !to) return;
-
-      if (from > to) {
-        untracked(() => {
-          this.expirationToDate.set(from);
-        });
+      if (!this.filtersHydrated) {
+        return;
       }
-    });
 
-    // Automatically re-fetch whenever a filter signal changes
-    effect(() => {
-      this.fetchAuctions();
+      this.scheduleFetchAuctions();
     });
+  }
+
+  private getNormalizedExpirationRange(fromValue: string, toValue: string) {
+    const from = fromValue || '';
+    const to = toValue || '';
+
+    if (from && to && from > to) {
+      return {
+        from: to,
+        to: from,
+      };
+    }
+
+    return { from, to };
+  }
+
+  private setExpirationRange(fromValue: string, toValue: string) {
+    const normalized = this.getNormalizedExpirationRange(fromValue, toValue);
+    this.expirationFromDate.set(normalized.from);
+    this.expirationToDate.set(normalized.to);
+  }
+
+  private scheduleFetchAuctions() {
+    if (this.fetchTimeout) {
+      clearTimeout(this.fetchTimeout);
+    }
+
+    this.fetchTimeout = setTimeout(() => {
+      this.fetchTimeout = null;
+      this.fetchAuctions();
+    }, 0);
   }
 
   private normalizeExpirationRange(changedField: 'from' | 'to', rawValue: string) {
     const nextValue = rawValue || '';
-
-    if (changedField === 'from') {
-      this.expirationFromDate.set(nextValue);
-    } else {
-      this.expirationToDate.set(nextValue);
-    }
-
     const fromValue = changedField === 'from' ? nextValue : this.expirationFromDate();
     const toValue = changedField === 'to' ? nextValue : this.expirationToDate();
-    if (fromValue && toValue && fromValue > toValue) {
-      if (changedField === 'from') {
-        this.expirationToDate.set(fromValue);
-      } else {
-        this.expirationFromDate.set(toValue);
-      }
-    }
 
+    this.setExpirationRange(fromValue, toValue);
     this.offset.set(0);
   }
 
@@ -213,6 +238,10 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     // Clean up progress polling subscriptions
     this.progressSubscriptions.forEach(sub => sub.unsubscribe());
     this.progressSubscriptions.clear();
+    if (this.fetchTimeout) {
+      clearTimeout(this.fetchTimeout);
+      this.fetchTimeout = null;
+    }
   }
 
   /**
@@ -376,8 +405,10 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (qp['max_score']) this.maxScore.set(Number(qp['max_score']));
     if (qp['platforms']) this.selectedPlatforms.set(qp['platforms'].split(','));
     if (qp['offering_type']) this.offeringType.set(qp['offering_type']);
-    if (qp['exp_from']) this.expirationFromDate.set(qp['exp_from']);
-    if (qp['exp_to']) this.expirationToDate.set(qp['exp_to']);
+    this.setExpirationRange(qp['exp_from'] || '', qp['exp_to'] || '');
+
+    this.filtersHydrated = true;
+    this.scheduleFetchAuctions();
   }
 
   onExpirationFromDateChange(value: string) {
@@ -568,8 +599,12 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     const maxS = this.maxScore();
     const platforms = this.selectedPlatforms();
     const offType = this.offeringType();
-    const expFrom = this.expirationFromDate();
-    const expTo = this.expirationToDate();
+    const normalizedExpirationRange = this.getNormalizedExpirationRange(
+      this.expirationFromDate(),
+      this.expirationToDate(),
+    );
+    const expFrom = normalizedExpirationRange.from;
+    const expTo = normalizedExpirationRange.to;
     const currentOffset = this.offset();
     const currentLimit = this.limit();
 
