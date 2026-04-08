@@ -105,6 +105,7 @@ async def get_report_details(
     domain: str,
     keywords_limit: int = Query(100, ge=1, le=1000),
     backlinks_limit: int = Query(100, ge=1, le=1000),
+    sections: Optional[str] = Query(None, description="Comma-separated list of sections: keywords,referring_domains,backlinks"),
     current_user = Depends(get_current_user),
 ):
     """
@@ -115,9 +116,19 @@ async def get_report_details(
 
         from models.domain_analysis import DetailedDataType
 
-        keywords_data = await db.get_detailed_data(domain, DetailedDataType.KEYWORDS)
-        backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
-        referring_domains_data = await db.get_detailed_data(domain, DetailedDataType.REFERRING_DOMAINS)
+        requested_sections = {
+            section.strip()
+            for section in (sections.split(",") if sections else ["keywords", "referring_domains", "backlinks"])
+            if section.strip()
+        }
+
+        include_keywords = "keywords" in requested_sections
+        include_backlinks = "backlinks" in requested_sections
+        include_referring_domains = "referring_domains" in requested_sections
+
+        keywords_data = await db.get_detailed_data(domain, DetailedDataType.KEYWORDS) if include_keywords else None
+        backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS) if (include_backlinks or include_referring_domains) else None
+        referring_domains_data = await db.get_detailed_data(domain, DetailedDataType.REFERRING_DOMAINS) if include_referring_domains else None
 
         keyword_items = (keywords_data.json_data or {}).get("items", []) if keywords_data else []
         raw_backlinks = (backlinks_data.json_data or {}).get("items", []) if backlinks_data else []
@@ -192,15 +203,15 @@ async def get_report_details(
             "detailed_data_available": report.detailed_data_available or {},
             "keywords": {
                 "total_count": total_keywords,
-                "items": keyword_items[:keywords_limit],
+                "items": keyword_items[:keywords_limit] if include_keywords else [],
             },
             "referring_domains": {
                 "total_count": total_referring_domains,
-                "items": mapped_referring_domains,
+                "items": mapped_referring_domains if include_referring_domains else [],
             },
             "backlinks": {
                 "total_count": total_backlinks,
-                "items": mapped_backlinks,
+                "items": mapped_backlinks if include_backlinks else [],
             },
         }
     except HTTPException:

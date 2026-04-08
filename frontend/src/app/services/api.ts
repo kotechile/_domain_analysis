@@ -60,12 +60,16 @@ export class ApiService {
     return this.http.get<{ domain: string; total_count: number; keywords: any[] }>(`${this.baseUrl}/reports/${domain}/keywords`);
   }
 
-  getReportDetails(domain: string, keywordsLimit: number = 100, backlinksLimit: number = 100): Observable<Models.ReportDetailsResponse> {
+  getReportDetails(domain: string, options: { keywordsLimit?: number; backlinksLimit?: number; sections?: string[] } = {}): Observable<Models.ReportDetailsResponse> {
     const params = new HttpParams()
-      .set('keywords_limit', keywordsLimit.toString())
-      .set('backlinks_limit', backlinksLimit.toString());
+      .set('keywords_limit', (options.keywordsLimit ?? 100).toString())
+      .set('backlinks_limit', (options.backlinksLimit ?? 100).toString());
 
-    return this.http.get<Models.ReportDetailsResponse>(`${this.baseUrl}/reports/${domain}/details`, { params });
+    const finalParams = options.sections?.length
+      ? params.set('sections', options.sections.join(','))
+      : params;
+
+    return this.http.get<Models.ReportDetailsResponse>(`${this.baseUrl}/reports/${domain}/details`, { params: finalParams });
   }
 
   listReports(limit: number = 10, offset: number = 0, status?: string): Observable<Models.DomainAnalysisReport[]> {

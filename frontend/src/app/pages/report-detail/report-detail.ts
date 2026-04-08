@@ -78,6 +78,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     backlinksTotal = signal<number>(0);
     referringDomainsTotal = signal<number>(0);
     keywordsTotal = signal<number>(0);
+    private loadedDetailTabs = new Set<string>();
 
     private pollingSub?: Subscription;
 
@@ -92,6 +93,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
                 this.backlinksTotal.set(0);
                 this.referringDomainsTotal.set(0);
                 this.keywordsTotal.set(0);
+                this.loadedDetailTabs.clear();
                 this.startPolling(d);
             }
         });
@@ -112,10 +114,6 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
                 this.report.set(res.report);
                 this.error.set(null);
 
-                if (this.hasDetailedData(res.report)) {
-                    await this.fetchReportDetails(d);
-                }
-
                 // Start polling if it's in progress
                 if (res.report.status === 'pending' || res.report.status === 'in_progress') {
                     this.startPolling(d);
@@ -131,15 +129,27 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
         }
     }
 
-    async fetchReportDetails(domain: string) {
+    async fetchReportDetails(domain: string, tab: 'keywords' | 'referring-domains' | 'backlinks') {
         try {
-            const res = await firstValueFrom(this.api.getReportDetails(domain));
-            this.keywords.set(res.keywords?.items || []);
-            this.referringDomains.set(res.referring_domains?.items || []);
-            this.backlinks.set(res.backlinks?.items || []);
-            this.keywordsTotal.set(res.keywords?.total_count || 0);
-            this.referringDomainsTotal.set(res.referring_domains?.total_count || 0);
-            this.backlinksTotal.set(res.backlinks?.total_count || 0);
+            const sectionMap: Record<'keywords' | 'referring-domains' | 'backlinks', string[]> = {
+                'keywords': ['keywords'],
+                'referring-domains': ['referring_domains'],
+                'backlinks': ['backlinks'],
+            };
+            const res = await firstValueFrom(this.api.getReportDetails(domain, { sections: sectionMap[tab] }));
+
+            if (tab === 'keywords') {
+                this.keywords.set(res.keywords?.items || []);
+                this.keywordsTotal.set(res.keywords?.total_count || 0);
+            } else if (tab === 'referring-domains') {
+                this.referringDomains.set(res.referring_domains?.items || []);
+                this.referringDomainsTotal.set(res.referring_domains?.total_count || 0);
+            } else if (tab === 'backlinks') {
+                this.backlinks.set(res.backlinks?.items || []);
+                this.backlinksTotal.set(res.backlinks?.total_count || 0);
+            }
+
+            this.loadedDetailTabs.add(tab);
         } catch (err) {
             console.error('Error fetching report details:', err);
         }
@@ -194,7 +204,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
                         this.error.set(null);
                         this.loading.set(false);
                         if (res.report.status === 'completed' && this.hasDetailedData(res.report)) {
-                            this.fetchReportDetails(domain);
+                            this.ensureActiveTabData();
                         }
                     }
                 },
@@ -214,6 +224,17 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
 
     setTab(tab: string) {
         this.activeTab.set(tab);
+        this.ensureActiveTabData();
+    }
+
+    ensureActiveTabData() {
+        const d = this.domain();
+        const tab = this.activeTab();
+        if (!d || !this.hasDetailedData(this.report())) return;
+
+        if ((tab === 'keywords' || tab === 'referring-domains' || tab === 'backlinks') && !this.loadedDetailTabs.has(tab)) {
+            this.fetchReportDetails(d, tab);
+        }
     }
 
     getBuyColor(rec: string | undefined): string {
