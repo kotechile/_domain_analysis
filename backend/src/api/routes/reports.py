@@ -189,7 +189,22 @@ async def list_reports(
                 else:
                     analysis_mode = AnalysisMode.LEGACY
                 
-                report = DomainAnalysisReport( domain_name=report_data['domain_name'], analysis_timestamp=analysis_timestamp, status=status, data_for_seo_metrics=report_data.get('data_for_seo_metrics'), wayback_machine_summary=report_data.get('wayback_machine_summary'), llm_analysis=report_data.get('llm_analysis'), raw_data_links=report_data.get('raw_data_links'), detailed_data_available=report_data.get('detailed_data_available', {}), analysis_phase=analysis_phase, analysis_mode=analysis_mode, processing_time_seconds=report_data.get('processing_time_seconds'), error_message=report_data.get('error_message'), backlinks_page_summary=backlinks_page_summary )
+                report = DomainAnalysisReport(
+                    domain_name=report_data['domain_name'],
+                    user_id=report_data.get('user_id'),
+                    analysis_timestamp=analysis_timestamp,
+                    status=status,
+                    data_for_seo_metrics=report_data.get('data_for_seo_metrics'),
+                    wayback_machine_summary=report_data.get('wayback_machine_summary'),
+                    llm_analysis=report_data.get('llm_analysis'),
+                    raw_data_links=report_data.get('raw_data_links'),
+                    detailed_data_available=report_data.get('detailed_data_available', {}),
+                    analysis_phase=analysis_phase,
+                    analysis_mode=analysis_mode,
+                    processing_time_seconds=report_data.get('processing_time_seconds'),
+                    error_message=report_data.get('error_message'),
+                    backlinks_page_summary=backlinks_page_summary
+                )
                 reports.append(report)
             except Exception as e:
                 logger.error("Failed to parse report in list", domain=report_data.get('domain_name'), error=str(e), error_type=type(e).__name__, report_keys=list(report_data.keys()) if isinstance(report_data, dict) else None, exc_info=True)
