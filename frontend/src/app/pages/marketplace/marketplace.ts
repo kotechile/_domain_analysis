@@ -168,16 +168,23 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   private creditService = inject(CreditService);
 
   constructor() {
+    effect(() => {
+      const from = this.expirationFromDate();
+      const to = this.expirationToDate();
+
+      if (!from || !to) return;
+
+      if (from > to) {
+        untracked(() => {
+          this.expirationToDate.set(from);
+        });
+      }
+    });
+
     // Automatically re-fetch whenever a filter signal changes
     effect(() => {
       this.fetchAuctions();
     });
-  }
-
-  private parseDateInput(value: string): Date | null {
-    if (!value) return null;
-    const parsed = new Date(`${value}T00:00:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
   private normalizeExpirationRange(changedField: 'from' | 'to', rawValue: string) {
@@ -191,10 +198,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
     const fromValue = changedField === 'from' ? nextValue : this.expirationFromDate();
     const toValue = changedField === 'to' ? nextValue : this.expirationToDate();
-    const fromDate = this.parseDateInput(fromValue);
-    const toDate = this.parseDateInput(toValue);
-
-    if (fromDate && toDate && fromDate.getTime() > toDate.getTime()) {
+    if (fromValue && toValue && fromValue > toValue) {
       if (changedField === 'from') {
         this.expirationToDate.set(fromValue);
       } else {

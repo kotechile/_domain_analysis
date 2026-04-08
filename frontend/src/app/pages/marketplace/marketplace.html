@@ -229,12 +229,12 @@
             <div class="space-y-4">
                 <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">Expiration</span>
                 <div class="flex items-center space-x-3">
-                    <input type="date" placeholder="From" [ngModel]="expirationFromDate()"
+                    <input type="date" placeholder="From" [ngModel]="expirationFromDate()" [max]="expirationToDate() || null"
                         (ngModelChange)="onExpirationFromDateChange($event)"
                         class="w-full h-11 px-2 rounded-xl bg-black/5 dark:bg-white/5 border-none text-[10px] font-semibold outline-none ring-1 ring-black/5 dark:ring-white/10"
                         style="color: var(--text-color)">
                     <span class="opacity-20 font-semibold">TO</span>
-                    <input type="date" placeholder="To" [ngModel]="expirationToDate()"
+                    <input type="date" placeholder="To" [ngModel]="expirationToDate()" [min]="expirationFromDate() || null"
                         (ngModelChange)="onExpirationToDateChange($event)"
                         class="w-full h-11 px-2 rounded-xl bg-black/5 dark:bg-white/5 border-none text-[10px] font-semibold outline-none ring-1 ring-black/5 dark:ring-white/10"
                         style="color: var(--text-color)">
