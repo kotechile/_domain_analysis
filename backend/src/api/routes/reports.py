@@ -123,9 +123,41 @@ async def get_report_details(
         raw_backlinks = (backlinks_data.json_data or {}).get("items", []) if backlinks_data else []
         raw_referring_domains = (referring_domains_data.json_data or {}).get("items", []) if referring_domains_data else []
 
+        # Some analyses do not persist a separate referring-domains dataset.
+        # In that case, derive it from the backlink rows so the report stays useful.
+        if not raw_referring_domains and raw_backlinks:
+            derived_referring_domains = {}
+            for item in raw_backlinks:
+                domain_key = item.get("domain_from") or item.get("domain") or ""
+                if not domain_key:
+                    continue
+
+                if domain_key not in derived_referring_domains:
+                    derived_referring_domains[domain_key] = {
+                        "domain": domain_key,
+                        "domain_rank": item.get("domain_from_rank", item.get("domain_rank", 0)),
+                        "anchor_text": item.get("anchor") or item.get("anchor_text", ""),
+                        "backlinks_count": 0,
+                        "first_seen": item.get("first_seen", ""),
+                        "last_seen": item.get("last_seen", ""),
+                    }
+
+                derived_referring_domains[domain_key]["backlinks_count"] += item.get("links_count", 1) or 1
+
+                if not derived_referring_domains[domain_key]["first_seen"]:
+                    derived_referring_domains[domain_key]["first_seen"] = item.get("first_seen", "")
+                if item.get("last_seen"):
+                    derived_referring_domains[domain_key]["last_seen"] = item.get("last_seen", "")
+
+            raw_referring_domains = sorted(
+                derived_referring_domains.values(),
+                key=lambda entry: entry.get("domain_rank", 0),
+                reverse=True,
+            )
+
         total_keywords = (keywords_data.json_data or {}).get("total_count", len(keyword_items)) if keywords_data else 0
         total_backlinks = (backlinks_data.json_data or {}).get("total_count", len(raw_backlinks)) if backlinks_data else 0
-        total_referring_domains = (referring_domains_data.json_data or {}).get("total_count", len(raw_referring_domains)) if referring_domains_data else 0
+        total_referring_domains = (referring_domains_data.json_data or {}).get("total_count", len(raw_referring_domains)) if referring_domains_data else len(raw_referring_domains)
 
         mapped_referring_domains = []
         for item in raw_referring_domains[:backlinks_limit]:
@@ -141,14 +173,14 @@ async def get_report_details(
         mapped_backlinks = []
         for item in raw_backlinks[:backlinks_limit]:
             mapped_backlinks.append({
-                "domain": item.get("domain_from", ""),
-                "domain_rank": item.get("domain_from_rank", 0),
-                "anchor_text": item.get("anchor", ""),
-                "backlinks_count": item.get("links_count", 0),
-                "url_from": item.get("url_from", ""),
-                "url_to": item.get("url_to", ""),
-                "link_type": item.get("type", ""),
-                "link_attributes": item.get("attributes", ""),
+                "domain": item.get("domain_from") or item.get("domain", ""),
+                "domain_rank": item.get("domain_from_rank", item.get("domain_rank", 0)),
+                "anchor_text": item.get("anchor") or item.get("anchor_text", ""),
+                "backlinks_count": item.get("links_count", item.get("backlinks_count", 1)),
+                "url_from": item.get("url_from") or item.get("url", ""),
+                "url_to": item.get("url_to") or item.get("target", ""),
+                "link_type": item.get("type", item.get("link_type", "")),
+                "link_attributes": item.get("attributes", item.get("link_attributes", "")),
                 "first_seen": item.get("first_seen", ""),
                 "last_seen": item.get("last_seen", ""),
                 "backlink_spam_score": item.get("backlink_spam_score", 0),
