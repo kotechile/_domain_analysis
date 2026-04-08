@@ -131,6 +131,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   sortOrder = signal<'asc' | 'desc'>('asc');
   preferredOnly = signal<boolean>(false);
   scoredOnly = signal<boolean>(false);
+  statisticsOnly = signal<boolean>(false);
 
   // Advanced Filters
   minScore = signal<number | null>(null);
@@ -154,6 +155,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (this.searchQuery()) count++;
     if (this.preferredOnly()) count++;
     if (this.scoredOnly()) count++;
+    if (this.statisticsOnly()) count++;
     if (this.minScore() !== null && this.minScore() !== undefined) count++;
     if (this.maxScore() !== null && this.maxScore() !== undefined) count++;
     if (this.selectedPlatforms().length > 0) count++;
@@ -334,6 +336,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (qp['order']) this.sortOrder.set(qp['order'] as 'asc' | 'desc');
     if (qp['preferred']) this.preferredOnly.set(qp['preferred'] === 'true');
     if (qp['scored']) this.scoredOnly.set(qp['scored'] === 'true');
+    if (qp['has_statistics']) this.statisticsOnly.set(qp['has_statistics'] === 'true');
     if (qp['min_score']) this.minScore.set(Number(qp['min_score']));
     if (qp['max_score']) this.maxScore.set(Number(qp['max_score']));
     if (qp['platforms']) this.selectedPlatforms.set(qp['platforms'].split(','));
@@ -385,6 +388,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (this.searchQuery()) filters['search'] = this.searchQuery();
     if (this.preferredOnly()) filters['preferred'] = true;
     if (this.scoredOnly()) filters['scored'] = true;
+    if (this.statisticsOnly()) filters['has_statistics'] = true;
     if (this.expirationFromDate()) filters['expiration_from_date'] = this.expirationFromDate();
     if (this.expirationToDate()) filters['expiration_to_date'] = this.expirationToDate();
     if (this.selectedPlatforms().length) filters['auction_sites'] = this.selectedPlatforms();
@@ -456,6 +460,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (this.searchQuery()) filters['search'] = this.searchQuery();
     if (this.preferredOnly()) filters['preferred'] = true;
     if (this.scoredOnly()) filters['scored'] = true;
+    if (this.statisticsOnly()) filters['has_statistics'] = true;
     if (this.expirationFromDate()) filters['expiration_from_date'] = this.expirationFromDate();
     if (this.expirationToDate()) filters['expiration_to_date'] = this.expirationToDate();
     if (this.selectedPlatforms().length) filters['auction_sites'] = this.selectedPlatforms();
@@ -515,6 +520,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     const order = this.sortOrder();
     const preferred = this.preferredOnly();
     const scored = this.scoredOnly();
+    const hasStatistics = this.statisticsOnly();
     const minS = this.minScore();
     const maxS = this.maxScore();
     const platforms = this.selectedPlatforms();
@@ -532,6 +538,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
         order: order,
         preferred: preferred ? true : undefined,
         scored: scored ? true : undefined,
+        has_statistics: hasStatistics ? true : undefined,
         expiration_from_date: expFrom || undefined,
         expiration_to_date: expTo || undefined,
         search: search || undefined,
@@ -548,6 +555,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
         order: order !== 'asc' ? order : undefined,
         preferred: preferred ? 'true' : undefined,
         scored: scored ? 'true' : undefined,
+        has_statistics: hasStatistics ? 'true' : undefined,
         min_score: minS ?? undefined,
         max_score: maxS ?? undefined,
         platforms: platforms.length > 0 ? platforms.join(',') : undefined,
@@ -600,6 +608,11 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     this.offset.set(0);
   }
 
+  toggleStatistics() {
+    this.statisticsOnly.set(!this.statisticsOnly());
+    this.offset.set(0);
+  }
+
   toggleOnlyDisplayed() {
     this.onlyDisplayedDomains.set(!this.onlyDisplayedDomains());
   }
@@ -628,6 +641,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     this.searchQuery.set('');
     this.preferredOnly.set(false);
     this.scoredOnly.set(false);
+    this.statisticsOnly.set(false);
     this.minScore.set(null);
     this.maxScore.set(null);
     this.selectedPlatforms.set([]);
