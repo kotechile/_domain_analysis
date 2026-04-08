@@ -1,8 +1,6 @@
 import asyncio
 import structlog
-from datetime import datetime
-from typing import Any, Dict, List
-from services.database import get_database
+from services.database import DatabaseService
 from models.domain_analysis import DetailedDataType
 
 logger = structlog.get_logger()
@@ -11,7 +9,7 @@ async def migrate_jsonb_to_relational():
     """
     Migrates existing detailed analysis data from JSONB blobs to relational tables.
     """
-    db = get_database()
+    db = DatabaseService()
     client = await db._get_client()
 
     # Data types to migrate
@@ -50,12 +48,7 @@ async def migrate_jsonb_to_relational():
                 continue
 
             try:
-                if data_type == DetailedDataType.KEYWORDS:
-                    await db.bulk_insert_keywords(domain, items)
-                elif data_type == DetailedDataType.BACKLINKS:
-                    await db.bulk_insert_backlinks(domain, items)
-                elif data_type == DetailedDataType.REFERRING_DOMAINS:
-                    await db.bulk_insert_referring_domains(domain, items)
+                await db.refresh_relational_detailed_data(domain, data_type, items)
 
                 total_migrated_rows += len(items)
                 logger.debug("Migrated items for domain", domain=domain, count=len(items))

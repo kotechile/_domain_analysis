@@ -399,6 +399,49 @@ class DatabaseService:
             logger.error("Failed to save detailed data", domain=detailed_data.domain_name, data_type=detailed_data.data_type.value, error=str(e))
             raise
 
+    async def store_detailed_data(self, detailed_data: DetailedAnalysisData) -> str:
+        """Persist JSONB detailed data and refresh relational rows for the same domain/type."""
+        data_id = await self.save_detailed_data(detailed_data)
+        await self.refresh_relational_detailed_data(
+            detailed_data.domain_name,
+            detailed_data.data_type,
+            detailed_data.json_data.get('items', []),
+        )
+        return data_id
+
+    async def refresh_relational_detailed_data(self, domain_name: str, data_type: DetailedDataType, items: List[Dict[str, Any]]):
+        """Replace relational rows for a domain/type so backfills and reruns are idempotent."""
+        if data_type == DetailedDataType.BACKLINKS:
+            await self.delete_relational_detailed_data(domain_name, data_type)
+            if items:
+                await self.bulk_insert_backlinks(domain_name, items)
+            await self.refresh_referring_domains_from_backlinks(domain_name)
+            return
+
+        await self.delete_relational_detailed_data(domain_name, data_type)
+
+        if not items:
+            return
+
+        if data_type == DetailedDataType.KEYWORDS:
+            await self.bulk_insert_keywords(domain_name, items)
+        elif data_type == DetailedDataType.REFERRING_DOMAINS:
+            await self.bulk_insert_referring_domains(domain_name, items)
+
+    async def delete_relational_detailed_data(self, domain_name: str, data_type: DetailedDataType):
+        """Delete relational detailed rows for a domain/type."""
+        client = await self._get_client()
+        table_map = {
+            DetailedDataType.KEYWORDS: 'domain_keywords',
+            DetailedDataType.BACKLINKS: 'domain_backlinks',
+            DetailedDataType.REFERRING_DOMAINS: 'domain_referring_domains',
+        }
+        table_name = table_map.get(data_type)
+        if not table_name:
+            raise ValueError(f"Unsupported data type: {data_type}")
+
+        await client.table(table_name).delete().eq('domain_name', domain_name).execute()
+
     async def bulk_insert_keywords(self, domain_name: str, items: List[Dict[str, Any]]):
         """Bulk insert keywords into domain_keywords table"""
         client = await self._get_client()
@@ -407,12 +450,15 @@ class DatabaseService:
             for item in items:
                 kw_data = item.get('keyword_data', {})
                 serp_item = item.get('ranked_serp_element', {}).get('serp_item', {})
+                keyword = item.get('keyword') or kw_data.get('keyword')
+                if not keyword:
+                    continue
                 records.append({
                     'domain_name': domain_name,
-                    'keyword': kw_data.get('keyword'),
+                    'keyword': keyword,
                     'search_volume': kw_data.get('search_volume'),
-                    'position': serp_item.get('rank_absolute') or item.get('rank'),
-                    'url': serp_item.get('url') or item.get('url')
+                    'position': item.get('position') or serp_item.get('rank_absolute') or item.get('rank'),
+                    'url': item.get('ranking_url') or serp_item.get('url') or item.get('url')
                 })
 
             if records:
@@ -467,6 +513,52 @@ class DatabaseService:
             logger.error("Failed to bulk insert referring domains", domain=domain_name, error=str(e))
             raise
 
+    async def refresh_referring_domains_from_backlinks(self, domain_name: str):
+        """Rebuild derived referring domains from backlinks for a single domain."""
+        client = await self._get_client()
+        try:
+            backlinks_result = await client.table('domain_backlinks') \
+                .select('domain_name_source, dr') \
+                .eq('domain_name', domain_name) \
+                .execute()
+
+            records_by_domain: Dict[str, Dict[str, Any]] = {}
+            for item in backlinks_result.data or []:
+                source_domain = item.get('domain_name_source')
+                if not source_domain:
+                    continue
+
+                existing = records_by_domain.get(source_domain)
+                dr = item.get('dr')
+                if existing is None:
+                    records_by_domain[source_domain] = {
+                        'domain_name': domain_name,
+                        'referring_domain': source_domain,
+                        'backlinks_count': 1,
+                        'dr': dr,
+                    }
+                    continue
+
+                existing['backlinks_count'] += 1
+                if dr is not None and (existing.get('dr') is None or dr > existing['dr']):
+                    existing['dr'] = dr
+
+            await self.delete_relational_detailed_data(domain_name, DetailedDataType.REFERRING_DOMAINS)
+            records = list(records_by_domain.values())
+            if records:
+                await client.table('domain_referring_domains').upsert(
+                    records,
+                    on_conflict='domain_name,referring_domain',
+                ).execute()
+                logger.info("Refreshed derived referring domains", domain=domain_name, count=len(records))
+        except Exception as e:
+            logger.error("Failed to refresh derived referring domains", domain=domain_name, error=str(e))
+            raise
+
+    async def get_derived_referring_domains(self, domain_name: str, limit: int, offset: int) -> Dict[str, Any]:
+        """Fetch referring domains derived from backlinks."""
+        return await self.get_detailed_items(domain_name, DetailedDataType.REFERRING_DOMAINS, limit, offset)
+
     async def get_detailed_items(self, domain_name: str, data_type: DetailedDataType, limit: int, offset: int) -> Dict[str, Any]:
         """Fetch paginated items from relational tables"""
         client = await self._get_client()
@@ -489,6 +581,10 @@ class DatabaseService:
 
             if data_type == DetailedDataType.KEYWORDS:
                 query = query.order('position', ascending=True)
+            elif data_type == DetailedDataType.REFERRING_DOMAINS:
+                query = query.order('dr', ascending=False).order('backlinks_count', ascending=False)
+            elif data_type == DetailedDataType.BACKLINKS:
+                query = query.order('dr', ascending=False)
 
             result = await query.execute()
 
@@ -534,6 +630,7 @@ class DatabaseService:
         client = await self._get_client()
         try:
             await client.table('detailed_analysis_data').delete().eq('domain_name', domain_name).eq('data_type', data_type.value).execute()
+            await self.delete_relational_detailed_data(domain_name, data_type)
             logger.info("Detailed data deleted", domain=domain_name, data_type=data_type.value)
         except Exception as e:
             logger.error("Failed to delete detailed data", domain=domain_name, data_type=data_type.value, error=str(e))

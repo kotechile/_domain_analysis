@@ -417,7 +417,7 @@ class AnalysisService:
                         existing_data = await self.db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
                         if not existing_data:
                             detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.BACKLINKS, json_data=backlinks_data )
-                            await self.db.save_detailed_data(detailed_data)
+                            await self.db.store_detailed_data(detailed_data)
                     
                     # Collect detailed keywords
                     progress_tracker.start_sub_operation("detailed_data", "keywords_analysis")
@@ -439,7 +439,7 @@ class AnalysisService:
                         
                         # Save detailed data to database
                         detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.KEYWORDS, json_data=keywords_data )
-                        await self.db.save_detailed_data(detailed_data)
+                        await self.db.store_detailed_data(detailed_data)
                         
                         # Update report metadata with real counts from detailed data
                         if report.data_for_seo_metrics:
@@ -469,7 +469,7 @@ class AnalysisService:
                             
                         # Save detailed data to database
                         detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.KEYWORDS, json_data=keywords_data )
-                        await self.db.save_detailed_data(detailed_data)
+                        await self.db.store_detailed_data(detailed_data)
                         
                         # Update report metrics from legacy data
                         if report.data_for_seo_metrics:
@@ -504,7 +504,7 @@ class AnalysisService:
                         
                         # Save detailed data to database
                         detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.REFERRING_DOMAINS, json_data=referring_domains_data )
-                        await self.db.save_detailed_data(detailed_data)
+                        await self.db.store_detailed_data(detailed_data)
                     else:
                         logger.warning("Async referring domains collection returned None, falling back to legacy", domain=domain)
                         # Fall back to legacy mode for referring domains
@@ -518,7 +518,7 @@ class AnalysisService:
                             
                             # Save detailed data to database
                             detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.REFERRING_DOMAINS, json_data=referring_domains_data )
-                            await self.db.save_detailed_data(detailed_data)
+                            await self.db.store_detailed_data(detailed_data)
                     
                 except Exception as e:
                     logger.warning("Async detailed data collection failed, falling back to legacy", domain=domain, error=str(e))
@@ -572,7 +572,7 @@ class AnalysisService:
                     # Save detailed data to database
                     from models.domain_analysis import DetailedAnalysisData, DetailedDataType
                     detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.BACKLINKS, json_data=backlinks_data )
-                    await self.db.save_detailed_data(detailed_data)
+                    await self.db.store_detailed_data(detailed_data)
                 
                 keywords_data = await self.dataforseo_service.get_detailed_keywords(domain, 1000, user_id)
                 if keywords_data and keywords_data.get("items"):
@@ -580,7 +580,7 @@ class AnalysisService:
                     operation_logger.log_data_collection("keywords", record_count=len(keywords_data.get("items", [])))
                     # Save detailed data to database
                     detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.KEYWORDS, json_data=keywords_data )
-                    await self.db.save_detailed_data(detailed_data)
+                    await self.db.store_detailed_data(detailed_data)
                 
                 referring_domains_data = await self.dataforseo_service.get_referring_domains(domain, 800, user_id)
                 if referring_domains_data and referring_domains_data.get("items"):
@@ -588,7 +588,7 @@ class AnalysisService:
                     operation_logger.log_data_collection("referring_domains", record_count=len(referring_domains_data.get("items", [])))
                     # Save detailed data to database
                     detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.REFERRING_DOMAINS, json_data=referring_domains_data )
-                    await self.db.save_detailed_data(detailed_data)
+                    await self.db.store_detailed_data(detailed_data)
             
             # Update report with detailed data availability
             progress_tracker.start_sub_operation("detailed_data", "data_saving")

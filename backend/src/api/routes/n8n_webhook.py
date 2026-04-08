@@ -81,7 +81,7 @@ async def receive_backlinks_webhook(request: N8NBacklinksWebhookRequest):
         db = get_database()
         detailed_data = DetailedAnalysisData( domain_name=request.domain, data_type=DetailedDataType.BACKLINKS, json_data=request.data )
         
-        await db.save_detailed_data(detailed_data)
+        await db.store_detailed_data(detailed_data)
         if request.cost is not None or request.credits_count is not None:
             await db.log_api_usage(user_action='DEEP ANALYSIS', api_service='Backlinks (Detailed)', request_id=request.request_id, cost=request.cost or 0.0, credits_count=request.credits_count or 0.0, domain=request.domain)
         
@@ -885,4 +885,3 @@ async def receive_bulk_traffic_batch_webhook(request: N8NBulkRankWebhookRequest)
 async def n8n_webhook_health():
     """Health check endpoint for N8N webhook"""
     return { "status": "healthy", "service": "n8n_webhook" }
-

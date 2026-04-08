@@ -342,7 +342,7 @@ async def refresh_analysis_data(domain: str, data_types: Optional[list] = None, 
             if data:
                 from models.domain_analysis import DetailedAnalysisData
                 detailed_data = DetailedAnalysisData( domain_name=domain, data_type=data_type, json_data=data )
-                await db.save_detailed_data(detailed_data)
+                await db.store_detailed_data(detailed_data)
                 refreshed_count += 1
 
         # Track cost if any API calls were made

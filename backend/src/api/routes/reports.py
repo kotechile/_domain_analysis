@@ -14,7 +14,15 @@ from services.database import get_database, DataSource
 from services.external_apis import DataForSEOService
 from services.pdf_service import PDFService
 from services.analysis_service import AnalysisService
-from services.report_display_service import build_display_payload
+from services.report_display_service import (
+    build_backlinks_display,
+    build_display_payload,
+    build_keywords_display,
+    build_referring_domains_display,
+    shape_backlink_items,
+    shape_keyword_items,
+    shape_referring_domain_items,
+)
 from utils.date_utils import parse_iso_datetime
 from middleware.auth_middleware import get_current_user
 
@@ -129,36 +137,135 @@ async def get_report_details(
         include_backlinks = "backlinks" in requested_sections
         include_referring_domains = "referring_domains" in requested_sections
 
-        # Use relational tables for paginated detailed data
-        results = {}
+        def empty_section() -> dict:
+            return {"total_count": 0, "items": []}
 
-        if include_keywords:
-            res = await db.get_detailed_items(domain, DetailedDataType.KEYWORDS, keywords_limit, keywords_offset)
-            results["keywords"] = res
+        async def resolve_section(
+            data_type,
+            include: bool,
+            limit: int,
+            offset: int,
+            relational_shaper,
+            json_builder,
+            *,
+            raw_backlinks_for_refdomains: Optional[Any] = None,
+        ) -> dict:
+            if not include:
+                return empty_section()
 
-        if include_backlinks:
-            res = await db.get_detailed_items(domain, DetailedDataType.BACKLINKS, backlinks_limit, backlinks_offset)
-            results["backlinks"] = res
+            try:
+                relational_result = await db.get_detailed_items(domain, data_type, limit, offset)
+            except Exception as rel_error:
+                logger.warning(
+                    "Falling back to JSONB detailed data after relational read failed",
+                    domain=domain,
+                    data_type=data_type.value,
+                    error=str(rel_error),
+                )
+                relational_result = empty_section()
 
+            if relational_result["items"]:
+                return {
+                    "total_count": relational_result["total_count"],
+                    "items": relational_shaper(relational_result["items"]),
+                }
+
+            detailed_data = await db.get_detailed_data(domain, data_type)
+            if not detailed_data:
+                if raw_backlinks_for_refdomains is not None and raw_backlinks_for_refdomains:
+                    return json_builder(
+                        [],
+                        raw_backlinks_for_refdomains,
+                        limit=limit,
+                        offset=offset,
+                    )
+                return empty_section()
+
+            if raw_backlinks_for_refdomains is not None:
+                return json_builder(
+                    detailed_data.json_data.get("items", []),
+                    raw_backlinks_for_refdomains,
+                    limit=limit,
+                    offset=offset,
+                )
+
+            return json_builder(
+                detailed_data.json_data.get("items", []),
+                limit=limit,
+                offset=offset,
+            )
+
+        keywords_result = await resolve_section(
+            DetailedDataType.KEYWORDS,
+            include_keywords,
+            keywords_limit,
+            keywords_offset,
+            shape_keyword_items,
+            build_keywords_display,
+        )
+        backlinks_result = await resolve_section(
+            DetailedDataType.BACKLINKS,
+            include_backlinks,
+            backlinks_limit,
+            backlinks_offset,
+            shape_backlink_items,
+            build_backlinks_display,
+        )
         if include_referring_domains:
-            res = await db.get_detailed_items(domain, DetailedDataType.REFERRING_DOMAINS, backlinks_limit, backlinks_offset)
-            results["referring_domains"] = res
+            referring_domains_result = {
+                "total_count": 0,
+                "items": [],
+            }
+            try:
+                derived_result = await db.get_derived_referring_domains(domain, backlinks_limit, backlinks_offset)
+                if derived_result["items"]:
+                    referring_domains_result = {
+                        "total_count": derived_result["total_count"],
+                        "items": shape_referring_domain_items(derived_result["items"]),
+                    }
+                else:
+                    backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
+                    backlinks_json = backlinks_data.json_data.get("items", []) if backlinks_data else None
+                    if backlinks_json:
+                        referring_domains_result = build_referring_domains_display(
+                            [],
+                            backlinks_json,
+                            limit=backlinks_limit,
+                            offset=backlinks_offset,
+                        )
+            except Exception as rel_error:
+                logger.warning(
+                    "Falling back to backlinks JSONB for referring domains after derived read failed",
+                    domain=domain,
+                    error=str(rel_error),
+                )
+                backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
+                backlinks_json = backlinks_data.json_data.get("items", []) if backlinks_data else None
+                if backlinks_json:
+                    referring_domains_result = build_referring_domains_display(
+                        [],
+                        backlinks_json,
+                        limit=backlinks_limit,
+                        offset=backlinks_offset,
+                    )
+        else:
+            referring_domains_result = empty_section()
 
         return {
             "success": True,
             "domain": domain,
             "detailed_data_available": report.detailed_data_available or {},
             "keywords": {
-                "total_count": results["keywords"]["total_count"] if include_keywords else 0,
-                "items": results["keywords"]["items"] if include_keywords else [],
+                "total_count": keywords_result["total_count"],
+                "items": keywords_result["items"],
             },
             "referring_domains": {
-                "total_count": results["referring_domains"]["total_count"] if include_referring_domains else 0,
-                "items": results["referring_domains"]["items"] if include_referring_domains else [],
+                "total_count": referring_domains_result["total_count"],
+                "items": referring_domains_result["items"],
             },
             "backlinks": {
-                "total_count": results["backlinks"]["total_count"] if include_backlinks else 0,
-                "items": results["backlinks"]["items"] if include_backlinks else [],
+                "total_count": backlinks_result["total_count"],
+                "items": backlinks_result["items"],
             },
         }
     except HTTPException:
