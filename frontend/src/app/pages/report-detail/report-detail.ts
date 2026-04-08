@@ -102,7 +102,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
 
                 // Fetch detailed backlinks if they are available
                 if (res.report.detailed_data_available?.backlinks) {
-                    this.fetchBacklinks(d);
+                    await this.fetchBacklinks(d);
                 }
 
                 // Start polling if it's in progress
