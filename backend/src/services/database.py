@@ -476,13 +476,43 @@ class DatabaseService:
             for item in items:
                 bl = item.get('backlink', {})
                 dom = item.get('domain', {})
+                source_url = (
+                    bl.get('source_url')
+                    or item.get('source_url')
+                    or item.get('url_from')
+                    or item.get('url')
+                )
+                href = (
+                    bl.get('href')
+                    or item.get('href')
+                    or item.get('url_to')
+                    or item.get('target')
+                )
+                anchor = (
+                    bl.get('anchor')
+                    or item.get('anchor')
+                    or item.get('anchor_text')
+                )
+                source_domain = (
+                    dom.get('domain_name')
+                    or item.get('domain_name_source')
+                    or item.get('domain_from')
+                    or item.get('domain')
+                )
+                dr = dom.get('dr')
+                if dr is None:
+                    dr = item.get('dr')
+                if dr is None:
+                    dr = item.get('domain_from_rank')
+                if dr is None:
+                    dr = item.get('domain_rank')
                 records.append({
                     'domain_name': domain_name,
-                    'source_url': bl.get('source_url'),
-                    'href': bl.get('href'),
-                    'anchor': bl.get('anchor'),
-                    'domain_name_source': dom.get('domain_name'),
-                    'dr': dom.get('dr')
+                    'source_url': source_url,
+                    'href': href,
+                    'anchor': anchor,
+                    'domain_name_source': source_domain,
+                    'dr': dr
                 })
 
             if records:
@@ -499,11 +529,26 @@ class DatabaseService:
             records = []
             for item in items:
                 dom = item.get('domain', {})
+                referring_domain = (
+                    dom.get('domain_name')
+                    or item.get('referring_domain')
+                    or item.get('domain_from')
+                    or item.get('domain')
+                )
+                if not referring_domain:
+                    continue
+                dr = dom.get('dr')
+                if dr is None:
+                    dr = item.get('dr')
+                if dr is None:
+                    dr = item.get('domain_from_rank')
+                if dr is None:
+                    dr = item.get('domain_rank')
                 records.append({
                     'domain_name': domain_name,
-                    'referring_domain': dom.get('domain_name'),
-                    'backlinks_count': item.get('backlinks_count', 0),
-                    'dr': dom.get('dr')
+                    'referring_domain': referring_domain,
+                    'backlinks_count': item.get('backlinks_count', item.get('links_count', 0)),
+                    'dr': dr
                 })
 
             if records:
