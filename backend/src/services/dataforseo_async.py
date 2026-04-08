@@ -136,6 +136,14 @@ class DataForSEOAsyncService:
                             detailed_data = DetailedAnalysisData( domain_name=domain, data_type=task_type, json_data=validated_results, task_id=task_id )
                             await db.save_detailed_data(detailed_data)
 
+                            # Bulk insert into relational tables
+                            if task_type == DetailedDataType.KEYWORDS:
+                                await db.bulk_insert_keywords(domain, validated_results.get('items', []))
+                            elif task_type == DetailedDataType.BACKLINKS:
+                                await db.bulk_insert_backlinks(domain, validated_results.get('items', []))
+                            elif task_type == DetailedDataType.REFERRING_DOMAINS:
+                                await db.bulk_insert_referring_domains(domain, validated_results.get('items', []))
+
                             # Update task status
                             await db.update_async_task_status(task_id, AsyncTaskStatus.COMPLETED)
 

@@ -128,75 +128,37 @@ async def get_report_details(
         include_keywords = "keywords" in requested_sections
         include_backlinks = "backlinks" in requested_sections
         include_referring_domains = "referring_domains" in requested_sections
-        display_payload = report.display_payload or {}
-        needs_backfill = False
 
-        cached_keywords = display_payload.get("keywords", {"total_count": 0, "items": []})
-        cached_backlinks = display_payload.get("backlinks", {"total_count": 0, "items": []})
-        cached_referring_domains = display_payload.get("referring_domains", {"total_count": 0, "items": []})
+        # Use relational tables for paginated detailed data
+        results = {}
 
-        needed_keywords = keywords_offset + keywords_limit
-        needed_backlinks = backlinks_offset + backlinks_limit
+        if include_keywords:
+            res = await db.get_detailed_items(domain, DetailedDataType.KEYWORDS, keywords_limit, keywords_offset)
+            results["keywords"] = res
 
-        if include_keywords and (
-            "keywords" not in display_payload or len(cached_keywords.get("items", [])) < needed_keywords
-        ):
-            needs_backfill = True
-        if include_backlinks and (
-            "backlinks" not in display_payload or len(cached_backlinks.get("items", [])) < needed_backlinks
-        ):
-            needs_backfill = True
-        if include_referring_domains and (
-            "referring_domains" not in display_payload or len(cached_referring_domains.get("items", [])) < needed_backlinks
-        ):
-            needs_backfill = True
+        if include_backlinks:
+            res = await db.get_detailed_items(domain, DetailedDataType.BACKLINKS, backlinks_limit, backlinks_offset)
+            results["backlinks"] = res
 
-        if needs_backfill:
-            keywords_data = await db.get_detailed_data(domain, DetailedDataType.KEYWORDS) if include_keywords else None
-            backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS) if (include_backlinks or include_referring_domains) else None
-            referring_domains_data = await db.get_detailed_data(domain, DetailedDataType.REFERRING_DOMAINS) if include_referring_domains else None
-
-            fresh_payload = build_display_payload(
-                keywords_data=keywords_data.json_data if keywords_data else None,
-                backlinks_data=backlinks_data.json_data if backlinks_data else None,
-                referring_domains_data=referring_domains_data.json_data if referring_domains_data else None,
-                keywords_limit=max(needed_keywords, len(cached_keywords.get("items", [])), 100),
-                backlinks_limit=max(needed_backlinks, len(cached_backlinks.get("items", [])), len(cached_referring_domains.get("items", [])), 100),
-            )
-
-            display_payload = {
-                **display_payload,
-                **{key: value for key, value in fresh_payload.items() if value.get("items") or value.get("total_count", 0) > 0},
-            }
-            report.display_payload = display_payload
-            try:
-                await db.save_report(report)
-            except Exception as cache_error:
-                logger.warning(
-                    "Failed to persist display payload cache; returning fresh payload without cache",
-                    domain=domain,
-                    error=str(cache_error),
-                )
-
-        keywords_section = display_payload.get("keywords", {"total_count": 0, "items": []})
-        backlinks_section = display_payload.get("backlinks", {"total_count": 0, "items": []})
-        referring_domains_section = display_payload.get("referring_domains", {"total_count": 0, "items": []})
+        if include_referring_domains:
+            res = await db.get_detailed_items(domain, DetailedDataType.REFERRING_DOMAINS, backlinks_limit, backlinks_offset)
+            results["referring_domains"] = res
 
         return {
             "success": True,
             "domain": domain,
             "detailed_data_available": report.detailed_data_available or {},
             "keywords": {
-                "total_count": keywords_section.get("total_count", 0) if include_keywords else 0,
-                "items": keywords_section.get("items", [])[keywords_offset:keywords_offset + keywords_limit] if include_keywords else [],
+                "total_count": results["keywords"]["total_count"] if include_keywords else 0,
+                "items": results["keywords"]["items"] if include_keywords else [],
             },
             "referring_domains": {
-                "total_count": referring_domains_section.get("total_count", 0) if include_referring_domains else 0,
-                "items": referring_domains_section.get("items", [])[backlinks_offset:backlinks_offset + backlinks_limit] if include_referring_domains else [],
+                "total_count": results["referring_domains"]["total_count"] if include_referring_domains else 0,
+                "items": results["referring_domains"]["items"] if include_referring_domains else [],
             },
             "backlinks": {
-                "total_count": backlinks_section.get("total_count", 0) if include_backlinks else 0,
-                "items": backlinks_section.get("items", [])[backlinks_offset:backlinks_offset + backlinks_limit] if include_backlinks else [],
+                "total_count": results["backlinks"]["total_count"] if include_backlinks else 0,
+                "items": results["backlinks"]["items"] if include_backlinks else [],
             },
         }
     except HTTPException:

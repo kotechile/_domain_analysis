@@ -388,16 +388,118 @@ class DatabaseService:
             expires_at = None
             if detailed_data.expires_at:
                 expires_at = detailed_data.expires_at.isoformat()
-            
+
             result = await client.table('detailed_analysis_data').upsert({ 'domain_name': detailed_data.domain_name, 'data_type': detailed_data.data_type.value, 'json_data': detailed_data.json_data, 'task_id': detailed_data.task_id, 'data_source': detailed_data.data_source, 'expires_at': expires_at }, on_conflict= 'domain_name,data_type').execute()
-            
+
             data_id = result.data[0]['id'] if result.data else None
             logger.info("Detailed data saved successfully", domain=detailed_data.domain_name, data_type=detailed_data.data_type.value, data_id=data_id)
             return data_id
-            
+
         except Exception as e:
             logger.error("Failed to save detailed data", domain=detailed_data.domain_name, data_type=detailed_data.data_type.value, error=str(e))
             raise
+
+    async def bulk_insert_keywords(self, domain_name: str, items: List[Dict[str, Any]]):
+        """Bulk insert keywords into domain_keywords table"""
+        client = await self._get_client()
+        try:
+            records = []
+            for item in items:
+                kw_data = item.get('keyword_data', {})
+                serp_item = item.get('ranked_serp_element', {}).get('serp_item', {})
+                records.append({
+                    'domain_name': domain_name,
+                    'keyword': kw_data.get('keyword'),
+                    'search_volume': kw_data.get('search_volume'),
+                    'position': serp_item.get('rank_absolute') or item.get('rank'),
+                    'url': serp_item.get('url') or item.get('url')
+                })
+
+            if records:
+                await client.table('domain_keywords').insert(records).execute()
+                logger.info("Bulk inserted keywords", domain=domain_name, count=len(records))
+        except Exception as e:
+            logger.error("Failed to bulk insert keywords", domain=domain_name, error=str(e))
+            raise
+
+    async def bulk_insert_backlinks(self, domain_name: str, items: List[Dict[str, Any]]):
+        """Bulk insert backlinks into domain_backlinks table"""
+        client = await self._get_client()
+        try:
+            records = []
+            for item in items:
+                bl = item.get('backlink', {})
+                dom = item.get('domain', {})
+                records.append({
+                    'domain_name': domain_name,
+                    'source_url': bl.get('source_url'),
+                    'href': bl.get('href'),
+                    'anchor': bl.get('anchor'),
+                    'domain_name_source': dom.get('domain_name'),
+                    'dr': dom.get('dr')
+                })
+
+            if records:
+                await client.table('domain_backlinks').insert(records).execute()
+                logger.info("Bulk inserted backlinks", domain=domain_name, count=len(records))
+        except Exception as e:
+            logger.error("Failed to bulk insert backlinks", domain=domain_name, error=str(e))
+            raise
+
+    async def bulk_insert_referring_domains(self, domain_name: str, items: List[Dict[str, Any]]):
+        """Bulk insert referring domains into domain_referring_domains table"""
+        client = await self._get_client()
+        try:
+            records = []
+            for item in items:
+                dom = item.get('domain', {})
+                records.append({
+                    'domain_name': domain_name,
+                    'referring_domain': dom.get('domain_name'),
+                    'backlinks_count': item.get('backlinks_count', 0),
+                    'dr': dom.get('dr')
+                })
+
+            if records:
+                await client.table('domain_referring_domains').upsert(records, on_conflict='domain_name,referring_domain').execute()
+                logger.info("Bulk inserted referring domains", domain=domain_name, count=len(records))
+        except Exception as e:
+            logger.error("Failed to bulk insert referring domains", domain=domain_name, error=str(e))
+            raise
+
+    async def get_detailed_items(self, domain_name: str, data_type: DetailedDataType, limit: int, offset: int) -> Dict[str, Any]:
+        """Fetch paginated items from relational tables"""
+        client = await self._get_client()
+        try:
+            table_map = {
+                DetailedDataType.KEYWORDS: 'domain_keywords',
+                DetailedDataType.BACKLINKS: 'domain_backlinks',
+                DetailedDataType.REFERRING_DOMAINS: 'domain_referring_domains'
+            }
+            table_name = table_map.get(data_type)
+            if not table_name:
+                raise ValueError(f"Unsupported data type: {data_type}")
+
+            # Get total count
+            count_res = await client.table(table_name).select('id', count='exact').eq('domain_name', domain_name).execute()
+            total_count = count_res.count if count_res.count is not None else 0
+
+            # Get paginated items
+            query = client.table(table_name).select('*').eq('domain_name', domain_name).range(offset, offset + limit - 1)
+
+            if data_type == DetailedDataType.KEYWORDS:
+                query = query.order('position', ascending=True)
+
+            result = await query.execute()
+
+            return {
+                'items': result.data,
+                'total_count': total_count
+            }
+        except Exception as e:
+            logger.error("Failed to get detailed items", domain=domain_name, data_type=data_type.value, error=str(e))
+            raise
+
     
     async def get_detailed_data(self, domain_name: str, data_type: DetailedDataType) -> Optional[DetailedAnalysisData]:
         """Get detailed analysis data by domain and type"""
