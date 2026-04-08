@@ -116,7 +116,7 @@ async def list_reports(
     """
     try:
         db = get_database()
-        user_id = current_user.get('id')
+        user_id = getattr(current_user, 'id', None)
         if not user_id:
             # If no user ID (unauthorized), return empty list or raise
             return []
