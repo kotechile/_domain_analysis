@@ -2050,12 +2050,30 @@ class DatabaseService:
                     query = query.eq('preferred', filters['preferred'])
                 if filters.get('auction_site'):
                     query = query.eq('auction_site', filters['auction_site'])
+                if filters.get('offering_type'):
+                    query = query.eq('offer_type', filters['offering_type'])
+                if filters.get('has_statistics') is not None:
+                    query = query.eq('has_statistics', filters['has_statistics'])
+                if filters.get('scored') is not None:
+                    if filters['scored']:
+                        query = query.gt('score', 0)
+                    else:
+                        query = query.eq('score', 0)
                 if filters.get('min_score') is not None:
                     query = query.gte('score', filters['min_score'])
                 if filters.get('max_score') is not None:
                     query = query.lte('score', filters['max_score'])
                 if filters.get('auction_sites') and isinstance(filters['auction_sites'], list):
                     query = query.in_('auction_site', filters['auction_sites'])
+                if filters.get('tld'):
+                    tld = filters['tld']
+                    if not tld.startswith('.'):
+                        tld = '.' + tld
+                    query = query.ilike('domain', f'%{tld}')
+                if filters.get('tlds') and isinstance(filters['tlds'], list):
+                    normalized_tlds = [tld if tld.startswith('.') else f'.{tld}' for tld in filters['tlds'] if tld]
+                    if normalized_tlds:
+                        query = query.ilike('domain', f'%{normalized_tlds[0]}')
                 if filters.get('expiration_from_date'):
                     query = query.gte('expiration_date', filters['expiration_from_date'])
                 if filters.get('expiration_to_date'):

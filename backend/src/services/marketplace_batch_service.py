@@ -100,7 +100,7 @@ class MarketplaceBatchService:
                 # Normalize prioritized domains (remove duplicates, strip whitespace)
                 prioritized_set = set(d.strip().lower() for d in prioritized_domains if d and d.strip())
 
-                # Check which prioritized domains are in our database
+                # Check which prioritized domains are already in the filtered/sorted candidate list
                 prioritized_in_db = [d for d in domain_names if d.lower() in prioritized_set]
                 prioritized_missing = [d for d in prioritized_set if d not in [x.lower() for x in domain_names]]
 
@@ -112,6 +112,8 @@ class MarketplaceBatchService:
                     # Add them to the domain_names list
                     prioritized_in_db.extend([d['domain'] for d in missing_domains])
 
+                prioritized_available = {d.lower() for d in prioritized_in_db}
+
                 # Create final list: prioritized first (in their original order), then remaining domains
                 final_domains = []
                 seen = set()
@@ -119,7 +121,7 @@ class MarketplaceBatchService:
                 # Add prioritized domains first (maintaining original order)
                 for d in prioritized_domains:
                     d_clean = d.strip()
-                    if d_clean and d_clean.lower() not in seen and d_clean.lower() in prioritized_set:
+                    if d_clean and d_clean.lower() not in seen and d_clean.lower() in prioritized_available:
                         final_domains.append(d_clean)
                         seen.add(d_clean.lower())
 
@@ -217,10 +219,6 @@ class MarketplaceBatchService:
                     # Trigger direct backlinks stats for BL/RD.
                     logger.info(f"[Background] Triggering Backlinks for batch {batch_num}", domain_count=len(batch))
                     await self.n8n_service.trigger_bulk_backlinks_workflow(batch)
-
-                    # Trigger a single traffic batch for up to 1000 domains.
-                    logger.info(f"[Background] Triggering Traffic for batch {batch_num}", domain_count=len(batch))
-                    await self.n8n_service.trigger_bulk_traffic_batch_workflow(batch)
 
                     # Trigger spam score separately since page summary does not populate it.
                     logger.info(f"[Background] Triggering Spam Score for batch {batch_num}", domain_count=len(batch))
