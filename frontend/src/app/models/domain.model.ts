@@ -70,6 +70,10 @@ export interface DomainAnalysisReport {
         full_keywords_list_api: string;
         full_backlinks_list_api: string;
     };
+    detailed_data_available?: {
+        keywords?: boolean;
+        backlinks?: boolean;
+    };
     processing_time_seconds?: number;
     error_message?: string;
     backlinks_page_summary?: BulkPageSummaryResult;

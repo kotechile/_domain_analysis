@@ -10,7 +10,7 @@ import { TrafficChartComponent } from '../../components/traffic-chart/traffic-ch
 @Component({
     selector: 'app-report-detail',
     standalone: true,
-    imports: [CommonModule, RouterLink, LucideAngularModule, TitleCasePipe, DatePipe, DecimalPipe, TrafficChartComponent],
+    imports: [CommonModule, RouterLink, LucideAngularModule, DatePipe, DecimalPipe, TrafficChartComponent],
     templateUrl: './report-detail.html',
     styles: [`
     .report-card {
@@ -126,7 +126,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
             // so we'll need to add it or use a generic request.
             // For now, I'll assume we add it to ApiService.
             const res = await firstValueFrom(this.api.getBacklinks(domain));
-            if (res.success && res.backlinks) {
+            if (res.backlinks) {
                 this.backlinks.set(res.backlinks);
             }
         } catch (err) {

@@ -4,12 +4,12 @@ import { ThemeService, ThemeMode } from '../../services/theme';
 import { SupabaseService } from '../../services/supabase';
 import { CreditService } from '../../services/credit';
 import { LucideAngularModule, Moon, Sun, Monitor, Palette, Search, Bell, User, LogOut } from 'lucide-angular';
-import { RouterLink, RouterLinkActive, Router } from '@angular/router';
+import { RouterLink, Router } from '@angular/router';
 
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule, LucideAngularModule, RouterLink, RouterLinkActive],
+  imports: [CommonModule, LucideAngularModule, RouterLink],
   templateUrl: './header.html',
   styles: [`
     :host {

@@ -13,7 +13,7 @@ import { Auction } from '../../models/domain.model';
 @Component({
   selector: 'app-marketplace',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule, LucideAngularModule, TitleCasePipe, DatePipe, DecimalPipe, MatSnackBarModule],
+  imports: [CommonModule, RouterLink, FormsModule, LucideAngularModule, DatePipe, MatSnackBarModule],
   templateUrl: './marketplace.html',
   styles: [`
     .table-container {

@@ -1,5 +1,5 @@
 import { Component, inject, signal, OnInit, OnDestroy } from '@angular/core';
-import { CommonModule, DatePipe, DecimalPipe, TitleCasePipe } from '@angular/common';
+import { CommonModule, DecimalPipe, TitleCasePipe } from '@angular/common';
 import { ApiService } from '../../services/api';
 import { LucideAngularModule, Database, Upload, Activity, CheckCircle, Clock, XCircle, AlertTriangle, RefreshCcw, LayoutDashboard, ChevronRight, Sparkles } from 'lucide-angular';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -10,7 +10,7 @@ import { AuctionUploadProgress } from '../../models/domain.model';
 @Component({
   selector: 'app-import',
   standalone: true,
-  imports: [CommonModule, LucideAngularModule, MatSnackBarModule, DatePipe, DecimalPipe, TitleCasePipe],
+  imports: [CommonModule, LucideAngularModule, MatSnackBarModule, DecimalPipe, TitleCasePipe],
   templateUrl: './import.html',
   styles: [``]
 })
