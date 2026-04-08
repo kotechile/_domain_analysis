@@ -11,6 +11,8 @@ from services.cache import get_cache
 
 logger = structlog.get_logger()
 
+_local_jobs: Dict[str, Dict[str, Any]] = {}
+
 
 class ProgressTracker:
     """Track progress of long-running background tasks"""
@@ -34,6 +36,10 @@ class ProgressTracker:
 
         job_data = { "job_id": job_id, "user_id": user_id, "job_type": job_type, "status": "running", "total_items": total_items, "processed_items": 0, "failed_items": 0, "current_batch": 0, "total_batches": 0, "started_at": datetime.utcnow().isoformat(), "completed_at": None, "message": "Starting...", "metadata": metadata or {} }
 
+        # Always keep an in-process copy so polling still works if Redis is unavailable
+        # or cache startup lags behind the first request after deployment.
+        _local_jobs[job_id] = dict(job_data)
+
         # Store in Redis with 1 hour TTL
         if cache:
             await cache.set( f"job:{job_id}", job_data, ttl=3600 ) # 1 hour
@@ -46,10 +52,11 @@ class ProgressTracker:
     async def update_progress( job_id: str, processed_items: int, failed_items: int = 0, current_batch: int = 0, total_batches: int = 0, message: str = "" ):
         """Update job progress"""
         cache = get_cache()
-        if not cache:
-            return
-
-        job_data = await cache.get(f"job:{job_id}")
+        job_data = _local_jobs.get(job_id)
+        if cache:
+            cached_job = await cache.get(f"job:{job_id}")
+            if cached_job:
+                job_data = cached_job
         if not job_data:
             return
 
@@ -60,16 +67,19 @@ class ProgressTracker:
         if message:
             job_data["message"] = message
 
-        await cache.set(f"job:{job_id}", job_data, ttl=3600)
+        _local_jobs[job_id] = dict(job_data)
+        if cache:
+            await cache.set(f"job:{job_id}", job_data, ttl=3600)
 
     @staticmethod
     async def complete_job( job_id: str, success: bool = True, message: str = "" ):
         """Mark job as completed"""
         cache = get_cache()
-        if not cache:
-            return
-
-        job_data = await cache.get(f"job:{job_id}")
+        job_data = _local_jobs.get(job_id)
+        if cache:
+            cached_job = await cache.get(f"job:{job_id}")
+            if cached_job:
+                job_data = cached_job
         if not job_data:
             return
 
@@ -78,7 +88,9 @@ class ProgressTracker:
         if message:
             job_data["message"] = message
 
-        await cache.set(f"job:{job_id}", job_data, ttl=3600)
+        _local_jobs[job_id] = dict(job_data)
+        if cache:
+            await cache.set(f"job:{job_id}", job_data, ttl=3600)
 
         logger.info(f"Completed progress job", job_id=job_id, success=success, message=message)
 
@@ -86,13 +98,13 @@ class ProgressTracker:
     async def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
         """Get current job status"""
         cache = get_cache()
-        if not cache:
-            # Return a default running status if cache is unavailable
-            # This prevents frontend errors when Redis is down
-            return { "job_id": job_id, "status": "running", "total_items": 1000, "processed_items": 0, "failed_items": 0, "progress_percent": 0, "message": "Processing... (cache unavailable)" }
 
         try:
-            job_data = await cache.get(f"job:{job_id}")
+            job_data = None
+            if cache:
+                job_data = await cache.get(f"job:{job_id}")
+            if not job_data:
+                job_data = _local_jobs.get(job_id)
             if not job_data:
                 return None
 
