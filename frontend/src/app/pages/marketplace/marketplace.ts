@@ -174,6 +174,37 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     });
   }
 
+  private parseDateInput(value: string): Date | null {
+    if (!value) return null;
+    const parsed = new Date(`${value}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private normalizeExpirationRange(changedField: 'from' | 'to', rawValue: string) {
+    const nextValue = rawValue || '';
+
+    if (changedField === 'from') {
+      this.expirationFromDate.set(nextValue);
+    } else {
+      this.expirationToDate.set(nextValue);
+    }
+
+    const fromValue = changedField === 'from' ? nextValue : this.expirationFromDate();
+    const toValue = changedField === 'to' ? nextValue : this.expirationToDate();
+    const fromDate = this.parseDateInput(fromValue);
+    const toDate = this.parseDateInput(toValue);
+
+    if (fromDate && toDate && fromDate.getTime() > toDate.getTime()) {
+      if (changedField === 'from') {
+        this.expirationToDate.set(fromValue);
+      } else {
+        this.expirationFromDate.set(toValue);
+      }
+    }
+
+    this.offset.set(0);
+  }
+
   ngOnDestroy() {
     // Clean up progress polling subscriptions
     this.progressSubscriptions.forEach(sub => sub.unsubscribe());
@@ -343,6 +374,14 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (qp['offering_type']) this.offeringType.set(qp['offering_type']);
     if (qp['exp_from']) this.expirationFromDate.set(qp['exp_from']);
     if (qp['exp_to']) this.expirationToDate.set(qp['exp_to']);
+  }
+
+  onExpirationFromDateChange(value: string) {
+    this.normalizeExpirationRange('from', value);
+  }
+
+  onExpirationToDateChange(value: string) {
+    this.normalizeExpirationRange('to', value);
   }
 
   isStale(dateStr: string | undefined): boolean {

@@ -1898,6 +1898,20 @@ async def get_auctions_report( search: Optional[str] = Query(None, description="
     
     Returns auctions with page_statistics when available. Records without statistics will have NULL page_statistics field. """
     try:
+        parsed_exp_from: Optional[datetime] = None
+        parsed_exp_to: Optional[datetime] = None
+
+        def _parse_expiration_filter(value: str, end_of_day: bool = False) -> datetime:
+            if 'T' in value:
+                dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            else:
+                dt = datetime.strptime(value, "%Y-%m-%d")
+                if end_of_day:
+                    dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+
         # Build filters
         filters = {}
         if search:
@@ -1935,22 +1949,29 @@ async def get_auctions_report( search: Optional[str] = Query(None, description="
         
         if expiration_from_date:
             try:
-                # Try simple format first
-                # ) Check if it's already ISO format (contains T
-                if 'T' in expiration_from_date:
-                    # Validate it's parseable
-                    datetime.fromisoformat(expiration_from_date.replace('Z', '+00:00'))
-                    filters['expiration_from_date'] = expiration_from_date
-                else:
-                    # Assume YYYY-MM-DD, convert to ISO start of day in UTC
-                    dt = datetime.strptime(expiration_from_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-                    filters['expiration_from_date'] = dt.isoformat().replace('+00:00', 'Z')
+                parsed_exp_from = _parse_expiration_filter(expiration_from_date, end_of_day=False)
             except ValueError:
                 logger.warning("Invalid expiration_from_date format, defaulting to NOW", date=expiration_from_date)
-                filters['expiration_from_date'] = datetime.now(timezone.utc).isoformat()
+                parsed_exp_from = datetime.now(timezone.utc)
         
         if expiration_to_date:
-            filters['expiration_to_date'] = expiration_to_date
+            try:
+                parsed_exp_to = _parse_expiration_filter(expiration_to_date, end_of_day=True)
+            except ValueError:
+                logger.warning("Invalid expiration_to_date format, ignoring filter", date=expiration_to_date)
+
+        if parsed_exp_from and parsed_exp_to and parsed_exp_from > parsed_exp_to:
+            logger.info(
+                "Swapping invalid expiration filter range",
+                expiration_from_date=parsed_exp_from.isoformat(),
+                expiration_to_date=parsed_exp_to.isoformat(),
+            )
+            parsed_exp_from, parsed_exp_to = parsed_exp_to, parsed_exp_from
+
+        if parsed_exp_from:
+            filters['expiration_from_date'] = parsed_exp_from.isoformat().replace('+00:00', 'Z')
+        if parsed_exp_to:
+            filters['expiration_to_date'] = parsed_exp_to.isoformat().replace('+00:00', 'Z')
         
         logger.info("Fetching auctions report", filters=filters, limit=limit, offset=offset)
 
