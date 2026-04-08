@@ -210,9 +210,13 @@ class MarketplaceBatchService:
                 batch_num = i // batch_size + 1
                 batch = domain_names[i:i + batch_size]
                 try:
-                    # Trigger backlinks summary data for BL/RD/rank.
-                    logger.info(f"[Background] Triggering Summary for batch {batch_num}", domain_count=len(batch))
-                    await self.n8n_service.trigger_bulk_page_summary_workflow(batch)
+                    # Trigger direct rank data for DR/rank-related columns.
+                    logger.info(f"[Background] Triggering Rank for batch {batch_num}", domain_count=len(batch))
+                    await self.n8n_service.trigger_bulk_rank_workflow(batch)
+
+                    # Trigger direct backlinks stats for BL/RD.
+                    logger.info(f"[Background] Triggering Backlinks for batch {batch_num}", domain_count=len(batch))
+                    await self.n8n_service.trigger_bulk_backlinks_workflow(batch)
 
                     # Trigger a single traffic batch for up to 1000 domains.
                     logger.info(f"[Background] Triggering Traffic for batch {batch_num}", domain_count=len(batch))
