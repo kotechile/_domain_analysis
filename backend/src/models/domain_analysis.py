@@ -268,6 +268,7 @@ class DomainAnalysisReport(BaseModel):
     analysis_phase: AnalysisPhase = AnalysisPhase.ESSENTIAL
     analysis_mode: AnalysisMode = AnalysisMode.LEGACY
     progress_data: Optional[ProgressInfo] = None
+    display_payload: Optional[Dict[str, Any]] = None
     # ) Backlinks page summary (from DataForSEO backlinks summary endpoint
     # Using forward reference since BulkPageSummaryResult is defined later
     backlinks_page_summary: Optional['BulkPageSummaryResult'] = None
@@ -473,4 +474,3 @@ class ScoredDomain(BaseModel):
 
 
 # Removed duplicate HistoricalMetricPoint, HistoricalRankOverview, TrafficAnalyticsHistory, and HistoricalData definitions
-

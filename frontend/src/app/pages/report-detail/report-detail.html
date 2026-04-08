@@ -325,6 +325,21 @@
                         </tbody>
                     </table>
                 </div>
+
+                @if (canLoadMore('keywords')) {
+                <div class="flex justify-center pt-2">
+                    <button
+                        (click)="loadMore('keywords')"
+                        [disabled]="detailLoading()['keywords']"
+                        class="h-11 px-6 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all active:scale-95 disabled:opacity-40"
+                        style="border-color: var(--border-color); color: var(--text-color); background: var(--card-bg)">
+                        <span>{{ detailLoading()['keywords'] ? 'Loading...' : 'Load 25 More' }}</span>
+                        @if (!detailLoading()['keywords']) {
+                        <span class="opacity-40">({{ remainingCount('keywords') }} left)</span>
+                        }
+                    </button>
+                </div>
+                }
                 } @placeholder {
                 <div class="p-12 text-center rounded-2xl border border-opacity-5"
                     style="border-color: var(--border-color)">
@@ -597,6 +612,21 @@
                         </tbody>
                     </table>
                 </div>
+
+                @if (canLoadMore('referring-domains')) {
+                <div class="flex justify-center pt-2">
+                    <button
+                        (click)="loadMore('referring-domains')"
+                        [disabled]="detailLoading()['referring-domains']"
+                        class="h-11 px-6 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all active:scale-95 disabled:opacity-40"
+                        style="border-color: var(--border-color); color: var(--text-color); background: var(--card-bg)">
+                        <span>{{ detailLoading()['referring-domains'] ? 'Loading...' : 'Load 25 More' }}</span>
+                        @if (!detailLoading()['referring-domains']) {
+                        <span class="opacity-40">({{ remainingCount('referring-domains') }} left)</span>
+                        }
+                    </button>
+                </div>
+                }
                 } @placeholder {
                 <div class="p-12 text-center rounded-2xl border border-opacity-5"
                     style="border-color: var(--border-color)">
@@ -681,6 +711,21 @@
                         </tbody>
                     </table>
                 </div>
+
+                @if (canLoadMore('backlinks')) {
+                <div class="flex justify-center pt-2">
+                    <button
+                        (click)="loadMore('backlinks')"
+                        [disabled]="detailLoading()['backlinks']"
+                        class="h-11 px-6 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all active:scale-95 disabled:opacity-40"
+                        style="border-color: var(--border-color); color: var(--text-color); background: var(--card-bg)">
+                        <span>{{ detailLoading()['backlinks'] ? 'Loading...' : 'Load 25 More' }}</span>
+                        @if (!detailLoading()['backlinks']) {
+                        <span class="opacity-40">({{ remainingCount('backlinks') }} left)</span>
+                        }
+                    </button>
+                </div>
+                }
                 } @placeholder {
                 <div class="p-12 text-center rounded-2xl border border-opacity-5"
                     style="border-color: var(--border-color)">

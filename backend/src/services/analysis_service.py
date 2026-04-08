@@ -14,6 +14,7 @@ from services.external_apis import DataForSEOService, WaybackMachineService, LLM
 from services.dataforseo_async import DataForSEOAsyncService
 from services.n8n_service import N8NService
 from services.logging_config import AsyncOperationLogger, ProgressTracker
+from services.report_display_service import build_display_payload
 from utils.config import get_settings
 from utils.date_utils import parse_iso_datetime
 
@@ -335,7 +336,10 @@ class AnalysisService:
         Collect detailed data (backlinks, keywords, referring domains)
         """
         detailed_data_available = { "backlinks": False, "keywords": False, "referring_domains": False }
-        detailed_status_messages = []          
+        detailed_status_messages = []
+        backlinks_data = None
+        keywords_data = None
+        referring_domains_data = None
         
         try:
             if analysis_mode in [AnalysisMode.ASYNC, AnalysisMode.DUAL]:
@@ -590,6 +594,11 @@ class AnalysisService:
             progress_tracker.start_sub_operation("detailed_data", "data_saving")
             report.detailed_data_available = detailed_data_available
             report.analysis_phase = AnalysisPhase.AI_ANALYSIS
+            report.display_payload = build_display_payload(
+                keywords_data=keywords_data,
+                backlinks_data=backlinks_data,
+                referring_domains_data=referring_domains_data,
+            )
             
             # Save report with detailed data availability
             await self.db.save_report(report)

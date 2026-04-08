@@ -129,6 +129,7 @@ class DatabaseService:
                 llm_analysis JSONB, 
                 historical_data JSONB, 
                 raw_data_links JSONB, 
+                display_payload JSONB,
                 processing_time_seconds FLOAT, 
                 error_message TEXT, 
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), 
@@ -180,6 +181,7 @@ class DatabaseService:
             
             # Reports table user_id
             "ALTER TABLE reports ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);",
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS display_payload JSONB;",
             "ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_domain_name_key;",
             "ALTER TABLE reports ADD CONSTRAINT reports_domain_name_user_id_key UNIQUE (domain_name, user_id);",
             
@@ -247,6 +249,7 @@ class DatabaseService:
                 'llm_analysis': report_data.get('llm_analysis'), 
                 'historical_data': report.historical_data.model_dump(mode='json') if report.historical_data else None, 
                 'raw_data_links': report_data.get('raw_data_links'), 
+                'display_payload': report_data.get('display_payload'),
                 'detailed_data_available': report_data.get('detailed_data_available'), 
                 'analysis_phase': report_data.get('analysis_phase'), 
                 'progress_data': report.progress_data.dict() if report.progress_data else None, 
@@ -279,7 +282,7 @@ class DatabaseService:
             report_data = result.data[0]
             
             # Convert back to DomainAnalysisReport object
-            report = DomainAnalysisReport( domain_name=report_data['domain_name'], user_id=report_data.get('user_id'), analysis_timestamp=parse_iso_datetime(report_data['analysis_timestamp']), status=report_data['status'], data_for_seo_metrics=report_data.get('data_for_seo_metrics'), wayback_machine_summary=report_data.get('wayback_machine_summary'), llm_analysis=report_data.get('llm_analysis'), historical_data=report_data.get('historical_data'), raw_data_links=report_data.get('raw_data_links'), detailed_data_available=report_data.get('detailed_data_available'), analysis_phase=report_data.get('analysis_phase'), progress_data=report_data.get('progress_data'), processing_time_seconds=report_data.get('processing_time_seconds'), error_message=report_data.get('error_message') )
+            report = DomainAnalysisReport( domain_name=report_data['domain_name'], user_id=report_data.get('user_id'), analysis_timestamp=parse_iso_datetime(report_data['analysis_timestamp']), status=report_data['status'], data_for_seo_metrics=report_data.get('data_for_seo_metrics'), wayback_machine_summary=report_data.get('wayback_machine_summary'), llm_analysis=report_data.get('llm_analysis'), historical_data=report_data.get('historical_data'), raw_data_links=report_data.get('raw_data_links'), display_payload=report_data.get('display_payload'), detailed_data_available=report_data.get('detailed_data_available'), analysis_phase=report_data.get('analysis_phase'), progress_data=report_data.get('progress_data'), processing_time_seconds=report_data.get('processing_time_seconds'), error_message=report_data.get('error_message') )
             
             logger.info("Report retrieved successfully", domain=domain_name)
             return report

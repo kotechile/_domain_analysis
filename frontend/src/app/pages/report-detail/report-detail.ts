@@ -43,6 +43,8 @@ import { TrafficChartComponent } from '../../components/traffic-chart/traffic-ch
   `]
 })
 export class ReportDetailComponent implements OnInit, OnDestroy {
+    private readonly initialDetailLimit = 25;
+    private readonly detailPageSize = 25;
     private route = inject(ActivatedRoute);
     private api = inject(ApiService);
 
@@ -78,6 +80,11 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     backlinksTotal = signal<number>(0);
     referringDomainsTotal = signal<number>(0);
     keywordsTotal = signal<number>(0);
+    detailLoading = signal<Record<string, boolean>>({
+        'keywords': false,
+        'referring-domains': false,
+        'backlinks': false,
+    });
     private loadedDetailTabs = new Set<string>();
 
     private pollingSub?: Subscription;
@@ -129,29 +136,45 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
         }
     }
 
-    async fetchReportDetails(domain: string, tab: 'keywords' | 'referring-domains' | 'backlinks') {
+    async fetchReportDetails(domain: string, tab: 'keywords' | 'referring-domains' | 'backlinks', append: boolean = false) {
+        const currentCount = tab === 'keywords'
+            ? this.keywords().length
+            : tab === 'referring-domains'
+                ? this.referringDomains().length
+                : this.backlinks().length;
+
+        this.detailLoading.update(state => ({ ...state, [tab]: true }));
+
         try {
             const sectionMap: Record<'keywords' | 'referring-domains' | 'backlinks', string[]> = {
                 'keywords': ['keywords'],
                 'referring-domains': ['referring_domains'],
                 'backlinks': ['backlinks'],
             };
-            const res = await firstValueFrom(this.api.getReportDetails(domain, { sections: sectionMap[tab] }));
+            const res = await firstValueFrom(this.api.getReportDetails(domain, {
+                sections: sectionMap[tab],
+                keywordsLimit: tab === 'keywords' ? this.detailPageSize : this.initialDetailLimit,
+                backlinksLimit: tab === 'keywords' ? this.initialDetailLimit : this.detailPageSize,
+                keywordsOffset: tab === 'keywords' && append ? currentCount : 0,
+                backlinksOffset: tab !== 'keywords' && append ? currentCount : 0,
+            }));
 
             if (tab === 'keywords') {
-                this.keywords.set(res.keywords?.items || []);
+                this.keywords.set(append ? [...this.keywords(), ...(res.keywords?.items || [])] : (res.keywords?.items || []));
                 this.keywordsTotal.set(res.keywords?.total_count || 0);
             } else if (tab === 'referring-domains') {
-                this.referringDomains.set(res.referring_domains?.items || []);
+                this.referringDomains.set(append ? [...this.referringDomains(), ...(res.referring_domains?.items || [])] : (res.referring_domains?.items || []));
                 this.referringDomainsTotal.set(res.referring_domains?.total_count || 0);
             } else if (tab === 'backlinks') {
-                this.backlinks.set(res.backlinks?.items || []);
+                this.backlinks.set(append ? [...this.backlinks(), ...(res.backlinks?.items || [])] : (res.backlinks?.items || []));
                 this.backlinksTotal.set(res.backlinks?.total_count || 0);
             }
 
             this.loadedDetailTabs.add(tab);
         } catch (err) {
             console.error('Error fetching report details:', err);
+        } finally {
+            this.detailLoading.update(state => ({ ...state, [tab]: false }));
         }
     }
 
@@ -235,6 +258,24 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
         if ((tab === 'keywords' || tab === 'referring-domains' || tab === 'backlinks') && !this.loadedDetailTabs.has(tab)) {
             this.fetchReportDetails(d, tab);
         }
+    }
+
+    async loadMore(tab: 'keywords' | 'referring-domains' | 'backlinks') {
+        const d = this.domain();
+        if (!d || !this.canLoadMore(tab) || this.detailLoading()[tab]) return;
+        await this.fetchReportDetails(d, tab, true);
+    }
+
+    canLoadMore(tab: 'keywords' | 'referring-domains' | 'backlinks'): boolean {
+        if (tab === 'keywords') return this.keywords().length < this.keywordsTotal();
+        if (tab === 'referring-domains') return this.referringDomains().length < this.referringDomainsTotal();
+        return this.backlinks().length < this.backlinksTotal();
+    }
+
+    remainingCount(tab: 'keywords' | 'referring-domains' | 'backlinks'): number {
+        if (tab === 'keywords') return Math.max(this.keywordsTotal() - this.keywords().length, 0);
+        if (tab === 'referring-domains') return Math.max(this.referringDomainsTotal() - this.referringDomains().length, 0);
+        return Math.max(this.backlinksTotal() - this.backlinks().length, 0);
     }
 
     getBuyColor(rec: string | undefined): string {

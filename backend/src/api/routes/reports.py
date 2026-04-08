@@ -14,6 +14,7 @@ from services.database import get_database, DataSource
 from services.external_apis import DataForSEOService
 from services.pdf_service import PDFService
 from services.analysis_service import AnalysisService
+from services.report_display_service import build_display_payload
 from utils.date_utils import parse_iso_datetime
 from middleware.auth_middleware import get_current_user
 
@@ -105,6 +106,8 @@ async def get_report_details(
     domain: str,
     keywords_limit: int = Query(100, ge=1, le=1000),
     backlinks_limit: int = Query(100, ge=1, le=1000),
+    keywords_offset: int = Query(0, ge=0),
+    backlinks_offset: int = Query(0, ge=0),
     sections: Optional[str] = Query(None, description="Comma-separated list of sections: keywords,referring_domains,backlinks"),
     current_user = Depends(get_current_user),
 ):
@@ -125,93 +128,68 @@ async def get_report_details(
         include_keywords = "keywords" in requested_sections
         include_backlinks = "backlinks" in requested_sections
         include_referring_domains = "referring_domains" in requested_sections
+        display_payload = report.display_payload or {}
+        needs_backfill = False
 
-        keywords_data = await db.get_detailed_data(domain, DetailedDataType.KEYWORDS) if include_keywords else None
-        backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS) if (include_backlinks or include_referring_domains) else None
-        referring_domains_data = await db.get_detailed_data(domain, DetailedDataType.REFERRING_DOMAINS) if include_referring_domains else None
+        cached_keywords = display_payload.get("keywords", {"total_count": 0, "items": []})
+        cached_backlinks = display_payload.get("backlinks", {"total_count": 0, "items": []})
+        cached_referring_domains = display_payload.get("referring_domains", {"total_count": 0, "items": []})
 
-        keyword_items = (keywords_data.json_data or {}).get("items", []) if keywords_data else []
-        raw_backlinks = (backlinks_data.json_data or {}).get("items", []) if backlinks_data else []
-        raw_referring_domains = (referring_domains_data.json_data or {}).get("items", []) if referring_domains_data else []
+        needed_keywords = keywords_offset + keywords_limit
+        needed_backlinks = backlinks_offset + backlinks_limit
 
-        # Some analyses do not persist a separate referring-domains dataset.
-        # In that case, derive it from the backlink rows so the report stays useful.
-        if not raw_referring_domains and raw_backlinks:
-            derived_referring_domains = {}
-            for item in raw_backlinks:
-                domain_key = item.get("domain_from") or item.get("domain") or ""
-                if not domain_key:
-                    continue
+        if include_keywords and (
+            "keywords" not in display_payload or len(cached_keywords.get("items", [])) < needed_keywords
+        ):
+            needs_backfill = True
+        if include_backlinks and (
+            "backlinks" not in display_payload or len(cached_backlinks.get("items", [])) < needed_backlinks
+        ):
+            needs_backfill = True
+        if include_referring_domains and (
+            "referring_domains" not in display_payload or len(cached_referring_domains.get("items", [])) < needed_backlinks
+        ):
+            needs_backfill = True
 
-                if domain_key not in derived_referring_domains:
-                    derived_referring_domains[domain_key] = {
-                        "domain": domain_key,
-                        "domain_rank": item.get("domain_from_rank", item.get("domain_rank", 0)),
-                        "anchor_text": item.get("anchor") or item.get("anchor_text", ""),
-                        "backlinks_count": 0,
-                        "first_seen": item.get("first_seen", ""),
-                        "last_seen": item.get("last_seen", ""),
-                    }
+        if needs_backfill:
+            keywords_data = await db.get_detailed_data(domain, DetailedDataType.KEYWORDS) if include_keywords else None
+            backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS) if (include_backlinks or include_referring_domains) else None
+            referring_domains_data = await db.get_detailed_data(domain, DetailedDataType.REFERRING_DOMAINS) if include_referring_domains else None
 
-                derived_referring_domains[domain_key]["backlinks_count"] += item.get("links_count", 1) or 1
-
-                if not derived_referring_domains[domain_key]["first_seen"]:
-                    derived_referring_domains[domain_key]["first_seen"] = item.get("first_seen", "")
-                if item.get("last_seen"):
-                    derived_referring_domains[domain_key]["last_seen"] = item.get("last_seen", "")
-
-            raw_referring_domains = sorted(
-                derived_referring_domains.values(),
-                key=lambda entry: entry.get("domain_rank", 0),
-                reverse=True,
+            fresh_payload = build_display_payload(
+                keywords_data=keywords_data.json_data if keywords_data else None,
+                backlinks_data=backlinks_data.json_data if backlinks_data else None,
+                referring_domains_data=referring_domains_data.json_data if referring_domains_data else None,
+                keywords_limit=max(needed_keywords, len(cached_keywords.get("items", [])), 100),
+                backlinks_limit=max(needed_backlinks, len(cached_backlinks.get("items", [])), len(cached_referring_domains.get("items", [])), 100),
             )
 
-        total_keywords = (keywords_data.json_data or {}).get("total_count", len(keyword_items)) if keywords_data else 0
-        total_backlinks = (backlinks_data.json_data or {}).get("total_count", len(raw_backlinks)) if backlinks_data else 0
-        total_referring_domains = (referring_domains_data.json_data or {}).get("total_count", len(raw_referring_domains)) if referring_domains_data else len(raw_referring_domains)
+            display_payload = {
+                **display_payload,
+                **{key: value for key, value in fresh_payload.items() if value.get("items") or value.get("total_count", 0) > 0},
+            }
+            report.display_payload = display_payload
+            await db.save_report(report)
 
-        mapped_referring_domains = []
-        for item in raw_referring_domains[:backlinks_limit]:
-            mapped_referring_domains.append({
-                "domain": item.get("domain", item.get("domain_from", "")),
-                "domain_rank": item.get("domain_rank", item.get("domain_from_rank", 0)),
-                "anchor_text": item.get("anchor_text", ""),
-                "backlinks_count": item.get("backlinks_count", item.get("links_count", 0)),
-                "first_seen": item.get("first_seen", ""),
-                "last_seen": item.get("last_seen", ""),
-            })
-
-        mapped_backlinks = []
-        for item in raw_backlinks[:backlinks_limit]:
-            mapped_backlinks.append({
-                "domain": item.get("domain_from") or item.get("domain", ""),
-                "domain_rank": item.get("domain_from_rank", item.get("domain_rank", 0)),
-                "anchor_text": item.get("anchor") or item.get("anchor_text", ""),
-                "backlinks_count": item.get("links_count", item.get("backlinks_count", 1)),
-                "url_from": item.get("url_from") or item.get("url", ""),
-                "url_to": item.get("url_to") or item.get("target", ""),
-                "link_type": item.get("type", item.get("link_type", "")),
-                "link_attributes": item.get("attributes", item.get("link_attributes", "")),
-                "first_seen": item.get("first_seen", ""),
-                "last_seen": item.get("last_seen", ""),
-                "backlink_spam_score": item.get("backlink_spam_score", 0),
-            })
+        keywords_section = display_payload.get("keywords", {"total_count": 0, "items": []})
+        backlinks_section = display_payload.get("backlinks", {"total_count": 0, "items": []})
+        referring_domains_section = display_payload.get("referring_domains", {"total_count": 0, "items": []})
 
         return {
             "success": True,
             "domain": domain,
             "detailed_data_available": report.detailed_data_available or {},
             "keywords": {
-                "total_count": total_keywords,
-                "items": keyword_items[:keywords_limit] if include_keywords else [],
+                "total_count": keywords_section.get("total_count", 0) if include_keywords else 0,
+                "items": keywords_section.get("items", [])[keywords_offset:keywords_offset + keywords_limit] if include_keywords else [],
             },
             "referring_domains": {
-                "total_count": total_referring_domains,
-                "items": mapped_referring_domains if include_referring_domains else [],
+                "total_count": referring_domains_section.get("total_count", 0) if include_referring_domains else 0,
+                "items": referring_domains_section.get("items", [])[backlinks_offset:backlinks_offset + backlinks_limit] if include_referring_domains else [],
             },
             "backlinks": {
-                "total_count": total_backlinks,
-                "items": mapped_backlinks if include_backlinks else [],
+                "total_count": backlinks_section.get("total_count", 0) if include_backlinks else 0,
+                "items": backlinks_section.get("items", [])[backlinks_offset:backlinks_offset + backlinks_limit] if include_backlinks else [],
             },
         }
     except HTTPException:
