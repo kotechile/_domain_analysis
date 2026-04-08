@@ -439,8 +439,8 @@ class N8NService:
             return None
         
         try:
-            # Normalize all domains and limit to 100 for bulk traffic (DataForSEO limitation)
-            normalized_domains = [self._normalize_domain(d) for d in domains if d][:100]
+            # DataForSEO bulk traffic estimation supports up to 1000 targets per request.
+            normalized_domains = [self._normalize_domain(d) for d in domains if d][:1000]
             
             if not normalized_domains:
                 logger.warning("No valid domains after normalization")
@@ -689,4 +689,3 @@ class N8NService:
         except Exception as e:
             logger.error("N8N auction scoring workflow trigger failed", error=str(e))
             return None
-

@@ -210,17 +210,17 @@ class MarketplaceBatchService:
                 batch_num = i // batch_size + 1
                 batch = domain_names[i:i + batch_size]
                 try:
-                    # Trigger summary
+                    # Trigger backlinks summary data for BL/RD/rank.
                     logger.info(f"[Background] Triggering Summary for batch {batch_num}", domain_count=len(batch))
                     await self.n8n_service.trigger_bulk_page_summary_workflow(batch)
-                    
-                    # Trigger traffic in smaller sub-batches (max 100 per DataForSEO)
+
+                    # Trigger a single traffic batch for up to 1000 domains.
                     logger.info(f"[Background] Triggering Traffic for batch {batch_num}", domain_count=len(batch))
-                    for j in range(0, len(batch), 100):
-                        sub_batch = batch[j:j+100]
-                        await self.n8n_service.trigger_bulk_traffic_batch_workflow(sub_batch)
-                        if j + 100 < len(batch):
-                            await asyncio.sleep(0.5)
+                    await self.n8n_service.trigger_bulk_traffic_batch_workflow(batch)
+
+                    # Trigger spam score separately since page summary does not populate it.
+                    logger.info(f"[Background] Triggering Spam Score for batch {batch_num}", domain_count=len(batch))
+                    await self.n8n_service.trigger_bulk_spam_score_workflow(batch)
 
                     processed_count += len(batch)
                     
