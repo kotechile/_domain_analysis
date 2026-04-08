@@ -2109,35 +2109,12 @@ class DatabaseService:
             updated_stats = current_stats.copy()
             updated_stats.update(page_statistics)
             
-            # Mark a record as having statistics only when at least one SEO metric exists.
-            def has_any_statistics(data: Dict[str, Any]) -> bool:
-                direct_keys = [
-                    'rank', 'ranking',
-                    'backlinks', 'total_backlinks',
-                    'referring_domains', 'total_referring_domains',
-                    'backlinks_spam_score', 'spam_score',
-                    'organic_traffic', 'etv', 'traffic', 'organic_traffic_est', 'organic_etv',
-                    'keywords_count', 'keywords', 'organic_keywords', 'organic_count',
-                    'first_seen', 'date_first_seen',
-                ]
-
-                for key in direct_keys:
-                    if data.get(key) is not None:
-                        return True
-
-                metrics = data.get('metrics')
-                if isinstance(metrics, dict):
-                    organic = metrics.get('organic')
-                    if isinstance(organic, dict):
-                        if organic.get('etv') is not None or organic.get('count') is not None:
-                            return True
-
-                return False
-
-            # Prepare update data with top-level columns for sorting
+            # A successful DataForSEO callback means the record was searched, even when
+            # the provider returns zero-valued metrics. The UI uses has_statistics to
+            # distinguish "searched and found 0" from "not queried yet".
             update_data = {
                 'page_statistics': updated_stats,
-                'has_statistics': has_any_statistics(updated_stats),
+                'has_statistics': True,
                 'updated_at': datetime.now(timezone.utc).isoformat()
             }
             
