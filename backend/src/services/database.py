@@ -2156,7 +2156,13 @@ class DatabaseService:
                 update_data['backlinks'] = backlinks
                 
             # Referring Domains
-            referring_domains = get_metric(updated_stats, ['referring_domains', 'total_referring_domains'])
+            # DataForSEO backlink stats can return several related fields. Prefer the
+            # direct count when available, otherwise fall back to main-domain counts.
+            referring_domains = get_metric(updated_stats, [
+                'referring_domains',
+                'total_referring_domains',
+                'referring_main_domains',
+            ])
             if referring_domains is not None:
                 update_data['referring_domains'] = referring_domains
                 
