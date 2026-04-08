@@ -117,9 +117,26 @@ async def get_report_details(
 
         keywords_data = await db.get_detailed_data(domain, DetailedDataType.KEYWORDS)
         backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
+        referring_domains_data = await db.get_detailed_data(domain, DetailedDataType.REFERRING_DOMAINS)
 
         keyword_items = (keywords_data.json_data or {}).get("items", []) if keywords_data else []
         raw_backlinks = (backlinks_data.json_data or {}).get("items", []) if backlinks_data else []
+        raw_referring_domains = (referring_domains_data.json_data or {}).get("items", []) if referring_domains_data else []
+
+        total_keywords = (keywords_data.json_data or {}).get("total_count", len(keyword_items)) if keywords_data else 0
+        total_backlinks = (backlinks_data.json_data or {}).get("total_count", len(raw_backlinks)) if backlinks_data else 0
+        total_referring_domains = (referring_domains_data.json_data or {}).get("total_count", len(raw_referring_domains)) if referring_domains_data else 0
+
+        mapped_referring_domains = []
+        for item in raw_referring_domains[:backlinks_limit]:
+            mapped_referring_domains.append({
+                "domain": item.get("domain", item.get("domain_from", "")),
+                "domain_rank": item.get("domain_rank", item.get("domain_from_rank", 0)),
+                "anchor_text": item.get("anchor_text", ""),
+                "backlinks_count": item.get("backlinks_count", item.get("links_count", 0)),
+                "first_seen": item.get("first_seen", ""),
+                "last_seen": item.get("last_seen", ""),
+            })
 
         mapped_backlinks = []
         for item in raw_backlinks[:backlinks_limit]:
@@ -128,6 +145,10 @@ async def get_report_details(
                 "domain_rank": item.get("domain_from_rank", 0),
                 "anchor_text": item.get("anchor", ""),
                 "backlinks_count": item.get("links_count", 0),
+                "url_from": item.get("url_from", ""),
+                "url_to": item.get("url_to", ""),
+                "link_type": item.get("type", ""),
+                "link_attributes": item.get("attributes", ""),
                 "first_seen": item.get("first_seen", ""),
                 "last_seen": item.get("last_seen", ""),
                 "backlink_spam_score": item.get("backlink_spam_score", 0),
@@ -138,11 +159,15 @@ async def get_report_details(
             "domain": domain,
             "detailed_data_available": report.detailed_data_available or {},
             "keywords": {
-                "total_count": len(keyword_items),
+                "total_count": total_keywords,
                 "items": keyword_items[:keywords_limit],
             },
+            "referring_domains": {
+                "total_count": total_referring_domains,
+                "items": mapped_referring_domains,
+            },
             "backlinks": {
-                "total_count": len(raw_backlinks),
+                "total_count": total_backlinks,
                 "items": mapped_backlinks,
             },
         }

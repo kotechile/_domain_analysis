@@ -2,7 +2,7 @@ import { Component, inject, signal, computed, effect, OnDestroy, OnInit, ViewChi
 import { CommonModule, TitleCasePipe, DatePipe, DecimalPipe } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../services/api';
-import { LucideAngularModule, ArrowLeft, RefreshCw, Download, Sparkles, TrendingUp, History, ShieldCheck, Globe, Zap, AlertTriangle, CheckCircle, Search, Info, Flag, Target, Lightbulb, BarChart3 } from 'lucide-angular';
+import { LucideAngularModule, ArrowLeft, RefreshCw, Download, Sparkles, TrendingUp, History, ShieldCheck, Globe, Zap, AlertTriangle, CheckCircle, Search, Info, Flag, Target, Lightbulb, BarChart3, Link2 } from 'lucide-angular';
 import { firstValueFrom, interval, Subscription, startWith, switchMap, takeWhile } from 'rxjs';
 import { DomainAnalysisReport, OrganicKeyword, ReferringDomain } from '../../models/domain.model';
 import { TrafficChartComponent } from '../../components/traffic-chart/traffic-chart';
@@ -64,6 +64,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     readonly Target = Target;
     readonly Lightbulb = Lightbulb;
     readonly BarChart3 = BarChart3;
+    readonly Link2 = Link2;
 
     // State
     domain = signal<string | null>(null);
@@ -72,8 +73,10 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     error = signal<string | null>(null);
     activeTab = signal<string>('overview');
     backlinks = signal<ReferringDomain[]>([]);
+    referringDomains = signal<ReferringDomain[]>([]);
     keywords = signal<OrganicKeyword[]>([]);
     backlinksTotal = signal<number>(0);
+    referringDomainsTotal = signal<number>(0);
     keywordsTotal = signal<number>(0);
 
     private pollingSub?: Subscription;
@@ -84,8 +87,10 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
             if (d) {
                 this.domain.set(d);
                 this.backlinks.set([]);
+                this.referringDomains.set([]);
                 this.keywords.set([]);
                 this.backlinksTotal.set(0);
+                this.referringDomainsTotal.set(0);
                 this.keywordsTotal.set(0);
                 this.startPolling(d);
             }
@@ -130,8 +135,10 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
         try {
             const res = await firstValueFrom(this.api.getReportDetails(domain));
             this.keywords.set(res.keywords?.items || []);
+            this.referringDomains.set(res.referring_domains?.items || []);
             this.backlinks.set(res.backlinks?.items || []);
             this.keywordsTotal.set(res.keywords?.total_count || 0);
+            this.referringDomainsTotal.set(res.referring_domains?.total_count || 0);
             this.backlinksTotal.set(res.backlinks?.total_count || 0);
         } catch (err) {
             console.error('Error fetching report details:', err);
@@ -219,6 +226,30 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     // Formatting helpers
     formatNumber(val: number | undefined): string {
         return val ? val.toLocaleString() : '0';
+    }
+
+    getKeywordLabel(kw: OrganicKeyword): string {
+        return kw.keyword || kw.keyword_data?.keyword || 'Unknown keyword';
+    }
+
+    getKeywordPosition(kw: OrganicKeyword): number {
+        return kw.rank || kw.ranked_serp_element?.serp_item?.rank_absolute || 0;
+    }
+
+    getKeywordSearchVolume(kw: OrganicKeyword): number {
+        return kw.search_volume || kw.keyword_data?.keyword_info?.search_volume || 0;
+    }
+
+    getKeywordDifficulty(kw: OrganicKeyword): number {
+        return kw.keyword_difficulty || kw.keyword_data?.keyword_properties?.keyword_difficulty || 0;
+    }
+
+    getKeywordCpc(kw: OrganicKeyword): number {
+        return kw.cpc || kw.keyword_data?.keyword_info?.cpc || 0;
+    }
+
+    getKeywordUrl(kw: OrganicKeyword): string {
+        return kw.url || kw.ranked_serp_element?.serp_item?.url || '';
     }
 
     hasDetailedData(report: DomainAnalysisReport | null): boolean {

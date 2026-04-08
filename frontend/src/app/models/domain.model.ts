@@ -329,6 +329,10 @@ export interface ReportDetailsResponse {
         total_count: number;
         items: OrganicKeyword[];
     };
+    referring_domains: {
+        total_count: number;
+        items: ReferringDomain[];
+    };
     backlinks: {
         total_count: number;
         items: ReferringDomain[];

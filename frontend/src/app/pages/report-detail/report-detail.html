@@ -112,8 +112,12 @@
                 <i-lucide [name]="Search" class="w-4 h-4"></i-lucide>
                 <span>Keywords</span>
             </button>
-            <button (click)="setTab('backlinks')" [class.active]="activeTab() === 'backlinks'" class="tab-btn">
+            <button (click)="setTab('referring-domains')" [class.active]="activeTab() === 'referring-domains'" class="tab-btn">
                 <i-lucide [name]="ShieldCheck" class="w-4 h-4"></i-lucide>
+                <span>Ref Domains</span>
+            </button>
+            <button (click)="setTab('backlinks')" [class.active]="activeTab() === 'backlinks'" class="tab-btn">
+                <i-lucide [name]="Link2" class="w-4 h-4"></i-lucide>
                 <span>Backlinks</span>
             </button>
             <button (click)="setTab('traffic')" [class.active]="activeTab() === 'traffic'" class="tab-btn">
@@ -268,39 +272,49 @@
                                 <th class="p-4 text-left text-[10px] uppercase font-black opacity-40"
                                     style="color: var(--text-color)">Keyword</th>
                                 <th class="p-4 text-center text-[10px] uppercase font-black opacity-40"
-                                    style="color: var(--text-color)">Pos</th>
+                                    style="color: var(--text-color)">Position</th>
                                 <th class="p-4 text-center text-[10px] uppercase font-black opacity-40"
-                                    style="color: var(--text-color)">Vol</th>
+                                    style="color: var(--text-color)">Search Vol.</th>
+                                <th class="p-4 text-center text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">CPC</th>
                                 <th class="p-4 text-right text-[10px] uppercase font-black opacity-40"
                                     style="color: var(--text-color)">Difficulty</th>
+                                <th class="p-4 text-left text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">Ranking URL</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-opacity-5 border-border-color">
                             @for (kw of keywords(); track $index) {
                             <tr class="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                                <td class="p-4 font-black" style="color: var(--text-color)">{{ kw.keyword || kw.keyword_data?.keyword }}</td>
+                                <td class="p-4 font-black" style="color: var(--text-color)">{{ getKeywordLabel(kw) }}</td>
                                 <td class="p-4 text-center">
                                     <span
                                         class="px-3 py-1 rounded-lg text-xs font-black bg-blue-500/10 text-blue-500">#{{
-                                        kw.rank || kw.ranked_serp_element?.serp_item?.rank_absolute || 0 }}</span>
+                                        getKeywordPosition(kw) }}</span>
                                 </td>
                                 <td class="p-4 text-center font-bold opacity-40" style="color: var(--text-color)">{{
-                                    (kw.search_volume || kw.keyword_data?.keyword_info?.search_volume || 0) | number }}</td>
+                                    getKeywordSearchVolume(kw) | number }}</td>
+                                <td class="p-4 text-center font-bold opacity-40" style="color: var(--text-color)">
+                                    ${{ getKeywordCpc(kw) | number:'1.2-2' }}
+                                </td>
                                 <td class="p-4 text-right">
                                     <div class="flex items-center justify-end space-x-2">
                                         <div class="w-16 h-1.5 rounded-full bg-gray-200 dark:bg-white/10">
                                             <div class="h-full rounded-full"
                                                 [style.backgroundColor]="'var(--accent-color)'"
-                                                [style.width.%]="kw.keyword_difficulty || kw.keyword_data?.keyword_properties?.keyword_difficulty || 0"></div>
+                                                [style.width.%]="getKeywordDifficulty(kw)"></div>
                                         </div>
-                                        <span class="text-[10px] font-black opacity-60">{{ kw.keyword_difficulty || kw.keyword_data?.keyword_properties?.keyword_difficulty || 0
+                                        <span class="text-[10px] font-black opacity-60">{{ getKeywordDifficulty(kw)
                                             }}</span>
                                     </div>
+                                </td>
+                                <td class="p-4 text-xs opacity-60 max-w-[20rem] truncate" style="color: var(--text-color)">
+                                    {{ getKeywordUrl(kw) || 'N/A' }}
                                 </td>
                             </tr>
                             } @empty {
                             <tr>
-                                <td colspan="4" class="p-12 text-center">
+                                <td colspan="6" class="p-12 text-center">
                                     <div class="flex flex-col items-center justify-center space-y-2 opacity-30">
                                         <i-lucide [name]="Search" class="w-12 h-12"></i-lucide>
                                         <p class="text-sm font-bold uppercase tracking-widest">No detailed keywords found</p>
@@ -520,6 +534,81 @@
             </div>
             }
 
+            @case ('referring-domains') {
+            <div class="space-y-8 animate-in slide-in-from-right-4 duration-500">
+                @defer (on viewport) {
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="p-3 rounded-2xl bg-blue-500/10 text-blue-500">
+                            <i-lucide [name]="ShieldCheck" class="w-6 h-6"></i-lucide>
+                        </div>
+                        <div>
+                            <h4 class="text-xl font-black uppercase tracking-widest" style="color: var(--text-color)">Referring Domains</h4>
+                            <p class="text-[10px] font-bold opacity-30 uppercase tracking-widest mt-0.5">Unique domains linking into this site</p>
+                        </div>
+                    </div>
+                    <span class="text-xs font-bold opacity-40 uppercase tracking-widest">Showing {{ referringDomains().length }} of {{ referringDomainsTotal() }}</span>
+                </div>
+
+                <div class="overflow-hidden rounded-2xl border border-opacity-5"
+                    style="border-color: var(--border-color)">
+                    <table class="w-full">
+                        <thead class="bg-gray-50/50 dark:bg-white/5">
+                            <tr>
+                                <th class="p-4 text-left text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">Referring Domain</th>
+                                <th class="p-4 text-center text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">DR</th>
+                                <th class="p-4 text-left text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">Top Anchor</th>
+                                <th class="p-4 text-center text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">Backlinks</th>
+                                <th class="p-4 text-right text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">First Seen</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-opacity-5 border-border-color">
+                            @for (domain of referringDomains(); track $index) {
+                            <tr class="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group">
+                                <td class="p-4 font-black" style="color: var(--text-color)">{{ domain.domain }}</td>
+                                <td class="p-4 text-center">
+                                    <span class="px-3 py-1 rounded-lg text-[10px] font-black bg-blue-500/10 text-blue-500">
+                                        DR {{ domain.domain_rank || 0 }}
+                                    </span>
+                                </td>
+                                <td class="p-4 text-xs font-bold opacity-60" style="color: var(--text-color)">{{ domain.anchor_text || 'N/A' }}</td>
+                                <td class="p-4 text-center font-bold opacity-40 text-xs" style="color: var(--text-color)">
+                                    {{ (domain.backlinks_count || 0) | number }}
+                                </td>
+                                <td class="p-4 text-right text-xs font-bold opacity-40" style="color: var(--text-color)">
+                                    {{ domain.first_seen | date:'mediumDate' }}
+                                </td>
+                            </tr>
+                            } @empty {
+                                <tr>
+                                    <td colspan="5" class="p-12 text-center">
+                                        <div class="flex flex-col items-center justify-center space-y-2 opacity-30">
+                                            <i-lucide [name]="ShieldCheck" class="w-12 h-12"></i-lucide>
+                                            <p class="text-sm font-bold uppercase tracking-widest">No referring domains found</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                } @placeholder {
+                <div class="p-12 text-center rounded-2xl border border-opacity-5"
+                    style="border-color: var(--border-color)">
+                    <div class="animate-pulse flex flex-col items-center justify-center space-y-4">
+                        <div class="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-800"></div>
+                        <div class="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded"></div>
+                    </div>
+                </div>
+                }
+            </div>
+            }
+
             @case ('backlinks') {
             <div class="space-y-8 animate-in slide-in-from-right-4 duration-500">
                 @defer (on viewport) {
@@ -529,8 +618,8 @@
                             <i-lucide [name]="ShieldCheck" class="w-6 h-6"></i-lucide>
                         </div>
                         <div>
-                            <h4 class="text-xl font-black uppercase tracking-widest" style="color: var(--text-color)">Trust Flow Map</h4>
-                            <p class="text-[10px] font-bold opacity-30 uppercase tracking-widest mt-0.5">Top referring domains and authority markers</p>
+                            <h4 class="text-xl font-black uppercase tracking-widest" style="color: var(--text-color)">Backlinks</h4>
+                            <p class="text-[10px] font-bold opacity-30 uppercase tracking-widest mt-0.5">Individual backlinks and source URLs</p>
                         </div>
                     </div>
                     <span class="text-xs font-bold opacity-40 uppercase tracking-widest">Showing {{ backlinks().length }} of {{ backlinksTotal() }}</span>
@@ -543,15 +632,15 @@
                         <thead class="bg-gray-50/50 dark:bg-white/5">
                             <tr>
                                 <th class="p-4 text-left text-[10px] uppercase font-black opacity-40"
-                                    style="color: var(--text-color)">Referring Domain</th>
+                                    style="color: var(--text-color)">Source Domain</th>
                                 <th class="p-4 text-center text-[10px] uppercase font-black opacity-40"
                                     style="color: var(--text-color)">DR</th>
                                 <th class="p-4 text-left text-[10px] uppercase font-black opacity-40"
-                                    style="color: var(--text-color)">Top Anchor Text</th>
-                                <th class="p-4 text-center text-[10px] uppercase font-black opacity-40"
-                                    style="color: var(--text-color)">Links</th>
+                                    style="color: var(--text-color)">Source URL</th>
+                                <th class="p-4 text-left text-[10px] uppercase font-black opacity-40"
+                                    style="color: var(--text-color)">Anchor</th>
                                 <th class="p-4 text-right text-[10px] uppercase font-black opacity-40"
-                                    style="color: var(--text-color)">Spam Score</th>
+                                    style="color: var(--text-color)">Target</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-opacity-5 border-border-color">
@@ -569,21 +658,14 @@
                                         DR {{ link.domain_rank }}
                                     </span>
                                 </td>
+                                <td class="p-4 text-xs opacity-60 max-w-[16rem] truncate" style="color: var(--text-color)">
+                                    {{ link.url_from || 'N/A' }}
+                                </td>
                                 <td class="p-4">
                                     <span class="text-xs font-bold opacity-60" style="color: var(--text-color)">{{ link.anchor_text || 'Generic / Navigational' }}</span>
                                 </td>
-                                <td class="p-4 text-center font-bold opacity-40 text-xs" style="color: var(--text-color)">
-                                    {{ (link.backlinks_count || 0) | number }}
-                                </td>
-                                <td class="p-4 text-right">
-                                    <div class="flex items-center justify-end space-x-2">
-                                        <div class="w-12 h-1 rounded-full bg-gray-200 dark:bg-white/10">
-                                            <div class="h-full rounded-full"
-                                                [style.backgroundColor]="(link.backlink_spam_score || 0) > 30 ? '#ef4444' : '#10b981'"
-                                                [style.width.%]="link.backlink_spam_score || 0"></div>
-                                        </div>
-                                        <span class="text-[10px] font-black opacity-60">{{ link.backlink_spam_score || 0 }}%</span>
-                                    </div>
+                                <td class="p-4 text-right text-xs opacity-60 max-w-[16rem] truncate" style="color: var(--text-color)">
+                                    {{ link.url_to || 'N/A' }}
                                 </td>
                             </tr>
                             } @empty {
