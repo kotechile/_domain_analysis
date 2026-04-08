@@ -22,12 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install and upgrade pip
-RUN pip install --no-cache-dir --upgrade pip
-
 # Copy requirements and install dependencies into a prefix
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN pip install --no-cache-dir --prefer-binary --prefix=/install -r requirements.txt
 
 # Stage 2: Final stage
 FROM python:3.10-slim-bookworm

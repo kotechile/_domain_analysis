@@ -1,11 +1,11 @@
-# Build arguments
+# Multi-stage build for Angular app
+FROM node:20 AS build
+
+# Docker requires ARGs to be declared after FROM for use in this stage.
 ARG REACT_APP_API_URL=/api/v1
 ARG REACT_APP_SUPABASE_URL
 ARG REACT_APP_SUPABASE_ANON_KEY
 ARG REACT_APP_URL=https://scout.buildomain.com
-
-# Multi-stage build for Angular app
-FROM node:20 AS build
 
 # Pass build arg to environment
 ENV REACT_APP_API_URL=$REACT_APP_API_URL
@@ -13,7 +13,7 @@ ENV REACT_APP_SUPABASE_URL=$REACT_APP_SUPABASE_URL
 ENV REACT_APP_SUPABASE_ANON_KEY=$REACT_APP_SUPABASE_ANON_KEY
 ENV REACT_APP_URL=$REACT_APP_URL
 ENV NG_CLI_ANALYTICS=false
-ENV NODE_OPTIONS="--max-old-space-size=4096"
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 
 # Set working directory
 WORKDIR /app
@@ -28,7 +28,7 @@ RUN npm ci --prefer-offline --no-audit
 COPY . .
 
 # Build the Angular application
-RUN npm run build > /tmp/build.log 2>&1 || { cat /tmp/build.log; exit 1; }
+RUN npm run build -- --configuration production > /tmp/build.log 2>&1 || { cat /tmp/build.log; exit 1; }
 
 # Verify build output exists
 RUN ls -la /app/dist/angular-version/browser

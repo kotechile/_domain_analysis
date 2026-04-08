@@ -673,7 +673,7 @@ async def delete_report(domain: str, current_user = Depends(get_current_user)):
             raise HTTPException(status_code=404, detail="Report not found")
             
         # Ownership check
-        if report.user_id and str(report.user_id) != str(current_user.get('id')):
+        if report.user_id and str(report.user_id) != str(getattr(current_user, 'id', None)):
             raise HTTPException(status_code=403, detail="You do not have permission to delete this report")
         
         # Delete all related records

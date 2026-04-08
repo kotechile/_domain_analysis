@@ -71,6 +71,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     loading = signal<boolean>(true);
     error = signal<string | null>(null);
     activeTab = signal<string>('overview');
+    backlinks = signal<any[]>([]); // New signal for detailed backlinks
 
     private pollingSub?: Subscription;
 
@@ -99,6 +100,11 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
                 this.report.set(res.report);
                 this.error.set(null);
 
+                // Fetch detailed backlinks if they are available
+                if (res.report.detailed_data_available?.backlinks) {
+                    this.fetchBacklinks(d);
+                }
+
                 // Start polling if it's in progress
                 if (res.report.status === 'pending' || res.report.status === 'in_progress') {
                     this.startPolling(d);
@@ -111,6 +117,20 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
             this.error.set('Connection error. Please try again.');
         } finally {
             this.loading.set(false);
+        }
+    }
+
+    async fetchBacklinks(domain: string) {
+        try {
+            // Note: ApiService currently doesn't have a getBacklinks method,
+            // so we'll need to add it or use a generic request.
+            // For now, I'll assume we add it to ApiService.
+            const res = await firstValueFrom(this.api.getBacklinks(domain));
+            if (res.success && res.backlinks) {
+                this.backlinks.set(res.backlinks);
+            }
+        } catch (err) {
+            console.error('Error fetching detailed backlinks:', err);
         }
     }
 

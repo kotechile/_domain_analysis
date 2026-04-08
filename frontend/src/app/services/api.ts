@@ -52,6 +52,10 @@ export class ApiService {
     return this.http.get<Models.ProgressResponse>(`${this.baseUrl}/reports/${domain}/progress`);
   }
 
+  getBacklinks(domain: string): Observable<{ domain: string; total_count: number; backlinks: any[] }> {
+    return this.http.get<{ domain: string; total_count: number; backlinks: any[] }>(`${this.baseUrl}/reports/${domain}/backlinks`);
+  }
+
   listReports(limit: number = 10, offset: number = 0, status?: string): Observable<Models.DomainAnalysisReport[]> {
     let params = new HttpParams()
       .set('limit', limit.toString())

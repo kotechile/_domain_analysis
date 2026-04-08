@@ -546,7 +546,7 @@
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-opacity-5 border-border-color">
-                            @for (link of report()?.data_for_seo_metrics?.referring_domains_info; track $index) {
+                            @for (link of backlinks(); track $index) {
                             <tr class="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group">
                                 <td class="p-4">
                                     <div class="flex flex-col">
@@ -582,7 +582,7 @@
                                     <td colspan="5" class="p-12 text-center">
                                         <div class="flex flex-col items-center justify-center space-y-2 opacity-30">
                                             <i-lucide [name]="ShieldCheck" class="w-12 h-12"></i-lucide>
-                                            <p class="text-sm font-bold uppercase tracking-widest">No referring domains found</p>
+                                            <p class="text-sm font-bold uppercase tracking-widest">No detailed backlinks found</p>
                                         </div>
                                     </td>
                                 </tr>
