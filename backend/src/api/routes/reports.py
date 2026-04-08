@@ -169,7 +169,14 @@ async def get_report_details(
                 **{key: value for key, value in fresh_payload.items() if value.get("items") or value.get("total_count", 0) > 0},
             }
             report.display_payload = display_payload
-            await db.save_report(report)
+            try:
+                await db.save_report(report)
+            except Exception as cache_error:
+                logger.warning(
+                    "Failed to persist display payload cache; returning fresh payload without cache",
+                    domain=domain,
+                    error=str(cache_error),
+                )
 
         keywords_section = display_payload.get("keywords", {"total_count": 0, "items": []})
         backlinks_section = display_payload.get("backlinks", {"total_count": 0, "items": []})

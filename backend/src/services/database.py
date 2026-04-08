@@ -239,7 +239,7 @@ class DatabaseService:
                 if hasattr(report_data['wayback_machine_summary']['last_capture_date'], 'isoformat'):
                     report_data['wayback_machine_summary']['last_capture_date'] = report_data['wayback_machine_summary']['last_capture_date'].isoformat()
             
-            result = await client.table('reports').upsert({ 
+            payload = { 
                 'domain_name': report.domain_name, 
                 'user_id': report.user_id,
                 'analysis_timestamp': report_data['analysis_timestamp'], 
@@ -256,7 +256,23 @@ class DatabaseService:
                 'processing_time_seconds': report.processing_time_seconds, 
                 'error_message': report.error_message, 
                 'updated_at': datetime.utcnow().isoformat() 
-            }, on_conflict= 'domain_name, user_id').execute()
+            }
+
+            try:
+                result = await client.table('reports').upsert(payload, on_conflict='domain_name, user_id').execute()
+            except Exception as e:
+                # Older deployments may not have the display_payload column yet.
+                # Retry without that field so report reads keep working even before schema refresh catches up.
+                error_text = str(e).lower()
+                if 'display_payload' in error_text and 'column' in error_text:
+                    logger.warning(
+                        "Retrying report save without display_payload because schema is not updated yet",
+                        domain=report.domain_name,
+                    )
+                    payload.pop('display_payload', None)
+                    result = await client.table('reports').upsert(payload, on_conflict='domain_name, user_id').execute()
+                else:
+                    raise
             
             report_id = result.data[0]['id'] if result.data else None
             logger.info("Report saved successfully", domain=report.domain_name, report_id=report_id)
