@@ -114,7 +114,7 @@
             </button>
             <button (click)="setTab('backlinks')" [class.active]="activeTab() === 'backlinks'" class="tab-btn">
                 <i-lucide [name]="ShieldCheck" class="w-4 h-4"></i-lucide>
-                <span>Trust Flow</span>
+                <span>Backlinks</span>
             </button>
             <button (click)="setTab('traffic')" [class.active]="activeTab() === 'traffic'" class="tab-btn">
                 <i-lucide [name]="BarChart3" class="w-4 h-4"></i-lucide>
@@ -256,7 +256,7 @@
                 <div class="flex items-center justify-between">
                     <h4 class="text-xl font-black uppercase tracking-widest" style="color: var(--text-color)">Top
                         Ranking Terms</h4>
-                    <span class="text-xs font-bold opacity-40 uppercase tracking-widest">Showing Top 20</span>
+                    <span class="text-xs font-bold opacity-40 uppercase tracking-widest">Showing {{ keywords().length }} of {{ keywordsTotal() }}</span>
                 </div>
 
                 @defer (on viewport) {
@@ -276,25 +276,34 @@
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-opacity-5 border-border-color">
-                            @for (kw of report()?.data_for_seo_metrics?.organic_keywords; track $index) {
+                            @for (kw of keywords(); track $index) {
                             <tr class="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
-                                <td class="p-4 font-black" style="color: var(--text-color)">{{ kw.keyword }}</td>
+                                <td class="p-4 font-black" style="color: var(--text-color)">{{ kw.keyword || kw.keyword_data?.keyword }}</td>
                                 <td class="p-4 text-center">
                                     <span
                                         class="px-3 py-1 rounded-lg text-xs font-black bg-blue-500/10 text-blue-500">#{{
-                                        kw.rank }}</span>
+                                        kw.rank || kw.ranked_serp_element?.serp_item?.rank_absolute || 0 }}</span>
                                 </td>
                                 <td class="p-4 text-center font-bold opacity-40" style="color: var(--text-color)">{{
-                                    (kw.search_volume || 0) | number }}</td>
+                                    (kw.search_volume || kw.keyword_data?.keyword_info?.search_volume || 0) | number }}</td>
                                 <td class="p-4 text-right">
                                     <div class="flex items-center justify-end space-x-2">
                                         <div class="w-16 h-1.5 rounded-full bg-gray-200 dark:bg-white/10">
                                             <div class="h-full rounded-full"
                                                 [style.backgroundColor]="'var(--accent-color)'"
-                                                [style.width.%]="kw.keyword_difficulty || 0"></div>
+                                                [style.width.%]="kw.keyword_difficulty || kw.keyword_data?.keyword_properties?.keyword_difficulty || 0"></div>
                                         </div>
-                                        <span class="text-[10px] font-black opacity-60">{{ kw.keyword_difficulty || 0
+                                        <span class="text-[10px] font-black opacity-60">{{ kw.keyword_difficulty || kw.keyword_data?.keyword_properties?.keyword_difficulty || 0
                                             }}</span>
+                                    </div>
+                                </td>
+                            </tr>
+                            } @empty {
+                            <tr>
+                                <td colspan="4" class="p-12 text-center">
+                                    <div class="flex flex-col items-center justify-center space-y-2 opacity-30">
+                                        <i-lucide [name]="Search" class="w-12 h-12"></i-lucide>
+                                        <p class="text-sm font-bold uppercase tracking-widest">No detailed keywords found</p>
                                     </div>
                                 </td>
                             </tr>
@@ -524,7 +533,7 @@
                             <p class="text-[10px] font-bold opacity-30 uppercase tracking-widest mt-0.5">Top referring domains and authority markers</p>
                         </div>
                     </div>
-                    <span class="text-xs font-bold opacity-40 uppercase tracking-widest">Showing Top {{ report()?.data_for_seo_metrics?.referring_domains_info?.length || 0 }}</span>
+                    <span class="text-xs font-bold opacity-40 uppercase tracking-widest">Showing {{ backlinks().length }} of {{ backlinksTotal() }}</span>
                 </div>
 
                 <!-- Backlinks Table -->

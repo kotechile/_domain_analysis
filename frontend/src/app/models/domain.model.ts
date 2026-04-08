@@ -317,6 +317,24 @@ export interface BacklinksResponse {
     backlinks: ReferringDomain[];
 }
 
+export interface ReportDetailsResponse {
+    success: boolean;
+    domain: string;
+    detailed_data_available: {
+        keywords?: boolean;
+        backlinks?: boolean;
+        referring_domains?: boolean;
+    };
+    keywords: {
+        total_count: number;
+        items: OrganicKeyword[];
+    };
+    backlinks: {
+        total_count: number;
+        items: ReferringDomain[];
+    };
+}
+
 export interface BulkPageSummaryInfo {
     server?: string;
     cms?: string;

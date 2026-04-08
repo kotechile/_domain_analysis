@@ -4,7 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../services/api';
 import { LucideAngularModule, ArrowLeft, RefreshCw, Download, Sparkles, TrendingUp, History, ShieldCheck, Globe, Zap, AlertTriangle, CheckCircle, Search, Info, Flag, Target, Lightbulb, BarChart3 } from 'lucide-angular';
 import { firstValueFrom, interval, Subscription, startWith, switchMap, takeWhile } from 'rxjs';
-import { DomainAnalysisReport } from '../../models/domain.model';
+import { DomainAnalysisReport, OrganicKeyword, ReferringDomain } from '../../models/domain.model';
 import { TrafficChartComponent } from '../../components/traffic-chart/traffic-chart';
 
 @Component({
@@ -71,7 +71,10 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     loading = signal<boolean>(true);
     error = signal<string | null>(null);
     activeTab = signal<string>('overview');
-    backlinks = signal<any[]>([]); // New signal for detailed backlinks
+    backlinks = signal<ReferringDomain[]>([]);
+    keywords = signal<OrganicKeyword[]>([]);
+    backlinksTotal = signal<number>(0);
+    keywordsTotal = signal<number>(0);
 
     private pollingSub?: Subscription;
 
@@ -80,6 +83,10 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
             const d = params.get('domain');
             if (d) {
                 this.domain.set(d);
+                this.backlinks.set([]);
+                this.keywords.set([]);
+                this.backlinksTotal.set(0);
+                this.keywordsTotal.set(0);
                 this.startPolling(d);
             }
         });
@@ -100,9 +107,8 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
                 this.report.set(res.report);
                 this.error.set(null);
 
-                // Fetch detailed backlinks if they are available
-                if (res.report.detailed_data_available?.backlinks) {
-                    await this.fetchBacklinks(d);
+                if (this.hasDetailedData(res.report)) {
+                    await this.fetchReportDetails(d);
                 }
 
                 // Start polling if it's in progress
@@ -120,17 +126,15 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
         }
     }
 
-    async fetchBacklinks(domain: string) {
+    async fetchReportDetails(domain: string) {
         try {
-            // Note: ApiService currently doesn't have a getBacklinks method,
-            // so we'll need to add it or use a generic request.
-            // For now, I'll assume we add it to ApiService.
-            const res = await firstValueFrom(this.api.getBacklinks(domain));
-            if (res.backlinks) {
-                this.backlinks.set(res.backlinks);
-            }
+            const res = await firstValueFrom(this.api.getReportDetails(domain));
+            this.keywords.set(res.keywords?.items || []);
+            this.backlinks.set(res.backlinks?.items || []);
+            this.keywordsTotal.set(res.keywords?.total_count || 0);
+            this.backlinksTotal.set(res.backlinks?.total_count || 0);
         } catch (err) {
-            console.error('Error fetching detailed backlinks:', err);
+            console.error('Error fetching report details:', err);
         }
     }
 
@@ -182,6 +186,9 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
                         this.report.set(res.report);
                         this.error.set(null);
                         this.loading.set(false);
+                        if (res.report.status === 'completed' && this.hasDetailedData(res.report)) {
+                            this.fetchReportDetails(domain);
+                        }
                     }
                 },
                 error: (err) => {
@@ -212,6 +219,11 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     // Formatting helpers
     formatNumber(val: number | undefined): string {
         return val ? val.toLocaleString() : '0';
+    }
+
+    hasDetailedData(report: DomainAnalysisReport | null): boolean {
+        if (!report?.detailed_data_available) return false;
+        return Boolean(report.detailed_data_available.backlinks || report.detailed_data_available.keywords);
     }
 
     // Traffic chart helpers

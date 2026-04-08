@@ -56,6 +56,18 @@ export class ApiService {
     return this.http.get<{ domain: string; total_count: number; backlinks: any[] }>(`${this.baseUrl}/reports/${domain}/backlinks`);
   }
 
+  getKeywords(domain: string): Observable<{ domain: string; total_count: number; keywords: any[] }> {
+    return this.http.get<{ domain: string; total_count: number; keywords: any[] }>(`${this.baseUrl}/reports/${domain}/keywords`);
+  }
+
+  getReportDetails(domain: string, keywordsLimit: number = 100, backlinksLimit: number = 100): Observable<Models.ReportDetailsResponse> {
+    const params = new HttpParams()
+      .set('keywords_limit', keywordsLimit.toString())
+      .set('backlinks_limit', backlinksLimit.toString());
+
+    return this.http.get<Models.ReportDetailsResponse>(`${this.baseUrl}/reports/${domain}/details`, { params });
+  }
+
   listReports(limit: number = 10, offset: number = 0, status?: string): Observable<Models.DomainAnalysisReport[]> {
     let params = new HttpParams()
       .set('limit', limit.toString())

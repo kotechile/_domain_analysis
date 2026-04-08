@@ -4,7 +4,7 @@ Reports API routes
 
 from fastapi import APIRouter, HTTPException, Query, Response, Depends
 from fastapi.responses import StreamingResponse
-from typing import List, Optional
+from typing import Any, List, Optional
 from datetime import datetime
 import structlog
 import io
@@ -21,17 +21,35 @@ logger = structlog.get_logger()
 router = APIRouter()
 
 
+def _get_user_id(current_user: Any) -> Optional[str]:
+    if not current_user:
+        return None
+    if isinstance(current_user, dict):
+        return current_user.get('id')
+    return getattr(current_user, 'id', None)
+
+
+async def _get_owned_report_or_404(domain: str, current_user: Any):
+    user_id = _get_user_id(current_user)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    db = get_database()
+    report = await db.get_report(domain, user_id=user_id)
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    return db, report
+
+
 @router.get("/reports/{domain}", response_model=ReportResponse)
-async def get_report(domain: str):
+async def get_report(domain: str, current_user = Depends(get_current_user)):
     """
     Get complete domain analysis report
     """
     try:
-        db = get_database()
-        report = await db.get_report(domain)
-        
-        if not report:
-            raise HTTPException(status_code=404, detail="Report not found")
+        _, report = await _get_owned_report_or_404(domain, current_user)
         
         if report.status != "completed":
             # Include error message if report failed
@@ -51,13 +69,13 @@ async def get_report(domain: str):
 
 
 @router.get("/reports/{domain}/page-summary")
-async def get_page_summary(domain: str):
+async def get_page_summary(domain: str, current_user = Depends(get_current_user)):
     """
     Get page summary data (backlinks summary) from raw_data_cache for a domain
     This data is collected during individual domain analysis
     """
     try:
-        db = get_database()
+        db, _ = await _get_owned_report_or_404(domain, current_user)
         
         # Get cached DataForSEO data which contains backlinks_summary
         raw_data = await db.get_raw_data(domain, DataSource.DATAFORSEO)
@@ -80,6 +98,59 @@ async def get_page_summary(domain: str):
     except Exception as e:
         logger.error("Failed to get page summary", domain=domain, error=str(e))
         raise HTTPException(status_code=500, detail="Failed to get page summary")
+
+
+@router.get("/reports/{domain}/details")
+async def get_report_details(
+    domain: str,
+    keywords_limit: int = Query(100, ge=1, le=1000),
+    backlinks_limit: int = Query(100, ge=1, le=1000),
+    current_user = Depends(get_current_user),
+):
+    """
+    Get a single authenticated payload for the report detail page.
+    """
+    try:
+        db, report = await _get_owned_report_or_404(domain, current_user)
+
+        from models.domain_analysis import DetailedDataType
+
+        keywords_data = await db.get_detailed_data(domain, DetailedDataType.KEYWORDS)
+        backlinks_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
+
+        keyword_items = (keywords_data.json_data or {}).get("items", []) if keywords_data else []
+        raw_backlinks = (backlinks_data.json_data or {}).get("items", []) if backlinks_data else []
+
+        mapped_backlinks = []
+        for item in raw_backlinks[:backlinks_limit]:
+            mapped_backlinks.append({
+                "domain": item.get("domain_from", ""),
+                "domain_rank": item.get("domain_from_rank", 0),
+                "anchor_text": item.get("anchor", ""),
+                "backlinks_count": item.get("links_count", 0),
+                "first_seen": item.get("first_seen", ""),
+                "last_seen": item.get("last_seen", ""),
+                "backlink_spam_score": item.get("backlink_spam_score", 0),
+            })
+
+        return {
+            "success": True,
+            "domain": domain,
+            "detailed_data_available": report.detailed_data_available or {},
+            "keywords": {
+                "total_count": len(keyword_items),
+                "items": keyword_items[:keywords_limit],
+            },
+            "backlinks": {
+                "total_count": len(raw_backlinks),
+                "items": mapped_backlinks,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get report details", domain=domain, error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get report details")
 
 
 @router.get("/reports/{domain}/history", response_model=HistoricalData)
@@ -116,7 +187,7 @@ async def list_reports(
     """
     try:
         db = get_database()
-        user_id = getattr(current_user, 'id', None)
+        user_id = _get_user_id(current_user)
         if not user_id:
             # If no user ID (unauthorized), return empty list or raise
             return []
@@ -225,16 +296,12 @@ async def list_reports(
 
 
 @router.get("/reports/{domain}/keywords")
-async def get_domain_keywords( domain: str, limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0) ):
+async def get_domain_keywords( domain: str, limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0), current_user = Depends(get_current_user) ):
     """
     Get detailed keywords data for a domain (on-demand from DataForSEO)
     """
     try:
-        db = get_database()
-        report = await db.get_report(domain)
-        
-        if not report:
-            raise HTTPException(status_code=404, detail="Report not found")
+        db, _ = await _get_owned_report_or_404(domain, current_user)
         
         # Get detailed keywords data from database
         from models.domain_analysis import DetailedDataType
@@ -294,16 +361,12 @@ async def get_domain_keywords( domain: str, limit: int = Query(100, ge=1, le=100
 
 
 @router.get("/reports/{domain}/keywords/export")
-async def export_domain_keywords(domain: str):
+async def export_domain_keywords(domain: str, current_user = Depends(get_current_user)):
     """
     Get all keywords data for CSV export (no pagination)
     """
     try:
-        db = get_database()
-        report = await db.get_report(domain)
-        
-        if not report:
-            raise HTTPException(status_code=404, detail="Report not found")
+        db, _ = await _get_owned_report_or_404(domain, current_user)
         
         # Get detailed keywords data from database
         from models.domain_analysis import DetailedDataType
@@ -325,16 +388,12 @@ async def export_domain_keywords(domain: str):
 
 
 @router.get("/reports/{domain}/backlinks")
-async def get_domain_backlinks( domain: str, limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0) ):
+async def get_domain_backlinks( domain: str, limit: int = Query(100, ge=1, le=1000), offset: int = Query(0, ge=0), current_user = Depends(get_current_user) ):
     """
     Get detailed backlinks data for a domain (on-demand from DataForSEO)
     """
     try:
-        db = get_database()
-        report = await db.get_report(domain)
-        
-        if not report:
-            raise HTTPException(status_code=404, detail="Report not found")
+        db, _ = await _get_owned_report_or_404(domain, current_user)
         
         # Get detailed backlinks data from database
         from models.domain_analysis import DetailedDataType
@@ -366,16 +425,12 @@ async def get_domain_backlinks( domain: str, limit: int = Query(100, ge=1, le=10
 
 
 @router.get("/reports/{domain}/backlinks/export")
-async def export_domain_backlinks(domain: str):
+async def export_domain_backlinks(domain: str, current_user = Depends(get_current_user)):
     """
     Get all backlinks data for CSV export (no pagination)
     """
     try:
-        db = get_database()
-        report = await db.get_report(domain)
-        
-        if not report:
-            raise HTTPException(status_code=404, detail="Report not found")
+        db, _ = await _get_owned_report_or_404(domain, current_user)
         
         # Get detailed backlinks data from database
         from models.domain_analysis import DetailedDataType
