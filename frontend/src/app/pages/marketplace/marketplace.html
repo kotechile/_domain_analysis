@@ -337,16 +337,6 @@
                                 [class.sort-active]="sortBy() === 'backlinks'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0" title="Referring Domains"
-                        class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
-                        (click)="toggleSort('referring_domains')" (keydown.enter)="toggleSort('referring_domains')">
-                        <div class="flex items-center justify-center space-x-2">
-                            <span>RD</span>
-                            <i-lucide [name]="getSortIcon('referring_domains')"
-                                class="w-3.5 h-3.5 opacity-0 group-hover:opacity-50 group-focus-visible:opacity-50"
-                                [class.sort-active]="sortBy() === 'referring_domains'"></i-lucide>
-                        </div>
-                    </th>
                     <th tabindex="0" title="Backlinks Spam Score (0 - 100)"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('backlinks_spam_score')" (keydown.enter)="toggleSort('backlinks_spam_score')">
@@ -394,7 +384,7 @@
                 @if (loading()) {
                 @for (item of [1,2,3,4,5,6,7,8]; track item) {
                 <tr class="animate-pulse">
-                    <td colspan="14" class="p-8">
+                    <td colspan="13" class="p-8">
                         <div class="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/4 mb-2"></div>
                         <div class="h-4 bg-gray-200 dark:bg-gray-800 rounded w-full opacity-20"></div>
                     </td>
@@ -497,16 +487,6 @@
                             <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">BL</span>
                         </div>
                     </td>
-                    <!-- Ref Domains -->
-                    <td class="text-center">
-                        <div class="flex flex-col items-center gap-0.5">
-                            <span class="text-lg font-bold tabular-nums"
-                                [class.opacity-20]="!item.has_statistics || !(item.referring_domains || 0)">
-                                {{ fmtMetric(item.referring_domains, item.has_statistics) }}
-                            </span>
-                            <span class="text-[9px] font-semibold opacity-30 uppercase tracking-widest">RD</span>
-                        </div>
-                    </td>
                     <!-- Spam Score -->
                     <td class="text-center">
                         <div class="flex flex-col items-center gap-0.5">
@@ -589,7 +569,7 @@
                 }
                 @} @else if (!loading()) {
                 <tr>
-                    <td colspan="14" class="p-20 text-center opacity-30 font-semibold tracking-widest uppercase">
+                    <td colspan="13" class="p-20 text-center opacity-30 font-semibold tracking-widest uppercase">
                         No domains found matching your criteria.
                     </td>
                 </tr>

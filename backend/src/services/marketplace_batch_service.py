@@ -213,7 +213,7 @@ class MarketplaceBatchService:
                 batch = domain_names[i:i + batch_size]
                 try:
                     logger.info(f"[Background] Triggering direct marketplace metrics for batch {batch_num}", domain_count=len(batch))
-                    await self.n8n_service.trigger_marketplace_metrics_workflows(batch, include_traffic=False)
+                    await self.n8n_service.trigger_marketplace_metrics_workflows(batch, include_traffic=True)
 
                     processed_count += len(batch)
                     
@@ -278,7 +278,7 @@ class MarketplaceBatchService:
             return {"success": False, "error": "Insufficient credits"}
             
         # 3. Trigger N8N
-        await self.n8n_service.trigger_marketplace_metrics_workflows([domain], include_traffic=False)
+        await self.n8n_service.trigger_marketplace_metrics_workflows([domain], include_traffic=True)
         
         # 4. Record History
         try:
