@@ -36,15 +36,19 @@
             <!-- Fill Metrics Button (primary action) -->
             <div class="relative group shrink-0">
                 <button (click)="triggerBulkRefresh()"
-                    [disabled]="fillGapsInProgress()"
+                    [disabled]="fillGapsInProgress() || postRefreshSyncInProgress()"
                     class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-20 active:scale-95 hover:bg-opacity-30 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
                     style="background: rgba(var(--accent-color-rgb), 0.1); color: var(--accent-color); border-color: rgba(var(--accent-color-rgb), 0.25);">
-                    @if (fillGapsInProgress()) {
+                    @if (fillGapsInProgress() || postRefreshSyncInProgress()) {
                         <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span>Processing…</span>
+                        <span>{{ fillGapsInProgress() ? 'Queueing Metrics…' : 'Syncing Results…' }}</span>
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/10"
+                            style="color: currentColor;">
+                            {{ fillGapsInProgress() ? fillGapsDisplayPercent() : postRefreshSyncDisplayPercent() }}%
+                        </span>
                     } @else {
                         <i-lucide [name]="Sparkles" class="w-4 h-4"></i-lucide>
                         <span>Fill Metrics</span>
@@ -56,9 +60,9 @@
                     <div class="rounded-xl px-4 py-3 text-xs shadow-2xl border border-opacity-10 leading-relaxed"
                         style="background: var(--card-bg); color: var(--text-color); border-color: var(--border-color)">
                         <p class="font-bold mb-1 opacity-90">✦ Fill Metrics</p>
-                        <p class="opacity-60">Finds up to 1,000 scored domains with <strong>missing SEO metrics</strong>
-                            matching your current filters, ordered by closest expiry. Skips domains already refreshed in
-                            the last 7 days.</p>
+                        <p class="opacity-60">Finds up to 1,000 domains with <strong>no SEO metrics yet</strong>
+                            matching your current filters and sort. The rows you are currently looking at are prioritized
+                            first so the visible table fills in sooner.</p>
                     </div>
                 </div>
             </div>
@@ -136,15 +140,17 @@
                     <span class="text-sm font-semibold" style="color: var(--accent-color)">Fill Gaps in Progress</span>
                 </div>
                 <span class="text-xs font-bold" style="color: var(--accent-color)">
-                    {{ fillGapsProgress()?.percent || 0 }}%
+                    {{ fillGapsDisplayPercent() }}%
                 </span>
             </div>
             <div class="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
-                <div class="h-full rounded-full transition-all duration-500"
-                    style="background: var(--accent-color); width: {{ fillGapsProgress()?.percent || 0 }}%">
+                <div class="h-full rounded-full transition-all duration-1000"
+                    [style.background]="'var(--accent-color)'"
+                    [style.width.%]="fillGapsDisplayPercent()">
                 </div>
             </div>
-            <p class="text-xs opacity-60 mt-2">{{ fillGapsProgress()?.message || 'Processing...' }}</p>
+            <p class="text-xs opacity-60 mt-2">{{ getFillStageMessage() }}</p>
+            <p class="text-[11px] opacity-45 mt-1">The bar tops out at 75% while provider callbacks are still running, then completes during table sync.</p>
         </div>
         }
 
@@ -161,15 +167,16 @@
                     <span class="text-sm font-semibold text-amber-500">Force Refresh in Progress</span>
                 </div>
                 <span class="text-xs font-bold text-amber-500">
-                    {{ forceRefreshProgress()?.percent || 0 }}%
+                    {{ forceRefreshDisplayPercent() }}%
                 </span>
             </div>
             <div class="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
-                <div class="h-full rounded-full transition-all duration-500 bg-amber-500"
-                    style="width: {{ forceRefreshProgress()?.percent || 0 }}%">
+                <div class="h-full rounded-full transition-all duration-1000 bg-amber-500"
+                    [style.width.%]="forceRefreshDisplayPercent()">
                 </div>
             </div>
-            <p class="text-xs opacity-60 mt-2">{{ forceRefreshProgress()?.message || 'Processing...' }}</p>
+            <p class="text-xs opacity-60 mt-2">{{ getForceRefreshStageMessage() }}</p>
+            <p class="text-[11px] opacity-45 mt-1">This stage reflects provider work being queued and acknowledged before final table sync completes.</p>
         </div>
         }
 
@@ -186,12 +193,12 @@
                     <span class="text-sm font-semibold text-sky-500">Syncing Metrics Into Table</span>
                 </div>
                 <span class="text-xs font-bold text-sky-500">
-                    {{ postRefreshSyncProgress()?.percent || 0 }}%
+                    {{ postRefreshSyncDisplayPercent() }}%
                 </span>
             </div>
             <div class="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
-                <div class="h-full rounded-full transition-all duration-500 bg-sky-500"
-                    style="width: {{ postRefreshSyncProgress()?.percent || 0 }}%">
+                <div class="h-full rounded-full transition-all duration-1000 bg-sky-500"
+                    [style.width.%]="postRefreshSyncDisplayPercent()">
                 </div>
             </div>
             <p class="text-xs opacity-60 mt-2">{{ postRefreshSyncProgress()?.message || 'Refreshing the table while callbacks arrive...' }}</p>

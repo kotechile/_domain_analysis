@@ -119,15 +119,20 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   fillGapsInProgress = signal<boolean>(false);
   fillGapsJobId = signal<string | null>(null);
   fillGapsProgress = signal<{ percent: number; message: string } | null>(null);
+  private fillGapsStartedAt = signal<number | null>(null);
 
   forceRefreshInProgress = signal<boolean>(false);
   forceRefreshJobId = signal<string | null>(null);
   forceRefreshProgress = signal<{ percent: number; message: string } | null>(null);
+  private forceRefreshStartedAt = signal<number | null>(null);
   postRefreshSyncInProgress = signal<boolean>(false);
   postRefreshSyncProgress = signal<{ percent: number; message: string } | null>(null);
+  private postRefreshSyncStartedAt = signal<number | null>(null);
+  private progressClock = signal<number>(Date.now());
 
   private progressSubscriptions = new Map<string, Subscription>();
   private postRefreshSyncSubscription: Subscription | null = null;
+  private progressClockSubscription: Subscription | null = null;
   private notFoundCount = new Map<string, number>(); // Track 404 errors per job
 
   // Filter Signals
@@ -167,6 +172,24 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (this.offeringType()) count++;
     if (this.expirationFromDate() || this.expirationToDate()) count++;
     return count;
+  });
+
+  fillGapsDisplayPercent = computed(() => {
+    this.progressClock();
+    if (!this.fillGapsInProgress()) return 0;
+    return this.getStagedPercent(this.fillGapsStartedAt(), 75, 120000);
+  });
+
+  forceRefreshDisplayPercent = computed(() => {
+    this.progressClock();
+    if (!this.forceRefreshInProgress()) return 0;
+    return this.getStagedPercent(this.forceRefreshStartedAt(), 75, 120000);
+  });
+
+  postRefreshSyncDisplayPercent = computed(() => {
+    this.progressClock();
+    if (!this.postRefreshSyncInProgress()) return 0;
+    return 75 + this.getStagedPercent(this.postRefreshSyncStartedAt(), 24, 90000);
   });
 
   private snackBar = inject(MatSnackBar);
@@ -242,10 +265,55 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     this.progressSubscriptions.forEach(sub => sub.unsubscribe());
     this.progressSubscriptions.clear();
     this.stopPostRefreshSync();
+    this.stopProgressClock();
     if (this.fetchTimeout) {
       clearTimeout(this.fetchTimeout);
       this.fetchTimeout = null;
     }
+  }
+
+  private startProgressClock() {
+    if (this.progressClockSubscription) return;
+    this.progressClockSubscription = interval(1000).subscribe(() => {
+      this.progressClock.set(Date.now());
+    });
+  }
+
+  private stopProgressClock() {
+    if (this.progressClockSubscription) {
+      this.progressClockSubscription.unsubscribe();
+      this.progressClockSubscription = null;
+    }
+  }
+
+  private refreshProgressClockState() {
+    if (this.fillGapsInProgress() || this.forceRefreshInProgress() || this.postRefreshSyncInProgress()) {
+      this.startProgressClock();
+    } else {
+      this.stopProgressClock();
+    }
+  }
+
+  private getStagedPercent(startedAt: number | null, maxPercent: number, durationMs: number): number {
+    if (!startedAt) return 0;
+    const elapsed = Math.max(0, this.progressClock() - startedAt);
+    return Math.min(maxPercent, Math.round((elapsed / durationMs) * maxPercent));
+  }
+
+  getFillStageMessage(): string {
+    const raw = this.fillGapsProgress()?.message || 'Preparing provider requests...';
+    if ((this.fillGapsProgress()?.percent || 0) >= 100) {
+      return 'Provider work is queued. Waiting for external metrics and callback processing before the table is fully updated.';
+    }
+    return raw;
+  }
+
+  getForceRefreshStageMessage(): string {
+    const raw = this.forceRefreshProgress()?.message || 'Preparing provider requests...';
+    if ((this.forceRefreshProgress()?.percent || 0) >= 100) {
+      return 'Provider work is queued. Waiting for fresh callbacks before the table is fully updated.';
+    }
+    return raw;
   }
 
   private stopPostRefreshSync() {
@@ -255,6 +323,8 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     }
     this.postRefreshSyncInProgress.set(false);
     this.postRefreshSyncProgress.set(null);
+    this.postRefreshSyncStartedAt.set(null);
+    this.refreshProgressClockState();
   }
 
   private startPostRefreshSync(type: 'fill_gaps' | 'force_refresh', statusMessage?: string) {
@@ -264,10 +334,12 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
     this.stopPostRefreshSync();
     this.postRefreshSyncInProgress.set(true);
+    this.postRefreshSyncStartedAt.set(Date.now());
     this.postRefreshSyncProgress.set({
-      percent: 0,
+      percent: 75,
       message: statusMessage || `${label} finished queuing requests. Metrics are still syncing into the table...`
     });
+    this.refreshProgressClockState();
 
     this.fetchAuctions();
     this.creditService.refreshData();
@@ -280,7 +352,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
           const percent = Math.round((completedPasses / totalPasses) * 100);
           this.fetchAuctions();
           this.postRefreshSyncProgress.set({
-            percent,
+            percent: 75 + Math.round((completedPasses / totalPasses) * 24),
             message: `${label} results are still arriving from providers. Refreshing table automatically (${completedPasses}/${totalPasses})...`
           });
         },
@@ -342,6 +414,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
             if (type === 'fill_gaps') {
               this.fillGapsInProgress.set(false);
               this.fillGapsJobId.set(null);
+              this.fillGapsStartedAt.set(null);
               const msg = status.status === 'completed'
                 ? `✅ ${status.message || 'Fill Gaps completed!'}`
                 : `❌ ${status.message || 'Fill Gaps failed'}`;
@@ -349,6 +422,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
             } else {
               this.forceRefreshInProgress.set(false);
               this.forceRefreshJobId.set(null);
+              this.forceRefreshStartedAt.set(null);
               const msg = status.status === 'completed'
                 ? `✅ ${status.message || 'Force Refresh completed!'}`
                 : `❌ ${status.message || 'Force Refresh failed'}`;
@@ -376,11 +450,13 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
                 this.fillGapsInProgress.set(false);
                 this.fillGapsJobId.set(null);
                 this.fillGapsProgress.set(null);
+                this.fillGapsStartedAt.set(null);
                 this.snackBar.open('✅ Fill Metrics likely finished queuing. Keeping the table syncing for a minute...', 'Close', { duration: 5000 });
               } else {
                 this.forceRefreshInProgress.set(false);
                 this.forceRefreshJobId.set(null);
                 this.forceRefreshProgress.set(null);
+                this.forceRefreshStartedAt.set(null);
                 this.snackBar.open('✅ Force Refresh likely finished queuing. Keeping the table syncing for a minute...', 'Close', { duration: 5000 });
               }
 
@@ -398,11 +474,14 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
             this.fillGapsInProgress.set(false);
             this.fillGapsJobId.set(null);
             this.fillGapsProgress.set(null);
+            this.fillGapsStartedAt.set(null);
           } else {
             this.forceRefreshInProgress.set(false);
             this.forceRefreshJobId.set(null);
             this.forceRefreshProgress.set(null);
+            this.forceRefreshStartedAt.set(null);
           }
+          this.refreshProgressClockState();
         },
         complete: () => {
           // Polling completed naturally (max polls reached)
@@ -414,11 +493,14 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
             this.fillGapsInProgress.set(false);
             this.fillGapsJobId.set(null);
             this.fillGapsProgress.set(null);
+            this.fillGapsStartedAt.set(null);
           } else {
             this.forceRefreshInProgress.set(false);
             this.forceRefreshJobId.set(null);
             this.forceRefreshProgress.set(null);
+            this.forceRefreshStartedAt.set(null);
           }
+          this.refreshProgressClockState();
         }
       });
 
@@ -524,7 +606,9 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
     // Set processing state
     this.fillGapsInProgress.set(true);
+    this.fillGapsStartedAt.set(Date.now());
     this.fillGapsProgress.set({ percent: 0, message: 'Starting...' });
+    this.refreshProgressClockState();
 
     // Show immediate feedback (dismiss after 3 seconds, processing continues in background)
     this.snackBar.open(
@@ -548,6 +632,8 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
       } else if ((res as any).skipped) {
         this.fillGapsInProgress.set(false);
         this.fillGapsProgress.set(null);
+        this.fillGapsStartedAt.set(null);
+        this.refreshProgressClockState();
         this.snackBar.open(
           '✅ All scored domains already have fresh metrics — nothing to refresh!',
           'Close', { duration: 6000 }
@@ -555,12 +641,16 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
       } else {
         this.fillGapsInProgress.set(false);
         this.fillGapsProgress.set(null);
+        this.fillGapsStartedAt.set(null);
+        this.refreshProgressClockState();
         const msg = (res as any).error || 'Failed to trigger refresh';
         this.snackBar.open(`❌ ${msg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });
       }
     } catch (e: any) {
       this.fillGapsInProgress.set(false);
       this.fillGapsProgress.set(null);
+      this.fillGapsStartedAt.set(null);
+      this.refreshProgressClockState();
       console.error('[Fill Gaps] Error:', e);
       const errorMsg = e.error?.detail || e.error?.error || 'Failed to trigger Fill-the-Gaps refresh';
       this.snackBar.open(`❌ ${errorMsg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });
@@ -595,7 +685,9 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
     // Set processing state
     this.forceRefreshInProgress.set(true);
+    this.forceRefreshStartedAt.set(Date.now());
     this.forceRefreshProgress.set({ percent: 0, message: 'Starting...' });
+    this.refreshProgressClockState();
 
     // Show immediate feedback
     this.snackBar.open(
@@ -618,12 +710,16 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
       } else {
         this.forceRefreshInProgress.set(false);
         this.forceRefreshProgress.set(null);
+        this.forceRefreshStartedAt.set(null);
+        this.refreshProgressClockState();
         const msg = (res as any).error || 'Failed to trigger force refresh';
         this.snackBar.open(`❌ ${msg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });
       }
     } catch (e: any) {
       this.forceRefreshInProgress.set(false);
       this.forceRefreshProgress.set(null);
+      this.forceRefreshStartedAt.set(null);
+      this.refreshProgressClockState();
       console.error('[Force Refresh] Error:', e);
       const errorMsg = e.error?.detail || e.error?.error || 'Failed to trigger force refresh';
       this.snackBar.open(`❌ ${errorMsg}`, 'Close', { duration: 6000, panelClass: ['error-snackbar'] });
