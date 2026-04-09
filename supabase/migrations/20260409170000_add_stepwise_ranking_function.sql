@@ -96,6 +96,7 @@ BEGIN
     UPDATE auctions a
     SET
         ranking = t.new_ranking,
+        name_rank = t.new_ranking,
         updated_at = NOW()
     FROM tmp_ranking_batch t
     WHERE a.id = t.id
@@ -120,6 +121,15 @@ BEGIN
         UPDATE auctions a
         SET
             preferred = CASE
+                WHEN v_score_threshold IS NULL AND v_rank_threshold IS NULL THEN TRUE
+                WHEN v_use_both_thresholds THEN
+                    (v_score_threshold IS NULL OR a.score >= v_score_threshold) AND
+                    (v_rank_threshold IS NULL OR t.new_ranking <= v_rank_threshold)
+                ELSE
+                    (v_score_threshold IS NULL OR a.score >= v_score_threshold) OR
+                    (v_rank_threshold IS NULL OR t.new_ranking <= v_rank_threshold)
+            END,
+            name_preferred = CASE
                 WHEN v_score_threshold IS NULL AND v_rank_threshold IS NULL THEN TRUE
                 WHEN v_use_both_thresholds THEN
                     (v_score_threshold IS NULL OR a.score >= v_score_threshold) AND

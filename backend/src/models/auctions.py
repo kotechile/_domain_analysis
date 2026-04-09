@@ -16,8 +16,13 @@ class Auction(BaseModel):
     auction_site: str = Field(..., min_length=1, max_length=100)
     current_bid: Optional[float] = None
     ranking: Optional[int] = None
+    name_rank: Optional[int] = None
+    opportunity_rank: Optional[int] = None
+    organic_search_rank: Optional[int] = None
     score: Optional[float] = None
+    opportunity_score: Optional[float] = None
     preferred: bool = False
+    name_preferred: bool = False
     has_statistics: bool = False
     has_analysis: bool = False
     organic_traffic: Optional[float] = None
@@ -86,8 +91,13 @@ class AuctionReportItem(BaseModel):
     auction_site: str
     current_bid: Optional[float] = None
     ranking: Optional[int] = None
+    name_rank: Optional[int] = None
+    opportunity_rank: Optional[int] = None
+    organic_search_rank: Optional[int] = None
     score: Optional[float] = None
+    opportunity_score: Optional[float] = None
     preferred: bool
+    name_preferred: bool = False
     has_statistics: bool
     has_analysis: bool = False
     organic_traffic: Optional[float] = None
@@ -105,6 +115,5 @@ class AuctionReportItem(BaseModel):
     
     class Config:
         json_encoders = { datetime: lambda v: v.isoformat() if v else None }
-
 
 

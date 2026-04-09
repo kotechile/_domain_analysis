@@ -191,6 +191,12 @@ class DatabaseService:
             "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS offer_type VARCHAR(50);",
             "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS first_seen TIMESTAMP WITH TIME ZONE;",
             "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS to_delete BOOLEAN DEFAULT false;",
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS name_rank INTEGER;",
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS name_preferred BOOLEAN DEFAULT false;",
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS opportunity_rank INTEGER;",
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS opportunity_score DECIMAL(10,2);",
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS organic_search_rank INTEGER;",
+            "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS opportunity_score_updated_at TIMESTAMP WITH TIME ZONE;",
             
             # Ensure auctions_staging table has ALL necessary columns (critical for bulk uploads)
             "ALTER TABLE auctions_staging ADD COLUMN IF NOT EXISTS job_id VARCHAR(255);",
@@ -1714,9 +1720,9 @@ class DatabaseService:
                         query = query.eq('score', 0)
 
                 if filters.get('min_rank') is not None:
-                    query = query.gte('ranking', filters['min_rank'])
+                    query = query.gte('name_rank', filters['min_rank'])
                 if filters.get('max_rank') is not None:
-                    query = query.lte('ranking', filters['max_rank'])
+                    query = query.lte('name_rank', filters['max_rank'])
                 if filters.get('min_score') is not None:
                     query = query.gte('score', filters['min_score'])
                 if filters.get('max_score') is not None:
@@ -1730,7 +1736,7 @@ class DatabaseService:
                 query = query.gte('expiration_date', now)
             
             # Apply sorting
-            valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score', 'domain_rating', 'organic_traffic']
+            valid_sort_fields = ['expiration_date', 'score', 'ranking', 'name_rank', 'opportunity_rank', 'opportunity_score', 'organic_search_rank', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score', 'domain_rating', 'organic_traffic']
             if sort_by not in valid_sort_fields:
                 sort_by = 'expiration_date'
             
@@ -1915,7 +1921,7 @@ class DatabaseService:
                 where_clause = " AND ".join(where_conditions)
 
                 # Sanitize sort fields to prevent injection
-                valid_sort_fields = ['expiration_date', 'score', 'ranking', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score', 'domain_rating', 'organic_traffic', 'updated_at']
+                valid_sort_fields = ['expiration_date', 'score', 'ranking', 'name_rank', 'opportunity_rank', 'opportunity_score', 'organic_search_rank', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score', 'domain_rating', 'organic_traffic', 'updated_at']
                 safe_sort_by = sort_by if sort_by in valid_sort_fields else 'updated_at'
                 safe_sort_order = 'DESC' if sort_order.lower() == 'desc' else 'ASC'
                 nulls_clause = 'NULLS LAST' if safe_sort_order == 'DESC' else 'NULLS FIRST'
@@ -1930,12 +1936,12 @@ class DatabaseService:
                 WHERE {where_clause}
                   AND ( -- Include if missing any metric (regardless of updated_at)
                     (organic_traffic IS NULL AND (page_statistics IS NULL OR (page_statistics->>'traffic') IS NULL))
-                    OR (ranking IS NULL AND (page_statistics IS NULL OR (page_statistics->>'rank') IS NULL))
+                    OR (organic_search_rank IS NULL AND (page_statistics IS NULL OR (page_statistics->>'rank') IS NULL))
                     OR (backlinks IS NULL AND (page_statistics IS NULL OR (page_statistics->>'backlinks') IS NULL))
                     OR (backlinks_spam_score IS NULL AND (page_statistics IS NULL OR (page_statistics->>'backlinks_spam_score') IS NULL))
                     -- OR include if has all metrics but is stale (>7 days)
                     OR ( organic_traffic IS NOT NULL
-                      AND ranking IS NOT NULL
+                      AND organic_search_rank IS NOT NULL
                       AND backlinks IS NOT NULL
                       AND backlinks_spam_score IS NOT NULL
                       AND (updated_at IS NULL OR updated_at < '{cutoff_7d}') ) )
@@ -1961,7 +1967,7 @@ class DatabaseService:
                     # Log first candidate to understand data structure
                     if candidates:
                         first = candidates[0]
-                        logger.info("First candidate sample", domain=first.get('domain'), updated_at=first.get('updated_at'), page_statistics=first.get('page_statistics') is not None, organic_traffic=first.get('organic_traffic'), ranking=first.get('ranking'), backlinks=first.get('backlinks'), backlinks_spam_score=first.get('backlinks_spam_score'))
+                        logger.info("First candidate sample", domain=first.get('domain'), updated_at=first.get('updated_at'), page_statistics=first.get('page_statistics') is not None, organic_traffic=first.get('organic_traffic'), name_rank=first.get('name_rank'), organic_search_rank=first.get('organic_search_rank'), backlinks=first.get('backlinks'), backlinks_spam_score=first.get('backlinks_spam_score'))
 
                     # ) In-memory filtering (fallback
                     # Logic: Include domain if missing ANY metric
@@ -1975,7 +1981,7 @@ class DatabaseService:
                             stats.get('traffic') is not None or
                             stats.get('etv') is not None or
                             stats.get('organic_traffic') is not None )
-                        has_rank = ( auction.get('ranking') is not None or
+                        has_rank = ( auction.get('organic_search_rank') is not None or
                             stats.get('rank') is not None or
                             stats.get('ranking') is not None )
                         has_backlinks = ( auction.get('backlinks') is not None or
@@ -2148,7 +2154,7 @@ class DatabaseService:
             # Rank
             ranking = get_metric(updated_stats, ['rank', 'ranking'])
             if ranking is not None:
-                update_data['ranking'] = ranking
+                update_data['organic_search_rank'] = ranking
                 
             # Backlinks
             backlinks = get_metric(updated_stats, ['backlinks', 'total_backlinks'])

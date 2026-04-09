@@ -506,8 +506,13 @@ export interface Auction {
     expiration_date: string;
     auction_site: string;
     ranking?: number;
+    name_rank?: number;
+    opportunity_rank?: number;
+    organic_search_rank?: number;
     score?: number;
+    opportunity_score?: number;
     preferred: boolean;
+    name_preferred?: boolean;
     has_statistics: boolean;
     has_analysis?: boolean;
     current_bid?: number;
