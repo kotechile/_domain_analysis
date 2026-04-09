@@ -36,11 +36,10 @@ class AuctionScoringService:
             List of auction records with age_score and filter status
         """
         try:
-            if not self.db_service.client:
-                raise Exception("Supabase client not available")
+            client = await self.db_service._get_client()
             
             # Call the optimized PostgreSQL function
-            result = (await self.db_service._get_client()).rpc( 'filter_and_pre_score_auctions', { 'p_batch_limit': batch_size, 'p_config_id': config_id } ).execute()
+            result = await client.rpc( 'filter_and_pre_score_auctions', { 'p_batch_limit': batch_size, 'p_config_id': config_id } ).execute()
             
             if result.data:
                 logger.info("Fetched unprocessed batch", count=len(result.data), batch_size=batch_size)
@@ -130,20 +129,12 @@ class AuctionScoringService:
                     failed_count += 1
                     continue
                 
-                # ) Get config weights (default if not available
-                # We'll use the weights from the scoring config, but for now use defaults
-                age_weight = 0.40
-                lfs_weight = 0.30
-                sv_weight = 0.30
-                
-                # Calculate total score using age_score from DB and complex scores from Python
+                # Use the centralized v2 scoring formula from DomainScoringService so
+                # auction processing and direct bulk scoring stay aligned.
                 lfs_score = scored.lexical_frequency_score or 0.0
                 sv_score = scored.semantic_value_score or 0.0
-                
-                total_score = ( (age_score * age_weight) + 
-                    (lfs_score * lfs_weight) + 
-                    (sv_score * sv_weight) )
-                
+                total_score = scored.total_meaning_score if scored.total_meaning_score is not None else 0.0
+
                 scores[domain_id] = { 'score': round(total_score, 2), 'lfs_score': round(lfs_score, 2), 'sv_score': round(sv_score, 2), 'age_score': age_score }
                 passed_count += 1
                 
@@ -172,8 +163,7 @@ class AuctionScoringService:
             Number of records updated
         """
         try:
-            if not self.db_service.client:
-                raise Exception("Supabase client not available")
+            client = await self.db_service._get_client()
             
             # Format scores for PostgreSQL function
             # Convert UUID keys to strings and prepare JSONB structure
@@ -182,7 +172,7 @@ class AuctionScoringService:
                 scores_jsonb[domain_id] = { 'score': score_data.get('score'), 'lfs_score': score_data.get('lfs_score'), 'sv_score': score_data.get('sv_score') }
             
             # Call bulk update function
-            result = (await self.db_service._get_client()).rpc( 'bulk_update_auction_scores', {'p_scores': scores_jsonb} ).execute()
+            result = await client.rpc( 'bulk_update_auction_scores', {'p_scores': scores_jsonb} ).execute()
             
             if result.data and 'updated_count' in result.data:
                 updated_count = result.data['updated_count']
@@ -207,14 +197,13 @@ class AuctionScoringService:
             Statistics about ranking recalculation
         """
         try:
-            if not self.db_service.client:
-                raise Exception("Supabase client not available")
+            client = await self.db_service._get_client()
             
             # For large datasets, try chunked approach first
             if use_chunked:
                 try:
                     logger.info("Attempting chunked ranking recalculation")
-                    result = (await self.db_service._get_client()).rpc( 'recalculate_auction_rankings_chunked', {'p_batch_size': 50000} ).execute()
+                    result = await client.rpc( 'recalculate_auction_rankings_chunked', {'p_batch_size': 50000} ).execute()
                     
                     if result.data and result.data.get('success'):
                         logger.info("Chunked ranking recalculation successful", result=result.data)
@@ -230,7 +219,7 @@ class AuctionScoringService:
             
             # Fallback to standard approach
             logger.info("Using standard ranking recalculation")
-            result = (await self.db_service._get_client()).rpc('recalculate_auction_rankings').execute()
+            result = await client.rpc('recalculate_auction_rankings').execute()
             
             if result.data:
                 logger.info("Recalculated rankings", result=result.data)
@@ -316,21 +305,20 @@ class AuctionScoringService:
             Statistics about processing status
         """
         try:
-            if not self.db_service.client:
-                raise Exception("Supabase client not available")
+            client = await self.db_service._get_client()
             
             # Query unprocessed count
-            unprocessed_result = ( (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', False).execute() )
+            unprocessed_result = await client.table('auctions').select('id', count='exact').eq('processed', False).execute()
             
             unprocessed_count = unprocessed_result.count if hasattr(unprocessed_result, 'count') else 0
             
             # Query processed count
-            processed_result = ( (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).execute() )
+            processed_result = await client.table('auctions').select('id', count='exact').eq('processed', True).execute()
             
             processed_count = processed_result.count if hasattr(processed_result, 'count') else 0
             
             # ) Query scored count (processed with non-null score
-            scored_result = ( (await self.db_service._get_client()).table('auctions').select('id', count='exact').eq('processed', True).not_.is_('score', 'null').execute() )
+            scored_result = await client.table('auctions').select('id', count='exact').eq('processed', True).not_.is_('score', 'null').execute()
             
             scored_count = scored_result.count if hasattr(scored_result, 'count') else 0
             
@@ -339,10 +327,6 @@ class AuctionScoringService:
         except Exception as e:
             logger.error("Failed to get processing stats", error=str(e))
             raise
-
-
-
-
 
 
 

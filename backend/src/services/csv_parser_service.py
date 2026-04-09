@@ -15,6 +15,8 @@ from utils.date_utils import parse_iso_datetime
 
 logger = structlog.get_logger()
 
+DEFAULT_SCORING_TLDS = {'.com', '.net', '.org', '.co', '.io', '.ai'}
+
 def find_col_static(fieldnames, possible_names):
     if not fieldnames: return None
     lower_map = {str(f).lower(): f for f in fieldnames}
@@ -25,6 +27,27 @@ def find_col_static(fieldnames, possible_names):
 
 class CSVParserService:
     """Service for parsing CSV files from different auction sites"""
+
+    def _get_allowed_scoring_tlds(self) -> set[str]:
+        """
+        Return the TLD whitelist for the lightweight post-import scorer.
+
+        This scorer is intentionally simpler than DomainScoringService, but it
+        still needs to honor the same allowlist so unsupported TLDs never get a
+        numeric score.
+        """
+        try:
+            from utils.config import get_settings
+
+            configured_tlds = getattr(get_settings(), 'TIER_1_TLDS', None) or []
+            normalized_tlds = {
+                tld.lower() if str(tld).startswith('.') else f".{str(tld).lower()}"
+                for tld in configured_tlds
+                if tld
+            }
+            return normalized_tlds or DEFAULT_SCORING_TLDS
+        except Exception:
+            return DEFAULT_SCORING_TLDS
     
     def parse_csv(self, source: Any, auction_site: str, filename: str = '', is_file: bool = False) -> Iterator[AuctionInput]:
         """
@@ -256,6 +279,14 @@ class CSVParserService:
             name_part = parts[0]
             tld_part = '.' + parts[1]
 
+        allowed_tlds = self._get_allowed_scoring_tlds()
+        if not tld_part or tld_part not in allowed_tlds:
+            return SimpleNamespace(
+                total_meaning_score=None,
+                eligible_for_scoring=False,
+                filter_reason=f"TLD {tld_part or '[missing]'} not in scoring whitelist"
+            )
+
         # 1. TLD Quality (Max 25)
         tld_score = 0
         if tld_part == '.com':
@@ -309,6 +340,8 @@ class CSVParserService:
         
         return SimpleNamespace(
             total_meaning_score=float(total_score),
+            eligible_for_scoring=True,
+            filter_reason=None,
             tld_score=tld_score,
             length_score=len_score,
             comp_score=comp_score,

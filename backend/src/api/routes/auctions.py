@@ -198,9 +198,6 @@ async def _score_new_domains_after_import(db, import_batch_id: str, scoring_serv
     UPSERT_BATCH_SIZE = 1000
 
     try:
-        from services.csv_parser_service import CSVParserService
-        parser = CSVParserService()
-        
         while True:
             # Get batch of new domains from this import
             result = await client.rpc('get_new_domains_for_scoring', {
@@ -217,11 +214,13 @@ async def _score_new_domains_after_import(db, import_batch_id: str, scoring_serv
             # Prepare records
             for domain_record in new_domains:
                 try:
-                    # Parse domain to get scoring data
-                    parsed = parser.parse_single_domain(domain_record['domain'])
+                    scored = scoring_service.score_domain(
+                        NamecheapDomain(name=domain_record['domain']),
+                        fast_mode=fast_mode
+                    )
                     score = None
-                    if parsed and hasattr(parsed, 'total_meaning_score') and parsed.total_meaning_score is not None:
-                        score = float(parsed.total_meaning_score)
+                    if scored.total_meaning_score is not None:
+                        score = float(scored.total_meaning_score)
 
                     # MUST include unique constraint columns: domain, auction_site, expiration_date
                     batch_updates.append({

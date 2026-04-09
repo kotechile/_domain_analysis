@@ -470,6 +470,10 @@ class ScoredDomain(BaseModel):
     age_score: Optional[float] = None
     lexical_frequency_score: Optional[float] = None
     semantic_value_score: Optional[float] = None
+    tld_score: Optional[float] = None
+    liquidity_score: Optional[float] = None
+    brandability_score: Optional[float] = None
+    commercial_intent_score: Optional[float] = None
     rank: Optional[int] = None  # Position in ranked list
 
 
