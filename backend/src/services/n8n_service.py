@@ -587,14 +587,38 @@ class N8NService:
         summary workflow. It relies on direct rank, backlinks, and spam score
         callbacks, with traffic optional.
         """
-        results: Dict[str, Any] = {}
+        workflow_calls = {
+            "rank": self.trigger_bulk_rank_workflow(domains),
+            "backlinks": self.trigger_bulk_backlinks_workflow(domains),
+            "spam_score": self.trigger_bulk_spam_score_workflow(domains),
+        }
 
         if include_traffic:
-            results["traffic"] = await self.trigger_bulk_traffic_batch_workflow(domains)
+            workflow_calls["traffic"] = self.trigger_bulk_traffic_batch_workflow(domains)
 
-        results["rank"] = await self.trigger_bulk_rank_workflow(domains)
-        results["backlinks"] = await self.trigger_bulk_backlinks_workflow(domains)
-        results["spam_score"] = await self.trigger_bulk_spam_score_workflow(domains)
+        names = list(workflow_calls.keys())
+        raw_results = await asyncio.gather(*workflow_calls.values(), return_exceptions=True)
+
+        results: Dict[str, Any] = {}
+        for name, raw_result in zip(names, raw_results):
+            if isinstance(raw_result, Exception):
+                logger.error(
+                    "Marketplace metrics workflow trigger raised an exception",
+                    workflow=name,
+                    domain_count=len(domains),
+                    error=str(raw_result),
+                )
+                results[name] = None
+                continue
+
+            results[name] = raw_result
+
+        logger.info(
+            "Marketplace metrics workflows trigger results",
+            domain_count=len(domains),
+            successful_workflows=[name for name, value in results.items() if value],
+            failed_workflows=[name for name, value in results.items() if not value],
+        )
 
         return results
     

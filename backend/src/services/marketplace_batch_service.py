@@ -249,21 +249,45 @@ class MarketplaceBatchService:
 
             processed_count = 0
             failed_count = 0
+            traffic_updated_total = 0
+            successful_workflows = set()
+            failed_workflows = set()
 
             for i in range(0, len(domain_names), batch_size):
                 batch_num = i // batch_size + 1
                 batch = domain_names[i:i + batch_size]
                 try:
                     logger.info(f"[Background] Triggering direct marketplace metrics via n8n for batch {batch_num}", domain_count=len(batch))
-                    await self.n8n_service.trigger_marketplace_metrics_workflows(batch, include_traffic=False)
+                    workflow_results = await self.n8n_service.trigger_marketplace_metrics_workflows(batch, include_traffic=False)
+                    batch_successful_workflows = [name for name, value in workflow_results.items() if value]
+                    batch_failed_workflows = [name for name, value in workflow_results.items() if not value]
+
+                    successful_workflows.update(batch_successful_workflows)
+                    failed_workflows.update(batch_failed_workflows)
 
                     logger.info(f"[Background] Fetching direct backend traffic metrics for batch {batch_num}", domain_count=len(batch))
-                    await self._fetch_and_store_traffic_metrics(batch, user_id=user_id if isinstance(user_id, UUID) else None)
+                    traffic_updated = await self._fetch_and_store_traffic_metrics(batch, user_id=user_id if isinstance(user_id, UUID) else None)
+                    traffic_updated_total += traffic_updated
 
                     processed_count += len(batch)
                     
                     if job_id:
-                        await ProgressTracker.update_progress( job_id, processed_items=processed_count, failed_items=failed_count, current_batch=batch_num, total_batches=total_batches, message=f"Sent {processed_count}/{len(domain_names)} domains to N8N..." )
+                        progress_message = (
+                            f"Queued {processed_count}/{len(domain_names)} domains. "
+                            f"Traffic updated for {traffic_updated_total} so far. "
+                            f"Successful triggers: {', '.join(sorted(successful_workflows)) or 'none'}."
+                        )
+                        if failed_workflows:
+                            progress_message += f" Trigger failures: {', '.join(sorted(failed_workflows))}."
+
+                        await ProgressTracker.update_progress(
+                            job_id,
+                            processed_items=processed_count,
+                            failed_items=failed_count,
+                            current_batch=batch_num,
+                            total_batches=total_batches,
+                            message=progress_message,
+                        )
 
                     if i + batch_size < len(domain_names):
                         await asyncio.sleep(2)
@@ -281,7 +305,24 @@ class MarketplaceBatchService:
 
             # 6. Complete job
             if job_id:
-                await ProgressTracker.complete_job( job_id, success=True, message=f"Successfully triggered refresh for {processed_count} domains." )
+                failed_workflow_list = sorted(failed_workflows)
+                successful_workflow_list = sorted(successful_workflows)
+
+                if failed_workflow_list:
+                    completion_message = (
+                        f"Partial refresh for {processed_count} domains. "
+                        f"Traffic updated immediately for {traffic_updated_total}. "
+                        f"Successful workflow triggers: {', '.join(successful_workflow_list) or 'none'}. "
+                        f"Failed workflow triggers: {', '.join(failed_workflow_list)}."
+                    )
+                    await ProgressTracker.complete_job(job_id, success=False, message=completion_message)
+                else:
+                    completion_message = (
+                        f"Queued refresh for {processed_count} domains. "
+                        f"Traffic updated immediately for {traffic_updated_total}. "
+                        f"Rank/backlinks/spam results continue syncing asynchronously."
+                    )
+                    await ProgressTracker.complete_job(job_id, success=True, message=completion_message)
             
             with open(DEBUG_LOG, 'a') as f:
                 f.write(f"--- REFRESH COMPLETE: {datetime.utcnow().isoformat()} ---\n")
