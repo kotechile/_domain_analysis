@@ -596,11 +596,21 @@ async def receive_bulk_backlinks_webhook(request: N8NBulkRankWebhookRequest):
         # Bulk backlinks API: approximately $0.005 per domain (more expensive than rank)
         estimated_cost = request.cost if request.cost is not None else (len(result_data) * 0.005)
 
-        db = get_database()
-        await db.log_api_usage(user_action='BULK REFRESH', api_service='Backlinks (Bulk)', request_id=request.request_id, cost=estimated_cost, credits_count=request.credits_count or 0.0, domain=None)
-        logger.info("Bulk backlinks cost tracked", request_id=request.request_id, cost=estimated_cost, items=len(result_data))
-
         async def process_data():
+            db = get_database()
+            try:
+                await db.log_api_usage(
+                    user_action='BULK REFRESH',
+                    api_service='Backlinks (Bulk)',
+                    request_id=request.request_id,
+                    cost=estimated_cost,
+                    credits_count=request.credits_count or 0.0,
+                    domain=None,
+                )
+                logger.info("Bulk backlinks cost tracked", request_id=request.request_id, cost=estimated_cost, items=len(result_data))
+            except Exception as exc:
+                logger.error("Failed to track bulk backlinks cost", request_id=request.request_id, error=str(exc))
+
             async def process_item(result_item):
                 nonlocal processed_count, failed_count
                 try:
@@ -703,10 +713,21 @@ async def receive_bulk_spam_score_webhook(request: N8NBulkRankWebhookRequest):
         # Bulk spam score API: approximately $0.001 per domain
         estimated_cost = request.cost if request.cost is not None else (len(result_data) * 0.001)
 
-        db = get_database()
-        await db.log_api_usage(user_action='BULK REFRESH', api_service='Spam Score (Bulk)', request_id=request.request_id, cost=estimated_cost, credits_count=request.credits_count or 0.0, domain=None)
-        logger.info("Bulk spam score cost tracked", request_id=request.request_id, cost=estimated_cost, items=len(result_data))
         async def process_data():
+            db = get_database()
+            try:
+                await db.log_api_usage(
+                    user_action='BULK REFRESH',
+                    api_service='Spam Score (Bulk)',
+                    request_id=request.request_id,
+                    cost=estimated_cost,
+                    credits_count=request.credits_count or 0.0,
+                    domain=None,
+                )
+                logger.info("Bulk spam score cost tracked", request_id=request.request_id, cost=estimated_cost, items=len(result_data))
+            except Exception as exc:
+                logger.error("Failed to track bulk spam score cost", request_id=request.request_id, error=str(exc))
+
             processed_count = 0
             failed_count = 0
             failed_domains = []
