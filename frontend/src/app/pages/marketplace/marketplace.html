@@ -121,7 +121,7 @@
     </div>
 
     <!-- Progress Bars -->
-    @if (fillGapsInProgress() || forceRefreshInProgress()) {
+    @if (fillGapsInProgress() || forceRefreshInProgress() || postRefreshSyncInProgress()) {
     <div class="space-y-3">
         <!-- Fill Gaps Progress -->
         @if (fillGapsInProgress()) {
@@ -170,6 +170,31 @@
                 </div>
             </div>
             <p class="text-xs opacity-60 mt-2">{{ forceRefreshProgress()?.message || 'Processing...' }}</p>
+        </div>
+        }
+
+        <!-- Post-refresh sync progress -->
+        @if (postRefreshSyncInProgress()) {
+        <div class="p-4 rounded-xl border border-opacity-10"
+            style="background: rgba(59, 130, 246, 0.05); border-color: rgba(59, 130, 246, 0.2)">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center space-x-2">
+                    <svg class="animate-spin w-4 h-4 text-sky-500" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span class="text-sm font-semibold text-sky-500">Syncing Metrics Into Table</span>
+                </div>
+                <span class="text-xs font-bold text-sky-500">
+                    {{ postRefreshSyncProgress()?.percent || 0 }}%
+                </span>
+            </div>
+            <div class="h-2 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-500 bg-sky-500"
+                    style="width: {{ postRefreshSyncProgress()?.percent || 0 }}%">
+                </div>
+            </div>
+            <p class="text-xs opacity-60 mt-2">{{ postRefreshSyncProgress()?.message || 'Refreshing the table while callbacks arrive...' }}</p>
         </div>
         }
     </div>

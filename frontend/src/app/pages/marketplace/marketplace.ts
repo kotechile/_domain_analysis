@@ -123,8 +123,11 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   forceRefreshInProgress = signal<boolean>(false);
   forceRefreshJobId = signal<string | null>(null);
   forceRefreshProgress = signal<{ percent: number; message: string } | null>(null);
+  postRefreshSyncInProgress = signal<boolean>(false);
+  postRefreshSyncProgress = signal<{ percent: number; message: string } | null>(null);
 
   private progressSubscriptions = new Map<string, Subscription>();
+  private postRefreshSyncSubscription: Subscription | null = null;
   private notFoundCount = new Map<string, number>(); // Track 404 errors per job
 
   // Filter Signals
@@ -238,10 +241,62 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     // Clean up progress polling subscriptions
     this.progressSubscriptions.forEach(sub => sub.unsubscribe());
     this.progressSubscriptions.clear();
+    this.stopPostRefreshSync();
     if (this.fetchTimeout) {
       clearTimeout(this.fetchTimeout);
       this.fetchTimeout = null;
     }
+  }
+
+  private stopPostRefreshSync() {
+    if (this.postRefreshSyncSubscription) {
+      this.postRefreshSyncSubscription.unsubscribe();
+      this.postRefreshSyncSubscription = null;
+    }
+    this.postRefreshSyncInProgress.set(false);
+    this.postRefreshSyncProgress.set(null);
+  }
+
+  private startPostRefreshSync(type: 'fill_gaps' | 'force_refresh', statusMessage?: string) {
+    const label = type === 'fill_gaps' ? 'Fill Metrics' : 'Force Refresh';
+    const totalPasses = 6;
+    let completedPasses = 0;
+
+    this.stopPostRefreshSync();
+    this.postRefreshSyncInProgress.set(true);
+    this.postRefreshSyncProgress.set({
+      percent: 0,
+      message: statusMessage || `${label} finished queuing requests. Metrics are still syncing into the table...`
+    });
+
+    this.fetchAuctions();
+    this.creditService.refreshData();
+
+    this.postRefreshSyncSubscription = interval(10000)
+      .pipe(take(totalPasses))
+      .subscribe({
+        next: () => {
+          completedPasses += 1;
+          const percent = Math.round((completedPasses / totalPasses) * 100);
+          this.fetchAuctions();
+          this.postRefreshSyncProgress.set({
+            percent,
+            message: `${label} results are still arriving from providers. Refreshing table automatically (${completedPasses}/${totalPasses})...`
+          });
+        },
+        error: () => {
+          this.stopPostRefreshSync();
+        },
+        complete: () => {
+          this.fetchAuctions();
+          this.stopPostRefreshSync();
+          this.snackBar.open(
+            `${label} sync window finished. If a few rows are still blank, provider callbacks may still be arriving.`,
+            'Close',
+            { duration: 6000 }
+          );
+        }
+      });
   }
 
   /**
@@ -300,18 +355,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
               this.snackBar.open(msg, 'Close', { duration: 8000 });
             }
 
-            // Refresh the auction list immediately
-            this.fetchAuctions();
-            this.creditService.refreshData();
-
-            // Refresh again after delay to catch N8N webhook results
-            // N8N processes asynchronously and webhooks arrive after job "completes"
-            if (status.status === 'completed') {
-              setTimeout(() => {
-                this.fetchAuctions();
-                this.snackBar.open('🔄 Data synced from N8N', 'Close', { duration: 3000 });
-              }, 15000); // Increased to 15s to allow N8N more time
-            }
+            this.startPostRefreshSync(type, status.message);
           }
         },
         error: (err) => {
@@ -327,19 +371,20 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
               console.log('Assuming job completed after multiple 404s, refreshing data');
               this.stopProgressPolling(jobId);
               this.notFoundCount.delete(jobId);
-              this.fetchAuctions();
 
               if (type === 'fill_gaps') {
                 this.fillGapsInProgress.set(false);
                 this.fillGapsJobId.set(null);
                 this.fillGapsProgress.set(null);
-                this.snackBar.open('✅ Fill Gaps likely completed - refreshing data', 'Close', { duration: 5000 });
+                this.snackBar.open('✅ Fill Metrics likely finished queuing. Keeping the table syncing for a minute...', 'Close', { duration: 5000 });
               } else {
                 this.forceRefreshInProgress.set(false);
                 this.forceRefreshJobId.set(null);
                 this.forceRefreshProgress.set(null);
-                this.snackBar.open('✅ Force Refresh likely completed - refreshing data', 'Close', { duration: 5000 });
+                this.snackBar.open('✅ Force Refresh likely finished queuing. Keeping the table syncing for a minute...', 'Close', { duration: 5000 });
               }
+
+              this.startPostRefreshSync(type);
             }
             return; // Continue polling
           }
