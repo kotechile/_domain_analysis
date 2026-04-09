@@ -656,6 +656,9 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
       this.totalCount.set(res.total_count);
     } catch (e) {
       console.error('Failed to load auctions:', e);
+      this.auctions.set([]);
+      this.totalCount.set(0);
+      this.snackBar.open('Failed to load marketplace results for the current filters.', 'Close', { duration: 4000 });
     } finally {
       this.loading.set(false);
     }
