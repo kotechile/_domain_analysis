@@ -1569,14 +1569,17 @@ async def trigger_bulk_rank_analysis( limit: int = Query(1000, description="Maxi
 
 
 @router.post("/auctions/trigger-bulk-traffic-data")
-async def trigger_bulk_traffic_data_analysis( limit: int = Query(1000, description="Maximum number of domains to trigger (DataForSEO Labs API limit: 1000 domains per request)", ge=1, le=1000) ):
+async def trigger_bulk_traffic_data_analysis(
+    limit: int = Query(1000, description="Maximum number of domains to trigger (DataForSEO Labs API limit: 1000 domains per request)", ge=1, le=1000),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+):
     """
     Trigger DataForSEO Labs API traffic data collection for scored domains closest to expire without traffic_data
     
     This will:
     1. Get up to 1000 scored domains closest to expire (ordered by expiration_date ASC) that don't have traffic_data
-    2. Trigger DataForSEO Labs API bulk traffic batch via n8n webhook
-    3. Webhook will update traffic_data field in auctions table
+    2. Trigger DataForSEO Labs API bulk traffic estimation directly from the backend
+    3. Backend will update traffic_data field in auctions table
     4. Return list of triggered domains
     """
     try:
@@ -1592,19 +1595,17 @@ async def trigger_bulk_traffic_data_analysis( limit: int = Query(1000, descripti
         
         domain_names = [a['domain'] for a in auctions]
         
-        # Trigger DataForSEO Labs API traffic data collection via N8N webhook
-        n8n_service = N8NService()
-        n8n_result = await n8n_service.trigger_bulk_traffic_batch_workflow(domain_names)
-        
-        if n8n_result:
-            triggered_count = len(domain_names)
-            logger.info("Triggered N8N workflow for bulk traffic batch", triggered=triggered_count, request_id=n8n_result.get('request_id'))
-            
-            return { "success": True, "message": f"Triggered traffic data collection for {triggered_count} domains", "triggered_count": triggered_count, "skipped_count": 0, "triggered_domains": domain_names[:100],  # Return first 100 for display
-                "request_id": n8n_result.get('request_id') }
-        else:
-            logger.warning("Failed to trigger N8N traffic data workflow", domains=len(domain_names))
-            return { "success": False, "message": "Failed to trigger N8N traffic data workflow", "triggered_count": 0, "skipped_count": len(domain_names), "triggered_domains": [] }
+        background_tasks.add_task(process_traffic_metrics_background_task, domain_names)
+        triggered_count = len(domain_names)
+        logger.info("Queued direct backend traffic data collection", triggered=triggered_count)
+
+        return {
+            "success": True,
+            "message": f"Queued traffic data collection for {triggered_count} domains",
+            "triggered_count": triggered_count,
+            "skipped_count": 0,
+            "triggered_domains": domain_names[:100],
+        }
         
     except Exception as e:
         error_msg = str(e)
@@ -1764,10 +1765,10 @@ async def trigger_full_analysis_background( domain_names: List[str], n8n_service
     logger = structlog.get_logger().bind(user_id=user_id, operation="bulk_trigger_background")
     logger.info("Starting background bulk analysis triggers", domain_count=len(domain_names))
     
-    # 1. Traffic data (Batch workflow) - handles up to 1000 domains
+    # 1. Traffic data via backend direct DataForSEO call - handles up to 1000 domains
     try:
         logger.info("Triggering bulk traffic analysis")
-        await n8n_service.trigger_bulk_traffic_batch_workflow(domain_names)
+        await process_traffic_metrics_background_task(domain_names)
     except Exception as e:
         logger.error("Failed to trigger traffic data analysis", error=str(e))
     

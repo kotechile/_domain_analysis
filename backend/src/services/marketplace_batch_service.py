@@ -9,6 +9,7 @@ from services.credits_service import CreditsService
 from services.n8n_service import N8NService
 from services.auctions_service import AuctionsService
 from services.progress_tracker import ProgressTracker
+from services.external_apis import DataForSEOService
 
 logger = structlog.get_logger()
 
@@ -20,6 +21,47 @@ class MarketplaceBatchService:
         self.credits_service = CreditsService(self.db)
         self.n8n_service = N8NService()
         self.auctions_service = AuctionsService()
+        self.dataforseo_service = DataForSEOService()
+
+    async def _fetch_and_store_traffic_metrics(self, domains: List[str], user_id: Optional[UUID] = None) -> int:
+        """
+        Fetch traffic metrics directly from DataForSEO Labs and store them in auctions.
+
+        This path intentionally bypasses n8n. It uses the bulk traffic estimation
+        live endpoint for up to 1000 domains and persists organic traffic plus
+        keyword count from metrics.organic.
+        """
+        if not domains:
+            return 0
+
+        items = await self.dataforseo_service.fetch_bulk_traffic_estimation_live(domains, user_id=user_id)
+        if not items:
+            logger.warning("No direct traffic metrics returned from DataForSEO", domain_count=len(domains))
+            return 0
+
+        updated = 0
+        for item in items:
+            target = item.get('target')
+            metrics = item.get('metrics', {})
+            organic = metrics.get('organic', {}) if isinstance(metrics, dict) else {}
+
+            if not target:
+                continue
+
+            traffic_data = {
+                "organic_traffic": organic.get('etv', 0) or 0,
+                "etv": organic.get('etv', 0) or 0,
+                "organic_keywords": organic.get('count', 0) or 0,
+                "keywords_count": organic.get('count', 0) or 0,
+                "traffic_timestamp": datetime.utcnow().isoformat(),
+            }
+
+            success = await self.db.update_auction_traffic_data(target, traffic_data)
+            if success:
+                updated += 1
+
+        logger.info("Stored direct traffic metrics from backend", requested=len(domains), updated=updated)
+        return updated
 
     async def get_refresh_costs(self) -> Dict[str, int]:
         """Get calculated costs from global settings"""
@@ -212,8 +254,11 @@ class MarketplaceBatchService:
                 batch_num = i // batch_size + 1
                 batch = domain_names[i:i + batch_size]
                 try:
-                    logger.info(f"[Background] Triggering direct marketplace metrics for batch {batch_num}", domain_count=len(batch))
-                    await self.n8n_service.trigger_marketplace_metrics_workflows(batch, include_traffic=True)
+                    logger.info(f"[Background] Triggering direct marketplace metrics via n8n for batch {batch_num}", domain_count=len(batch))
+                    await self.n8n_service.trigger_marketplace_metrics_workflows(batch, include_traffic=False)
+
+                    logger.info(f"[Background] Fetching direct backend traffic metrics for batch {batch_num}", domain_count=len(batch))
+                    await self._fetch_and_store_traffic_metrics(batch, user_id=user_id if isinstance(user_id, UUID) else None)
 
                     processed_count += len(batch)
                     
@@ -278,7 +323,8 @@ class MarketplaceBatchService:
             return {"success": False, "error": "Insufficient credits"}
             
         # 3. Trigger N8N
-        await self.n8n_service.trigger_marketplace_metrics_workflows([domain], include_traffic=True)
+        await self.n8n_service.trigger_marketplace_metrics_workflows([domain], include_traffic=False)
+        await self._fetch_and_store_traffic_metrics([domain], user_id=user_id)
         
         # 4. Record History
         try:
