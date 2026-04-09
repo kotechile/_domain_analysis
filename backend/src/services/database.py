@@ -1811,10 +1811,10 @@ class DatabaseService:
     async def get_auctions_missing_any_metric_with_filters( self, filters: Optional[Dict[str, Any]] = None, sort_by: str = 'expiration_date', sort_order: str = 'asc', limit: int = 1000, force_refresh: bool = False ) -> List[Dict[str, Any]]:
         """
         "Find and Fill" — Get up to `limit` domains that:
-          1. Have a score > 0 (only domains we care about)
+          1. Match the active marketplace filters
           2. Are missing ANY of the four DataForSEO metrics (traffic, rank, backlinks, spam_score)
-          3. Have NOT been refreshed in the last 7 days (updated_at < now - 7 days)
-        Ordered by closest expiry date (ascending) so the most time-sensitive domains are filled first. When force_refresh=True, skips the missing-metrics and staleness checks (force-fills all matched domains). """
+          3. Or, when force_refresh=True, all matched domains regardless of current metrics
+        Ordered by the requested marketplace sort so Fill Metrics mirrors the table the user is viewing. """
         client = await self._get_client()
         from datetime import timedelta
 
@@ -1828,9 +1828,6 @@ class DatabaseService:
             # --- Build base query ---
             # Always filter out records marked for deletion
             query = client.table('auctions').select('*').eq('to_delete', False)
-
-            # Always require score is not null so we only work on domains we've evaluated
-            query = query.not_.is_('score', 'null')
 
             # Apply user-facing filters
             if filters:
@@ -1866,11 +1863,13 @@ class DatabaseService:
                     query = query.in_('auction_site', filters['auction_sites'])
                 if filters.get('scored') is not None:
                     if filters['scored']:
-                        query = query.not_.is_('score', 'null')
+                        query = query.gt('score', 0)
                     else:
-                        query = query.is_('score', 'null')
+                        query = query.eq('score', 0)
                 if filters.get('search'):
                     query = query.ilike('domain', f"%{filters['search']}%")
+                if filters.get('has_statistics') is not None:
+                    query = query.eq('has_statistics', filters['has_statistics'])
 
             if force_refresh:
                 # Force mode: just return top N by requested sort, no missing-metrics check
@@ -1885,14 +1884,7 @@ class DatabaseService:
                 # Build filter conditions for the SQL function
                 where_conditions = ["to_delete = FALSE"]
                 
-                # Default behavior: find scored domains unless specified otherwise (scored=False)
-                if not filters or filters.get('scored') is not False:
-                    where_conditions.append("score IS NOT NULL")
-
                 if filters:
-                    if filters.get('scored') is False:
-                         where_conditions.append("score IS NULL")
-                    
                     if filters.get('preferred') is not None:
                         where_conditions.append(f"preferred = {str(filters['preferred']).lower()}")
                     if filters.get('auction_site'):
@@ -1929,6 +1921,13 @@ class DatabaseService:
                     if filters.get('auction_sites') and isinstance(filters['auction_sites'], list):
                         sites = ", ".join([f"'{s}'" for s in filters['auction_sites']])
                         where_conditions.append(f"auction_site IN ({sites})")
+                    if filters.get('scored') is not None:
+                        if filters['scored']:
+                            where_conditions.append("score > 0")
+                        else:
+                            where_conditions.append("(score IS NULL OR score = 0)")
+                    if filters.get('has_statistics') is not None:
+                        where_conditions.append(f"has_statistics = {str(filters['has_statistics']).lower()}")
 
                 where_clause = " AND ".join(where_conditions)
 

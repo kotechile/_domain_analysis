@@ -114,25 +114,41 @@ class MarketplaceBatchService:
             logger.info(f"[Background] Starting {'force' if force else 'bulk'} refresh", user_id=str(user_id), filters=filters, force=force, job_id=job_id, prioritized_count=len(prioritized_domains) if prioritized_domains else 0, only_displayed=only_displayed)
 
             # 2. Find the domains
+            # Fill Metrics should only target domains that have not been populated yet.
+            refresh_filters = dict(filters or {})
+            if not force:
+                refresh_filters['has_statistics'] = False
+
             # If only_displayed mode, we'll just use the prioritized domains directly
             domain_names = []
 
             if only_displayed and prioritized_domains:
-                # In "only displayed" mode, we only refresh the domains the user is currently viewing
-                # Fetch these specific domains from DB - bypass score/staleness filters since user explicitly selected them
-                prioritized_set = set(d.strip().lower() for d in prioritized_domains if d and d.strip())
-                # Only apply auction_sites filter to ensure we don't fetch from wrong sources
-                basic_filters = {}
-                if filters.get('auction_sites'):
-                    basic_filters['auction_sites'] = filters['auction_sites']
-                domains_data = await self.db.get_auctions_by_domains(list(prioritized_set), filters=basic_filters)
-                domain_names = [d['domain'] for d in domains_data]
-                logger.info(f"[Background] Only displayed mode - using {len(domain_names)} displayed domains (bypassed score/staleness filters)", domain_count=len(domain_names))
+                # In "only displayed" mode, refresh only the rows the user is looking at,
+                # while still respecting the same fill-metrics rules as the bulk selector.
+                prioritized_order = []
+                seen_domains = set()
+                for domain in prioritized_domains:
+                    cleaned = domain.strip().lower() if domain else ''
+                    if cleaned and cleaned not in seen_domains:
+                        prioritized_order.append(cleaned)
+                        seen_domains.add(cleaned)
+
+                domains_data = await self.db.get_auctions_by_domains(prioritized_order, filters=refresh_filters)
+                domains_by_name = {
+                    record['domain'].lower(): record['domain']
+                    for record in domains_data
+                    if record.get('domain')
+                }
+                domain_names = [domains_by_name[name] for name in prioritized_order if name in domains_by_name]
+                logger.info(
+                    "[Background] Only displayed mode - using displayed domains that still need metrics",
+                    domain_count=len(domain_names),
+                )
             else:
                 # Standard mode: find up to 1000 domains matching filters
-                logger.info(f"[Background] Finding domains with filters", filters=filters)
+                logger.info(f"[Background] Finding domains with filters", filters=refresh_filters)
                 domains_data = await self.auctions_service.get_auctions_missing_any_metric_with_filters(
-                    filters=filters, sort_by=sort_by, sort_order=sort_order, limit=1000, force_refresh=force
+                    filters=refresh_filters, sort_by=sort_by, sort_order=sort_order, limit=1000, force_refresh=force
                 )
                 domain_names = [d['domain'] for d in domains_data]
 
@@ -150,7 +166,7 @@ class MarketplaceBatchService:
                     logger.info(f"[Background] Some prioritized domains not in current filter results, fetching them separately",
                         missing_count=len(prioritized_missing))
                     # Fetch the missing prioritized domains directly from DB
-                    missing_domains = await self.db.get_auctions_by_domains(list(prioritized_missing), filters=filters)
+                    missing_domains = await self.db.get_auctions_by_domains(list(prioritized_missing), filters=refresh_filters)
                     # Add them to the domain_names list
                     prioritized_in_db.extend([d['domain'] for d in missing_domains])
 
