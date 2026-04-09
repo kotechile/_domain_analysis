@@ -23,6 +23,16 @@ class AuctionScoringService:
     def __init__(self):
         self.db_service = DatabaseService()
         self.domain_scoring_service = DomainScoringService()
+
+    @staticmethod
+    def _is_missing_chunked_ranking_function(error: Exception) -> bool:
+        """Return True when PostgREST reports the chunked RPC is not in the schema cache."""
+        error_msg = str(error)
+        return (
+            'PGRST202' in error_msg
+            or 'recalculate_auction_rankings_chunked' in error_msg
+            and 'schema cache' in error_msg
+        )
     
     async def get_unprocessed_batch( self, batch_size: int = 10000, config_id: Optional[str] = None ) -> List[Dict[str, Any]]:
         """
@@ -198,12 +208,33 @@ class AuctionScoringService:
         """
         try:
             client = await self.db_service._get_client()
+            scored_count = 0
+
+            try:
+                stats = await self.get_processing_stats()
+                scored_count = int(stats.get('scored_count') or 0)
+            except Exception as stats_error:
+                logger.debug("Failed to fetch scored count before ranking recalculation", error=str(stats_error))
             
             # For large datasets, try chunked approach first
             if use_chunked:
+                if scored_count >= 2_000_000:
+                    chunk_size = 10000
+                elif scored_count >= 1_000_000:
+                    chunk_size = 25000
+                else:
+                    chunk_size = 50000
+
                 try:
-                    logger.info("Attempting chunked ranking recalculation")
-                    result = await client.rpc( 'recalculate_auction_rankings_chunked', {'p_batch_size': 50000} ).execute()
+                    logger.info(
+                        "Attempting chunked ranking recalculation",
+                        chunk_size=chunk_size,
+                        scored_count=scored_count,
+                    )
+                    result = await client.rpc(
+                        'recalculate_auction_rankings_chunked',
+                        {'p_batch_size': chunk_size},
+                    ).execute()
                     
                     if result.data and result.data.get('success'):
                         logger.info("Chunked ranking recalculation successful", result=result.data)
@@ -211,11 +242,16 @@ class AuctionScoringService:
                     else:
                         logger.warning("Chunked approach failed, trying standard approach", result=result.data)
                 except Exception as chunked_error:
-                    error_msg = str(chunked_error)
-                    if 'timeout' not in error_msg.lower() and '57014' not in error_msg:
-                        logger.warning("Chunked approach error, trying standard", error=error_msg)
+                    if self._is_missing_chunked_ranking_function(chunked_error):
+                        logger.info(
+                            "Chunked ranking function is not available in the database yet, falling back to standard recalculation"
+                        )
                     else:
-                        raise  # Re-raise timeout errors
+                        error_msg = str(chunked_error)
+                        if 'timeout' not in error_msg.lower() and '57014' not in error_msg:
+                            logger.warning("Chunked approach error, trying standard", error=error_msg)
+                        else:
+                            raise  # Re-raise timeout errors
             
             # Fallback to standard approach
             logger.info("Using standard ranking recalculation")
@@ -327,7 +363,6 @@ class AuctionScoringService:
         except Exception as e:
             logger.error("Failed to get processing stats", error=str(e))
             raise
-
 
 
 
