@@ -1758,13 +1758,25 @@ class DatabaseService:
             # Fetch domains from result
             domains = [a.get('domain') for a in auctions if a.get('domain')]
             
-            # Check which domains have a full report in the reports table
+            # Check which domains have a full report in the reports table.
+            # Batch this lookup to avoid oversized PostgREST query strings for large pages.
             has_analysis_domains = set()
             if domains:
-                # Use in_ filter to find reports for these domains
-                reports_result = await client.table('reports').select('domain_name').in_('domain_name', domains).execute()
-                if reports_result.data:
-                    has_analysis_domains = {r['domain_name'] for r in reports_result.data}
+                report_lookup_batch_size = 100
+
+                try:
+                    for i in range(0, len(domains), report_lookup_batch_size):
+                        batch = domains[i:i + report_lookup_batch_size]
+                        reports_result = await client.table('reports').select('domain_name').in_('domain_name', batch).execute()
+                        if reports_result.data:
+                            has_analysis_domains.update(r['domain_name'] for r in reports_result.data if r.get('domain_name'))
+                except Exception as reports_error:
+                    logger.warning(
+                        "Failed to enrich auctions with has_analysis flags",
+                        domain_count=len(domains),
+                        batch_size=report_lookup_batch_size,
+                        error=str(reports_error),
+                    )
             
             # Add has_analysis flag to results
             for a in auctions:
