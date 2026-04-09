@@ -265,15 +265,53 @@ class MarketplaceBatchService:
                     successful_workflows.update(batch_successful_workflows)
                     failed_workflows.update(batch_failed_workflows)
 
-                    logger.info(f"[Background] Fetching direct backend traffic metrics for batch {batch_num}", domain_count=len(batch))
-                    traffic_updated = await self._fetch_and_store_traffic_metrics(batch, user_id=user_id if isinstance(user_id, UUID) else None)
-                    traffic_updated_total += traffic_updated
-
                     processed_count += len(batch)
-                    
+
                     if job_id:
                         progress_message = (
-                            f"Queued {processed_count}/{len(domain_names)} domains. "
+                            f"Queued {processed_count}/{len(domain_names)} domains for provider refresh. "
+                            f"Traffic updated for {traffic_updated_total} so far. "
+                            f"Successful triggers: {', '.join(sorted(successful_workflows)) or 'none'}."
+                        )
+                        if failed_workflows:
+                            progress_message += f" Trigger failures: {', '.join(sorted(failed_workflows))}."
+
+                        await ProgressTracker.update_progress(
+                            job_id,
+                            processed_items=processed_count,
+                            failed_items=failed_count,
+                            current_batch=batch_num,
+                            total_batches=total_batches,
+                            message=progress_message,
+                        )
+
+                    traffic_updated = 0
+                    try:
+                        logger.info(f"[Background] Fetching direct backend traffic metrics for batch {batch_num}", domain_count=len(batch))
+                        traffic_updated = await asyncio.wait_for(
+                            self._fetch_and_store_traffic_metrics(batch, user_id=user_id if isinstance(user_id, UUID) else None),
+                            timeout=45,
+                        )
+                        traffic_updated_total += traffic_updated
+                    except asyncio.TimeoutError:
+                        failed_workflows.add("traffic")
+                        logger.warning(
+                            "[Background] Direct traffic fetch timed out; continuing without blocking refresh completion",
+                            batch_num=batch_num,
+                            domain_count=len(batch),
+                        )
+                    except Exception as traffic_err:
+                        failed_workflows.add("traffic")
+                        logger.error(
+                            "[Background] Failed to fetch direct backend traffic metrics",
+                            batch_num=batch_num,
+                            domain_count=len(batch),
+                            error=str(traffic_err),
+                        )
+
+                    if job_id:
+                        progress_message = (
+                            f"Queued {processed_count}/{len(domain_names)} domains for provider refresh. "
                             f"Traffic updated for {traffic_updated_total} so far. "
                             f"Successful triggers: {', '.join(sorted(successful_workflows)) or 'none'}."
                         )
