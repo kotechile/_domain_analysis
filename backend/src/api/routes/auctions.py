@@ -2045,12 +2045,28 @@ async def get_scoring_stats():
 
 
 @router.post("/auctions/recalculate-rankings")
-async def recalculate_rankings():
+async def recalculate_rankings(
+    batch_size: int = Query(5000, ge=1, le=50000, description="Rows to update per ranking step"),
+    max_steps: int = Query(10, ge=1, le=200, description="Maximum ranking steps to run in this request"),
+    start_rank: int = Query(1, ge=1, description="Starting rank for stepwise recalculation"),
+    after_score: Optional[float] = Query(None, description="Cursor score from the previous response"),
+    after_id: Optional[str] = Query(None, description="Cursor id from the previous response"),
+):
     """
-    Recalculate global rankings and preferred flags for all scored auctions. This should be called periodically or after processing large batches. """
+    Recalculate auction rankings and preferred flags.
+
+    Large datasets are processed stepwise and return a cursor so callers can continue
+    safely without hitting request or SQL timeouts.
+    """
     try:
         scoring_service = AuctionScoringService()
-        result = await scoring_service.recalculate_rankings()
+        result = await scoring_service.recalculate_rankings(
+            batch_size=batch_size,
+            max_step_batches=max_steps,
+            start_rank=start_rank,
+            after_score=after_score,
+            after_id=after_id,
+        )
         return result
     except Exception as e:
         logger.error("Failed to recalculate rankings", error=str(e))

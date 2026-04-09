@@ -134,10 +134,18 @@ async def process_scoring(
             if scored_count > 0:
                 logger.info("Recalculating final rankings...", scored_count=scored_count)
                 try:
-                    ranking_result = await scoring_service.recalculate_rankings()
-                    if ranking_result.get('success'):
-                        logger.info("Final rankings recalculated successfully", 
-                                  ranked_count=ranking_result.get('ranked_count', 0))
+                    ranking_result = await scoring_service.recalculate_rankings(
+                        batch_size=5000,
+                        max_step_batches=None,
+                    )
+                    if ranking_result.get('success') and ranking_result.get('done', True):
+                        logger.info(
+                            "Final rankings recalculated successfully",
+                            processed_count=ranking_result.get('processed_count', 0),
+                            stepwise=ranking_result.get('stepwise', False),
+                        )
+                    elif ranking_result.get('success'):
+                        logger.warning("Final ranking recalculation partially completed", result=ranking_result)
                     else:
                         logger.warning("Final ranking recalculation returned unsuccessful result", result=ranking_result)
                 except Exception as e:
@@ -216,7 +224,6 @@ def main():
 
 if __name__ == '__main__':
     main()
-
 
 
 

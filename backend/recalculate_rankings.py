@@ -39,18 +39,22 @@ async def recalculate_rankings():
         return
     
     print(f"\nRecalculating rankings for {stats['scored_count']:,} scored records...")
-    print("This may take a few minutes for large datasets...")
+    print("This will run stepwise until all ranking slices are updated...")
     
     try:
-        result = await scoring_service.recalculate_rankings()
+        result = await scoring_service.recalculate_rankings(
+            batch_size=5000,
+            max_step_batches=None,
+        )
         
-        if result.get('success'):
-            ranked_count = result.get('ranked_count', 0)
+        if result.get('success') and result.get('done', True):
             print(f"\n✓ Rankings recalculated successfully!")
-            print(f"  Ranked records: {ranked_count:,}")
+            print(f"  Processed records: {result.get('processed_count', 0):,}")
+            if result.get('stepwise'):
+                print(f"  Steps run: {result.get('steps_run', 0):,}")
         else:
             print(f"\n✗ Ranking recalculation failed")
-            print(f"  Error: {result.get('error', 'Unknown error')}")
+            print(f"  Result: {result}")
             
     except Exception as e:
         error_msg = str(e)
@@ -68,7 +72,6 @@ async def recalculate_rankings():
 
 if __name__ == '__main__':
     asyncio.run(recalculate_rankings())
-
 
 
 

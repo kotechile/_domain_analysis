@@ -33,6 +33,16 @@ class AuctionScoringService:
             or 'recalculate_auction_rankings_chunked' in error_msg
             and 'schema cache' in error_msg
         )
+
+    @staticmethod
+    def _is_missing_stepwise_ranking_function(error: Exception) -> bool:
+        """Return True when PostgREST reports the stepwise RPC is not in the schema cache."""
+        error_msg = str(error)
+        return (
+            'PGRST202' in error_msg
+            or 'recalculate_auction_rankings_step' in error_msg
+            and 'schema cache' in error_msg
+        )
     
     async def get_unprocessed_batch( self, batch_size: int = 10000, config_id: Optional[str] = None ) -> List[Dict[str, Any]]:
         """
@@ -196,7 +206,35 @@ class AuctionScoringService:
             logger.error("Failed to update scores in database", error=str(e))
             raise
     
-    async def recalculate_rankings(self, use_chunked: bool = True) -> Dict[str, Any]:
+    async def recalculate_rankings_step(
+        self,
+        batch_size: int = 5000,
+        start_rank: int = 1,
+        after_score: Optional[float] = None,
+        after_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Recalculate a single ranking slice using the stepwise RPC."""
+        client = await self.db_service._get_client()
+        payload = {
+            'p_batch_size': batch_size,
+            'p_start_rank': start_rank,
+            'p_after_score': after_score,
+            'p_after_id': after_id,
+        }
+        result = await client.rpc('recalculate_auction_rankings_step', payload).execute()
+        if result.data:
+            return result.data
+        return {'success': False, 'processed_count': 0, 'done': False}
+
+    async def recalculate_rankings(
+        self,
+        use_chunked: bool = True,
+        batch_size: int = 5000,
+        max_step_batches: Optional[int] = 10,
+        start_rank: int = 1,
+        after_score: Optional[float] = None,
+        after_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Recalculate global rankings and preferred flags
         
@@ -216,7 +254,68 @@ class AuctionScoringService:
             except Exception as stats_error:
                 logger.debug("Failed to fetch scored count before ranking recalculation", error=str(stats_error))
             
-            # For large datasets, try chunked approach first
+            if use_chunked and scored_count >= 100000:
+                total_processed = 0
+                steps_run = 0
+                cursor_start_rank = start_rank
+                cursor_after_score = after_score
+                cursor_after_id = after_id
+
+                while max_step_batches is None or steps_run < max_step_batches:
+                    try:
+                        step_result = await self.recalculate_rankings_step(
+                            batch_size=batch_size,
+                            start_rank=cursor_start_rank,
+                            after_score=cursor_after_score,
+                            after_id=cursor_after_id,
+                        )
+                    except Exception as step_error:
+                        if self._is_missing_stepwise_ranking_function(step_error):
+                            logger.info(
+                                "Stepwise ranking function is not available in the database yet, falling back to legacy ranking recalculation"
+                            )
+                            break
+                        raise
+
+                    if not step_result.get('success'):
+                        return step_result
+
+                    steps_run += 1
+                    total_processed += int(step_result.get('processed_count') or 0)
+                    cursor_start_rank = int(step_result.get('next_start_rank') or cursor_start_rank)
+                    cursor_after_score = step_result.get('next_after_score')
+                    cursor_after_id = step_result.get('next_after_id')
+
+                    if step_result.get('done'):
+                        return {
+                            'success': True,
+                            'stepwise': True,
+                            'done': True,
+                            'steps_run': steps_run,
+                            'processed_count': total_processed,
+                            'next_start_rank': cursor_start_rank,
+                            'next_after_score': cursor_after_score,
+                            'next_after_id': cursor_after_id,
+                            'total_scored': step_result.get('total_scored', scored_count),
+                        }
+
+                if steps_run > 0:
+                    total_scored = scored_count or max(cursor_start_rank - 1, 0)
+                    return {
+                        'success': True,
+                        'stepwise': True,
+                        'done': False,
+                        'steps_run': steps_run,
+                        'processed_count': total_processed,
+                        'next_start_rank': cursor_start_rank,
+                        'next_after_score': cursor_after_score,
+                        'next_after_id': cursor_after_id,
+                        'remaining_count': max(total_scored - cursor_start_rank + 1, 0),
+                        'total_scored': total_scored,
+                        'message': 'Ranking recalculation progressed partially. Call again with the returned cursor to continue.',
+                    }
+
+            # For large datasets without the new step function, try chunked approach first
             if use_chunked:
                 if scored_count >= 2_000_000:
                     chunk_size = 10000
@@ -363,7 +462,6 @@ class AuctionScoringService:
         except Exception as e:
             logger.error("Failed to get processing stats", error=str(e))
             raise
-
 
 
 
