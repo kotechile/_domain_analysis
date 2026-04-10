@@ -26,33 +26,61 @@ async def analyze_domain( request: DomainAnalysisRequest, background_tasks: Back
     Start domain analysis process
     Returns immediately with analysis ID, actual analysis runs in background
     """
+    stage = "init"
     try:
+        logger.info(
+            "Analyze request received",
+            domain=request.domain,
+            requested_mode=request.mode.value,
+            user_id=str(current_user.id),
+        )
         analysis_service = AnalysisService()
         db = get_database()
         
         # Check if analysis already exists
-        existing_report = await db.get_report(request.domain)
+        stage = "lookup_existing_report"
+        existing_report = await db.get_report(request.domain, str(current_user.id))
         if existing_report:
+            logger.info(
+                "Existing report found",
+                domain=request.domain,
+                user_id=str(current_user.id),
+                existing_status=existing_report.status.value,
+                existing_mode=existing_report.analysis_mode.value if existing_report.analysis_mode else None,
+            )
             # If same mode or higher mode exists, return existing
             if existing_report.status == AnalysisStatus.COMPLETED:
                 # If existing is DUAL or matches requested mode, return it
                 if existing_report.analysis_mode == request.mode or existing_report.analysis_mode == AnalysisMode.DUAL:
+                    logger.info(
+                        "Returning completed existing report",
+                        domain=request.domain,
+                        user_id=str(current_user.id),
+                    )
                     return AnalysisResponse( success=True, message="Analysis already exists for this domain", report_id=request.domain )
             elif existing_report.status == AnalysisStatus.IN_PROGRESS:
+                logger.info(
+                    "Returning in-progress existing report",
+                    domain=request.domain,
+                    user_id=str(current_user.id),
+                )
                 return AnalysisResponse( success=True, message="Analysis already in progress for this domain", report_id=request.domain )
         
         # Initialize pricing and credits services
+        stage = "initialize_services"
         pricing_service = PricingService()
         credits_service = CreditsService(db)
         
         # Determine action and cost
         # Map LEGACY mode to ai_domain_summary, DUAL/ASYNC to deep_content_analysis
         action_name = "ai_domain_summary" if request.mode == AnalysisMode.LEGACY else "deep_content_analysis"
-        logger.info("Calculating cost", action=action_name, user_id=str(current_user.id))
+        stage = "calculate_cost"
+        logger.info("Calculating cost", domain=request.domain, action=action_name, user_id=str(current_user.id))
         cost = await pricing_service.calculate_action_cost(action_name)
         
         # Check balance
-        logger.info("Checking balance", user_id=str(current_user.id), cost=cost)
+        stage = "check_balance"
+        logger.info("Checking balance", domain=request.domain, user_id=str(current_user.id), cost=cost)
         balance = await credits_service.get_balance(current_user.id)
         if balance < cost:
             logger.warning("Insufficient credits", user_id=str(current_user.id), balance=balance, cost=cost)
@@ -62,7 +90,8 @@ async def analyze_domain( request: DomainAnalysisRequest, background_tasks: Back
             )
             
         # Deduct credits
-        logger.info("Deducting credits", user_id=str(current_user.id), cost=cost)
+        stage = "deduct_credits"
+        logger.info("Deducting credits", domain=request.domain, user_id=str(current_user.id), cost=cost)
         description = f"AI Domain Analysis: {request.domain} ({request.mode.value})"
         success = await credits_service.deduct_credits(current_user.id, cost, description, f"analysis_{request.domain}")
         if not success:
@@ -71,33 +100,68 @@ async def analyze_domain( request: DomainAnalysisRequest, background_tasks: Back
 
         if existing_report:
             # Update existing report fields to pending
+            stage = "update_existing_report"
+            existing_report.user_id = str(current_user.id)
             existing_report.status = AnalysisStatus.PENDING
             existing_report.analysis_phase = AnalysisPhase.ESSENTIAL
+            existing_report.analysis_mode = request.mode
             existing_report.analysis_timestamp = datetime.utcnow()
             existing_report.error_message = None
             existing_report.processing_time_seconds = None
             # Update the record
+            logger.info(
+                "Saving existing report before analysis start",
+                domain=request.domain,
+                user_id=str(current_user.id),
+                stage=stage,
+            )
             await db.save_report(existing_report)
             report_id = existing_report.id if hasattr(existing_report, 'id') else request.domain
         else:
             # Create a new report
+            stage = "create_new_report"
             report = DomainAnalysisReport(
                 domain_name=request.domain,
+                user_id=str(current_user.id),
                 status=AnalysisStatus.PENDING,
                 analysis_phase=AnalysisPhase.ESSENTIAL,
+                analysis_mode=request.mode,
                 analysis_timestamp=datetime.utcnow()
+            )
+            logger.info(
+                "Saving new report before analysis start",
+                domain=request.domain,
+                user_id=str(current_user.id),
+                stage=stage,
             )
             report_id = await db.save_report(report)
         
         # Start background analysis
+        stage = "enqueue_background_task"
         background_tasks.add_task( analysis_service.analyze_domain, request.domain, report_id, request.mode.value, current_user.id )
         
         logger.info("Domain analysis started", domain=request.domain, mode=request.mode, report_id=report_id, user_id=current_user.id)
         
         return AnalysisResponse( success=True, message=f"Analysis started successfully ({'Summary' if action_name == 'ai_domain_summary' else 'Deep'})", report_id=report_id, estimated_completion_time=15 if action_name == "ai_domain_summary" else 45 )
         
+    except HTTPException as e:
+        logger.warning(
+            "Domain analysis request rejected",
+            domain=request.domain,
+            user_id=str(current_user.id) if current_user else None,
+            stage=stage,
+            status_code=e.status_code,
+            detail=e.detail,
+        )
+        raise
     except Exception as e:
-        logger.error("Failed to start domain analysis", domain=request.domain, error=str(e))
+        logger.exception(
+            "Failed to start domain analysis",
+            domain=request.domain,
+            user_id=str(current_user.id) if current_user else None,
+            stage=stage,
+            error=str(e),
+        )
         raise HTTPException(status_code=500, detail="Failed to start analysis")
 
 

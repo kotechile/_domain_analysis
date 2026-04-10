@@ -181,9 +181,16 @@ class DatabaseService:
             
             # Reports table user_id
             "ALTER TABLE reports ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);",
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS historical_data JSONB;",
             "ALTER TABLE reports ADD COLUMN IF NOT EXISTS display_payload JSONB;",
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS detailed_data_available JSONB DEFAULT '{}';",
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS analysis_phase VARCHAR(50) DEFAULT 'essential';",
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS analysis_mode VARCHAR(20) DEFAULT 'legacy';",
+            "ALTER TABLE reports ADD COLUMN IF NOT EXISTS progress_data JSONB;",
             "ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_domain_name_key;",
             "ALTER TABLE reports ADD CONSTRAINT reports_domain_name_user_id_key UNIQUE (domain_name, user_id);",
+            "CREATE INDEX IF NOT EXISTS idx_reports_analysis_phase ON reports(analysis_phase);",
+            "CREATE INDEX IF NOT EXISTS idx_reports_analysis_mode ON reports(analysis_mode);",
             
             # Ensure auctions table has newer columns
             "ALTER TABLE auctions ADD COLUMN IF NOT EXISTS link VARCHAR(1000);",
@@ -264,28 +271,63 @@ class DatabaseService:
                 'updated_at': datetime.utcnow().isoformat() 
             }
 
+            logger.info(
+                "Saving report payload",
+                domain=report.domain_name,
+                user_id=report.user_id,
+                status=report.status.value if hasattr(report.status, 'value') else report.status,
+                analysis_phase=report.analysis_phase.value if getattr(report, 'analysis_phase', None) else None,
+                analysis_mode=report.analysis_mode.value if getattr(report, 'analysis_mode', None) else None,
+                payload_keys=sorted(payload.keys()),
+            )
+
             try:
                 result = await client.table('reports').upsert(payload, on_conflict='domain_name, user_id').execute()
             except Exception as e:
-                # Older deployments may not have the display_payload column yet.
-                # Retry without that field so report reads keep working even before schema refresh catches up.
+                # Older deployments may temporarily lag behind the app schema.
+                # Retry without newer optional columns so analysis can still start.
                 error_text = str(e).lower()
-                if 'display_payload' in error_text and 'column' in error_text:
-                    logger.warning(
-                        "Retrying report save without display_payload because schema is not updated yet",
-                        domain=report.domain_name,
-                    )
-                    payload.pop('display_payload', None)
-                    result = await client.table('reports').upsert(payload, on_conflict='domain_name, user_id').execute()
-                else:
+                optional_fields = [
+                    'display_payload',
+                    'historical_data',
+                    'detailed_data_available',
+                    'analysis_phase',
+                    'analysis_mode',
+                    'progress_data',
+                ]
+                removed_fields = []
+
+                if 'column' not in error_text:
                     raise
+
+                for field in optional_fields:
+                    if field in error_text and field in payload:
+                        payload.pop(field, None)
+                        removed_fields.append(field)
+
+                if not removed_fields:
+                    raise
+
+                logger.warning(
+                    "Retrying report save without unsupported columns",
+                    domain=report.domain_name,
+                    user_id=report.user_id,
+                    removed_fields=removed_fields,
+                    original_error=str(e),
+                )
+                result = await client.table('reports').upsert(payload, on_conflict='domain_name, user_id').execute()
             
             report_id = result.data[0]['id'] if result.data else None
             logger.info("Report saved successfully", domain=report.domain_name, report_id=report_id)
             return report_id
             
         except Exception as e:
-            logger.error("Failed to save report", domain=report.domain_name, error=str(e))
+            logger.exception(
+                "Failed to save report",
+                domain=report.domain_name,
+                user_id=report.user_id,
+                error=str(e),
+            )
             raise
     
     async def get_report(self, domain_name: str, user_id: Optional[str] = None) -> Optional[DomainAnalysisReport]:
