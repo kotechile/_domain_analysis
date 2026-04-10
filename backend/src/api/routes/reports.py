@@ -82,11 +82,27 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
             error=str(hydration_error),
         )
 
-    if (
-        report.data_for_seo_metrics.organic_traffic_est in (None, 0)
-        and report.historical_data
-        and report.historical_data.rank_overview
-    ):
+    display_payload = report.display_payload or {}
+    payload_keywords = (display_payload.get("keywords") or {}).get("items", [])
+    payload_backlinks = (display_payload.get("backlinks") or {}).get("items", [])
+    payload_referring_domains = (display_payload.get("referring_domains") or {}).get("items", [])
+
+    if payload_keywords:
+        report.detailed_data_available["keywords"] = True
+        if not report.data_for_seo_metrics.total_keywords:
+            report.data_for_seo_metrics.total_keywords = (display_payload.get("keywords") or {}).get("total_count", len(payload_keywords))
+
+    if payload_backlinks:
+        report.detailed_data_available["backlinks"] = True
+        if not report.data_for_seo_metrics.total_backlinks:
+            report.data_for_seo_metrics.total_backlinks = (display_payload.get("backlinks") or {}).get("total_count", len(payload_backlinks))
+
+    if payload_referring_domains:
+        report.detailed_data_available["referring_domains"] = True
+        if not report.data_for_seo_metrics.total_referring_domains:
+            report.data_for_seo_metrics.total_referring_domains = (display_payload.get("referring_domains") or {}).get("total_count", len(payload_referring_domains))
+
+    if report.historical_data and report.historical_data.rank_overview:
         rank_overview = report.historical_data.rank_overview
         if (
             not rank_overview.organic_traffic
@@ -242,6 +258,7 @@ async def get_report_details(
             limit: int,
             offset: int,
             relational_shaper,
+            payload_key: str,
         ) -> dict:
             if not include:
                 return empty_section()
@@ -263,6 +280,15 @@ async def get_report_details(
                     "items": relational_shaper(relational_result["items"]),
                 }
 
+            payload_section = (report.display_payload or {}).get(payload_key, {})
+            payload_items = payload_section.get("items", [])
+            if payload_items:
+                sliced_items = payload_items[offset:offset + limit]
+                return {
+                    "total_count": payload_section.get("total_count", len(payload_items)),
+                    "items": sliced_items,
+                }
+
             return empty_section()
 
         keywords_result = await resolve_section(
@@ -271,6 +297,7 @@ async def get_report_details(
             keywords_limit,
             keywords_offset,
             shape_keyword_items,
+            "keywords",
         )
         backlinks_result = await resolve_section(
             DetailedDataType.BACKLINKS,
@@ -278,6 +305,7 @@ async def get_report_details(
             backlinks_limit,
             backlinks_offset,
             shape_backlink_items,
+            "backlinks",
         )
         if include_referring_domains:
             referring_domains_result = {
