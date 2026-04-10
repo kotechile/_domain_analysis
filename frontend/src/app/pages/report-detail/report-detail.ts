@@ -295,6 +295,29 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
         return val ? val.toLocaleString() : '0';
     }
 
+    formatProgressLabel(value: string | undefined | null): string {
+        if (!value) return 'Analyzing Core DNA';
+        return value
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    getProgressUpdates(): string[] {
+        const progress = this.report()?.progress_data;
+        if (!progress) return [];
+
+        const completed = progress.completed_operations || [];
+        if (completed.length) {
+            return completed.map(step => this.formatProgressLabel(step));
+        }
+
+        if (progress.current_operation) {
+            return [`Current stage: ${this.formatProgressLabel(progress.current_operation)}`];
+        }
+
+        return ['Analysis request accepted and queued'];
+    }
+
     getKeywordLabel(kw: OrganicKeyword): string {
         return kw.keyword || kw.keyword_data?.keyword || 'Unknown keyword';
     }
