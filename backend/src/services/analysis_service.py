@@ -425,6 +425,9 @@ class AnalysisService:
                     
                     if backlinks_data and backlinks_data.get("items"):
                         detailed_data_available["backlinks"] = True
+                        backlinks_total = backlinks_data.get("total_count") or len(backlinks_data.get("items", []))
+                        if report.data_for_seo_metrics:
+                            report.data_for_seo_metrics.total_backlinks = backlinks_total
                         operation_logger.log_data_collection("backlinks", record_count=len(backlinks_data.get("items", [])), message="Backlinks analysis completed")
                         detailed_status_messages.append("Backlinks analysis completed")
                         await self._update_progress_data(report, "Backlinks analysis completed", detailed_status_messages, progress_tracker)
@@ -514,6 +517,9 @@ class AnalysisService:
                     referring_domains_data, rd_cost = await self.dataforseo_async_service.get_referring_domains_async(domain, 10000, user_id)
                     if referring_domains_data and referring_domains_data.get("items"):
                         detailed_data_available["referring_domains"] = True
+                        referring_domains_total = referring_domains_data.get("total_count") or len(referring_domains_data.get("items", []))
+                        if report.data_for_seo_metrics:
+                            report.data_for_seo_metrics.total_referring_domains = referring_domains_total
                         operation_logger.log_data_collection("referring_domains", record_count=len(referring_domains_data.get("items", [])), message="Referring domains analysis completed")
                         detailed_status_messages.append("Referring domains analysis completed")
                         await self._update_progress_data(report, "Referring domains analysis completed", detailed_status_messages, progress_tracker)
@@ -528,6 +534,9 @@ class AnalysisService:
                         referring_domains_data = await self.dataforseo_service.get_referring_domains(domain, 800, user_id)
                         if referring_domains_data:
                             detailed_data_available["referring_domains"] = True
+                            referring_domains_total = referring_domains_data.get("total_count") or len(referring_domains_data.get("items", []))
+                            if report.data_for_seo_metrics:
+                                report.data_for_seo_metrics.total_referring_domains = referring_domains_total
                             operation_logger.log_data_collection("referring_domains", record_count=len(referring_domains_data.get("items", [])), message="Referring domains analysis completed (legacy)")
                             detailed_status_messages.append("Referring domains analysis completed (legacy)")
                             await self._update_progress_data(report, "Referring domains analysis completed (legacy)", detailed_status_messages, progress_tracker)

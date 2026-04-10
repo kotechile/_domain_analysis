@@ -258,7 +258,8 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     ensureActiveTabData() {
         const d = this.domain();
         const tab = this.activeTab();
-        if (!d || !this.hasDetailedData(this.report())) return;
+        const report = this.report();
+        if (!d || !report || report.status !== 'completed') return;
 
         if ((tab === 'keywords' || tab === 'referring-domains' || tab === 'backlinks') && !this.loadedDetailTabs.has(tab)) {
             this.fetchReportDetails(d, tab);

@@ -898,13 +898,42 @@ class DatabaseService:
         except Exception as e:
             if self._is_missing_relation_error(e, 'detailed_analysis_data'):
                 logger.warning(
-                    "Legacy detailed_analysis_data table is missing; returning no JSON detailed data",
+                    "Legacy detailed_analysis_data table is missing; falling back to relational detailed data",
                     domain=domain_name,
                     data_type=data_type.value,
                 )
-                return None
+                return await self._get_relational_detailed_data(domain_name, data_type)
             logger.error("Failed to get detailed data", domain=domain_name, data_type=data_type.value, error=str(e))
             raise
+
+    async def _get_relational_detailed_data(self, domain_name: str, data_type: DetailedDataType) -> Optional[DetailedAnalysisData]:
+        """Synthesize legacy detailed-data payloads from relational tables."""
+        try:
+            if data_type == DetailedDataType.REFERRING_DOMAINS:
+                relational_result = await self.get_derived_referring_domains(domain_name, limit=10000, offset=0)
+            else:
+                relational_result = await self.get_detailed_items(domain_name, data_type, limit=10000, offset=0)
+
+            if not relational_result["items"]:
+                return None
+
+            return DetailedAnalysisData(
+                domain_name=domain_name,
+                data_type=data_type,
+                json_data={
+                    "items": relational_result["items"],
+                    "total_count": relational_result["total_count"],
+                },
+                data_source="relational",
+            )
+        except Exception as rel_error:
+            logger.warning(
+                "Failed to synthesize relational detailed data",
+                domain=domain_name,
+                data_type=data_type.value,
+                error=str(rel_error),
+            )
+            return None
     
     async def delete_detailed_data(self, domain_name: str, data_type: DetailedDataType):
         """Delete detailed analysis data"""

@@ -9,7 +9,7 @@ from datetime import datetime
 import structlog
 import io
 
-from models.domain_analysis import ReportResponse, DomainAnalysisReport, HistoricalData
+from models.domain_analysis import ReportResponse, DomainAnalysisReport, HistoricalData, DataForSEOMetrics, DetailedDataType
 from services.database import get_database, DataSource
 from services.external_apis import DataForSEOService
 from services.pdf_service import PDFService
@@ -48,13 +48,71 @@ async def _get_owned_report_or_404(domain: str, current_user: Any):
     return db, report
 
 
+async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAnalysisReport:
+    """Backfill report counts from relational data for older/stale report rows."""
+    if not report.data_for_seo_metrics:
+        report.data_for_seo_metrics = DataForSEOMetrics()
+
+    if not report.detailed_data_available:
+        report.detailed_data_available = {}
+
+    try:
+        keywords_result = await db.get_detailed_items(report.domain_name, DetailedDataType.KEYWORDS, 1, 0)
+        backlinks_result = await db.get_detailed_items(report.domain_name, DetailedDataType.BACKLINKS, 1, 0)
+        referring_domains_result = await db.get_derived_referring_domains(report.domain_name, 1, 0)
+
+        if keywords_result["total_count"] > 0:
+            report.detailed_data_available["keywords"] = True
+            if not report.data_for_seo_metrics.total_keywords:
+                report.data_for_seo_metrics.total_keywords = keywords_result["total_count"]
+
+        if backlinks_result["total_count"] > 0:
+            report.detailed_data_available["backlinks"] = True
+            if not report.data_for_seo_metrics.total_backlinks:
+                report.data_for_seo_metrics.total_backlinks = backlinks_result["total_count"]
+
+        if referring_domains_result["total_count"] > 0:
+            report.detailed_data_available["referring_domains"] = True
+            if not report.data_for_seo_metrics.total_referring_domains:
+                report.data_for_seo_metrics.total_referring_domains = referring_domains_result["total_count"]
+    except Exception as hydration_error:
+        logger.warning(
+            "Failed to hydrate report detail counts from relational data",
+            domain=report.domain_name,
+            error=str(hydration_error),
+        )
+
+    if (
+        report.data_for_seo_metrics.organic_traffic_est in (None, 0)
+        and report.historical_data
+        and report.historical_data.rank_overview
+        and report.historical_data.rank_overview.organic_traffic
+    ):
+        try:
+            latest_traffic = sorted(
+                report.historical_data.rank_overview.organic_traffic,
+                key=lambda point: point.date,
+            )[-1].value
+            if latest_traffic > 0:
+                report.data_for_seo_metrics.organic_traffic_est = latest_traffic
+        except Exception as hydration_error:
+            logger.warning(
+                "Failed to hydrate traffic from historical data",
+                domain=report.domain_name,
+                error=str(hydration_error),
+            )
+
+    return report
+
+
 @router.get("/reports/{domain}", response_model=ReportResponse)
 async def get_report(domain: str, current_user = Depends(get_current_user)):
     """
     Get complete domain analysis report
     """
     try:
-        _, report = await _get_owned_report_or_404(domain, current_user)
+        db, report = await _get_owned_report_or_404(domain, current_user)
+        report = await _hydrate_report_response(db, report)
         
         if report.status != "completed":
             # Include error message if report failed
