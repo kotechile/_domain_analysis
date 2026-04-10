@@ -392,6 +392,14 @@ class AnalysisService:
                         while waited < max_wait_time:
                             await asyncio.sleep(wait_interval)
                             waited += wait_interval
+
+                            if waited % 10 == 0:
+                                wait_message = f"Waiting for backlink results from N8N... {waited}s elapsed"
+                                if detailed_status_messages and detailed_status_messages[-1].startswith("Waiting for backlink results from N8N"):
+                                    detailed_status_messages[-1] = wait_message
+                                else:
+                                    detailed_status_messages.append(wait_message)
+                                await self._update_progress_data(report, wait_message, detailed_status_messages, progress_tracker)
                             
                             # Check if data was saved by webhook
                             saved_data = await self.db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
@@ -1021,14 +1029,13 @@ class AnalysisService:
             progress_percentage = 0
             completed_operations = 0
             total_operations = 4
-            current_operation = None
+            current_operation = current_message
             estimated_time_remaining = 0
             
             if progress_tracker:
                 progress_percentage = progress_tracker.get_progress_percentage()
                 completed_operations = progress_tracker.completed_operations
                 total_operations = progress_tracker.total_operations
-                current_operation = progress_tracker.get_current_operation()
                 estimated_time_remaining = progress_tracker.get_estimated_time_remaining() or 0
             
             # Create ProgressInfo object
