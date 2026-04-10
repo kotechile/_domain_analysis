@@ -28,6 +28,38 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnChanges, 
 
   private chart: Chart | null = null;
 
+  private parseTrafficDate(rawDate: string): Date | null {
+    if (!rawDate) return null;
+
+    const parsed = new Date(rawDate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+
+    const normalized = String(rawDate).trim();
+
+    // Recover compact year/month values such as 20202 -> 2020-02-01 or 202004 -> 2020-04-01.
+    const compactMatch = normalized.match(/^(\d{4})(\d{1,2})$/);
+    if (compactMatch) {
+      const [, year, month] = compactMatch;
+      const compactDate = new Date(`${year}-${month.padStart(2, '0')}-01`);
+      if (!Number.isNaN(compactDate.getTime())) {
+        return compactDate;
+      }
+    }
+
+    // Recover bare years such as 2025 -> 2025-01-01.
+    const yearOnlyMatch = normalized.match(/^(\d{4})$/);
+    if (yearOnlyMatch) {
+      const yearDate = new Date(`${normalized}-01-01`);
+      if (!Number.isNaN(yearDate.getTime())) {
+        return yearDate;
+      }
+    }
+
+    return null;
+  }
+
   ngOnInit() {}
 
   ngOnChanges(changes: SimpleChanges) {
@@ -61,14 +93,17 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnChanges, 
     }
 
     // Sort data by date
-    const sortedData = [...this.trafficData].sort((a, b) =>
-      new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
+    const sortedData = [...this.trafficData].sort((a, b) => {
+      const left = this.parseTrafficDate(a.date)?.getTime() ?? 0;
+      const right = this.parseTrafficDate(b.date)?.getTime() ?? 0;
+      return left - right;
+    });
 
     // Format dates for display
     const labels = sortedData.map(point => {
-      const date = new Date(point.date);
-      return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      const date = this.parseTrafficDate(point.date);
+      if (!date) return point.date;
+      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     });
 
     const data = sortedData.map(point => point.value);
@@ -143,6 +178,10 @@ export class TrafficChartComponent implements OnInit, AfterViewInit, OnChanges, 
             padding: 12,
             displayColors: false,
             callbacks: {
+              title: (tooltipItems) => {
+                const rawLabel = tooltipItems[0]?.label;
+                return rawLabel || 'Unknown date';
+              },
               label: (context) => {
                 const value = context.parsed.y;
                 if (value == null) return 'Traffic: N/A';

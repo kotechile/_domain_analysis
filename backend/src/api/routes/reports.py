@@ -87,6 +87,29 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
     payload_backlinks = (display_payload.get("backlinks") or {}).get("items", [])
     payload_referring_domains = (display_payload.get("referring_domains") or {}).get("items", [])
 
+    if not payload_backlinks:
+        try:
+            raw_data = await db.get_raw_data(report.domain_name, DataSource.DATAFORSEO)
+            raw_backlinks = (raw_data or {}).get("backlinks", {})
+            raw_backlink_items = raw_backlinks.get("items", []) if isinstance(raw_backlinks, dict) else []
+            if raw_backlink_items:
+                shaped_backlinks = shape_backlink_items(raw_backlink_items)
+                display_payload = {
+                    **display_payload,
+                    "backlinks": {
+                        "total_count": raw_backlinks.get("total_count", len(shaped_backlinks)),
+                        "items": shaped_backlinks,
+                    },
+                }
+                report.display_payload = display_payload
+                payload_backlinks = shaped_backlinks
+        except Exception as hydration_error:
+            logger.warning(
+                "Failed to hydrate backlink display payload from raw cache",
+                domain=report.domain_name,
+                error=str(hydration_error),
+            )
+
     if payload_keywords:
         report.detailed_data_available["keywords"] = True
         if not report.data_for_seo_metrics.total_keywords:
@@ -288,6 +311,25 @@ async def get_report_details(
                     "total_count": payload_section.get("total_count", len(payload_items)),
                     "items": sliced_items,
                 }
+
+            if data_type == DetailedDataType.BACKLINKS:
+                try:
+                    raw_data = await db.get_raw_data(domain, DataSource.DATAFORSEO)
+                    raw_backlinks = (raw_data or {}).get("backlinks", {})
+                    raw_items = raw_backlinks.get("items", []) if isinstance(raw_backlinks, dict) else []
+                    if raw_items:
+                        shaped_items = shape_backlink_items(raw_items)
+                        sliced_items = shaped_items[offset:offset + limit]
+                        return {
+                            "total_count": raw_backlinks.get("total_count", len(shaped_items)),
+                            "items": sliced_items,
+                        }
+                except Exception as raw_error:
+                    logger.warning(
+                        "Backlinks raw-cache fallback failed",
+                        domain=domain,
+                        error=str(raw_error),
+                    )
 
             return empty_section()
 
