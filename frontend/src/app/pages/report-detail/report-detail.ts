@@ -94,6 +94,9 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
             const d = params.get('domain');
             if (d) {
                 this.domain.set(d);
+                this.report.set(null);
+                this.error.set(null);
+                this.loading.set(true);
                 this.backlinks.set([]);
                 this.referringDomains.set([]);
                 this.keywords.set([]);
@@ -117,9 +120,9 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
 
         try {
             const res = await firstValueFrom(this.api.getReport(d));
-            if (res.success && res.report) {
+            if (res.report) {
                 this.report.set(res.report);
-                this.error.set(null);
+                this.error.set(res.success ? null : (res.message || null));
 
                 // Start polling if it's in progress
                 if (res.report.status === 'pending' || res.report.status === 'in_progress') {
@@ -222,13 +225,15 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
             )
             .subscribe({
                 next: (res) => {
-                    if (res.success && res.report) {
+                    if (res.report) {
                         this.report.set(res.report);
-                        this.error.set(null);
+                        this.error.set(res.success ? null : (res.message || null));
                         this.loading.set(false);
                         if (res.report.status === 'completed' && this.hasDetailedData(res.report)) {
                             this.ensureActiveTabData();
                         }
+                    } else {
+                        this.loading.set(true);
                     }
                 },
                 error: (err) => {

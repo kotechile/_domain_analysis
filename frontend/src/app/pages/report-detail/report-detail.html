@@ -18,7 +18,7 @@
                         <i-lucide [name]="CheckCircle" class="w-3.5 h-3.5 fill-current opacity-80"></i-lucide>
                         <span>Ready to scout</span>
                     </div>
-                    } @else if (report()?.status === 'in_progress') {
+                    } @else if (report()?.status === 'in_progress' || report()?.status === 'pending') {
                     <div class="status-badge bg-amber-500/10 text-amber-500 border border-amber-500/20">
                         <i-lucide [name]="RefreshCw" class="w-3.5 h-3.5 animate-spin"></i-lucide>
                         <span>Analyzing DNA...</span>
