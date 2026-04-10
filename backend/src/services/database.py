@@ -146,6 +146,33 @@ class DatabaseService:
                 expires_at TIMESTAMP WITH TIME ZONE, 
                 UNIQUE(domain_name, api_source) 
             );""",
+
+            # Legacy detailed JSON storage used by older analysis flows
+            """CREATE TABLE IF NOT EXISTS detailed_analysis_data (
+                id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                domain_name VARCHAR(255) NOT NULL,
+                data_type VARCHAR(50) NOT NULL,
+                json_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+                task_id VARCHAR(255),
+                data_source VARCHAR(50) DEFAULT 'dataforseo',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                expires_at TIMESTAMP WITH TIME ZONE,
+                UNIQUE(domain_name, data_type)
+            );""",
+
+            # Async task tracking
+            """CREATE TABLE IF NOT EXISTS async_tasks (
+                id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                domain_name VARCHAR(255) NOT NULL,
+                task_id VARCHAR(255) NOT NULL UNIQUE,
+                task_type VARCHAR(50) NOT NULL,
+                status VARCHAR(50) NOT NULL DEFAULT 'pending',
+                error_message TEXT,
+                retry_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                completed_at TIMESTAMP WITH TIME ZONE
+            );""",
             
             # CSV upload progress (unified location)
             """CREATE TABLE IF NOT EXISTS csv_upload_progress (
@@ -174,6 +201,8 @@ class DatabaseService:
             "CREATE INDEX IF NOT EXISTS idx_reports_domain_name ON reports(domain_name);",
             "CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);",
             "CREATE INDEX IF NOT EXISTS idx_raw_data_cache_domain_source ON raw_data_cache(domain_name, api_source);",
+            "CREATE INDEX IF NOT EXISTS idx_detailed_analysis_data_domain_type ON detailed_analysis_data(domain_name, data_type);",
+            "CREATE INDEX IF NOT EXISTS idx_async_tasks_domain_type ON async_tasks(domain_name, task_type);",
             "CREATE INDEX IF NOT EXISTS idx_csv_upload_progress_job_id ON csv_upload_progress(job_id);",
             "CREATE INDEX IF NOT EXISTS idx_csv_upload_progress_status ON csv_upload_progress(status);",
             
@@ -233,6 +262,15 @@ class DatabaseService:
             logger.debug("Failed to trigger PostgREST schema reload", error=str(e))
 
         logger.info("Database tables verification completed")
+
+    @staticmethod
+    def _is_missing_relation_error(error: Exception, relation_name: str) -> bool:
+        error_text = str(error).lower()
+        return (
+            "42p01" in error_text
+            and "does not exist" in error_text
+            and relation_name.lower() in error_text
+        )
     
     async def _create_indexes(self):
         """Create database indexes for performance"""
@@ -493,6 +531,13 @@ class DatabaseService:
             return data_id
 
         except Exception as e:
+            if self._is_missing_relation_error(e, 'detailed_analysis_data'):
+                logger.warning(
+                    "Legacy detailed_analysis_data table is missing; skipping JSON detailed-data save",
+                    domain=detailed_data.domain_name,
+                    data_type=detailed_data.data_type.value,
+                )
+                return ""
             logger.error("Failed to save detailed data", domain=detailed_data.domain_name, data_type=detailed_data.data_type.value, error=str(e))
             raise
 
@@ -851,6 +896,13 @@ class DatabaseService:
             return detailed_data
             
         except Exception as e:
+            if self._is_missing_relation_error(e, 'detailed_analysis_data'):
+                logger.warning(
+                    "Legacy detailed_analysis_data table is missing; returning no JSON detailed data",
+                    domain=domain_name,
+                    data_type=data_type.value,
+                )
+                return None
             logger.error("Failed to get detailed data", domain=domain_name, data_type=data_type.value, error=str(e))
             raise
     
@@ -858,7 +910,17 @@ class DatabaseService:
         """Delete detailed analysis data"""
         client = await self._get_client()
         try:
-            await client.table('detailed_analysis_data').delete().eq('domain_name', domain_name).eq('data_type', data_type.value).execute()
+            try:
+                await client.table('detailed_analysis_data').delete().eq('domain_name', domain_name).eq('data_type', data_type.value).execute()
+            except Exception as e:
+                if self._is_missing_relation_error(e, 'detailed_analysis_data'):
+                    logger.warning(
+                        "Legacy detailed_analysis_data table is missing; skipping JSON detailed-data delete",
+                        domain=domain_name,
+                        data_type=data_type.value,
+                    )
+                else:
+                    raise
             await self.delete_relational_detailed_data(domain_name, data_type)
             logger.info("Detailed data deleted", domain=domain_name, data_type=data_type.value)
         except Exception as e:
@@ -1004,9 +1066,26 @@ class DatabaseService:
             # Delete detailed analysis data
             try:
                 logger.info("Attempting to delete detailed analysis data", domain=domain_name)
-                detailed_data_result = await client.table('detailed_analysis_data').delete().eq('domain_name', domain_name).execute()
-                deleted_count += len(detailed_data_result.data) if detailed_data_result.data else 0
-                logger.info("Deleted detailed analysis data", domain=domain_name, count=len(detailed_data_result.data) if detailed_data_result.data else 0, result_data=detailed_data_result.data)
+                try:
+                    detailed_data_result = await client.table('detailed_analysis_data').delete().eq('domain_name', domain_name).execute()
+                    deleted_count += len(detailed_data_result.data) if detailed_data_result.data else 0
+                    logger.info("Deleted detailed analysis data", domain=domain_name, count=len(detailed_data_result.data) if detailed_data_result.data else 0, result_data=detailed_data_result.data)
+                except Exception as e:
+                    if self._is_missing_relation_error(e, 'detailed_analysis_data'):
+                        logger.warning("Legacy detailed_analysis_data table is missing; continuing delete flow", domain=domain_name)
+                    else:
+                        raise
+
+                for data_type in (DetailedDataType.KEYWORDS, DetailedDataType.BACKLINKS, DetailedDataType.REFERRING_DOMAINS):
+                    try:
+                        await self.delete_relational_detailed_data(domain_name, data_type)
+                    except Exception as rel_error:
+                        logger.warning(
+                            "Failed to delete relational detailed data during domain cleanup",
+                            domain=domain_name,
+                            data_type=data_type.value,
+                            error=str(rel_error),
+                        )
             except Exception as e:
                 logger.error("Failed to delete detailed analysis data", domain=domain_name, error=str(e))
                 raise
