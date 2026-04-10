@@ -8,7 +8,7 @@ from typing import Optional, List, Any, Dict
 from uuid import UUID
 import structlog
 
-from models.domain_analysis import ( DomainAnalysisReport, AnalysisStatus, DataForSEOMetrics, WaybackMachineSummary, LLMAnalysis, AnalysisMode, AnalysisPhase, DetailedDataType, AsyncTaskStatus, ProgressInfo )
+from models.domain_analysis import ( DomainAnalysisReport, AnalysisStatus, DataForSEOMetrics, WaybackMachineSummary, LLMAnalysis, AnalysisMode, AnalysisPhase, DetailedDataType, DetailedAnalysisData, AsyncTaskStatus, ProgressInfo )
 from services.database import get_database
 from services.external_apis import DataForSEOService, WaybackMachineService, LLMService
 from services.dataforseo_async import DataForSEOAsyncService
@@ -394,7 +394,6 @@ class AnalysisService:
                             waited += wait_interval
                             
                             # Check if data was saved by webhook
-                            from models.domain_analysis import DetailedDataType
                             saved_data = await self.db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
                             if saved_data:
                                 backlinks_data = saved_data.json_data
@@ -424,7 +423,6 @@ class AnalysisService:
                         progress_tracker.complete_sub_operation("detailed_data", "backlinks_analysis")
                         
                         # ) Save detailed data to database (if not already saved by N8N webhook
-                        from models.domain_analysis import DetailedAnalysisData, DetailedDataType
                         existing_data = await self.db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
                         if not existing_data:
                             detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.BACKLINKS, json_data=backlinks_data )
@@ -557,7 +555,6 @@ class AnalysisService:
                             await asyncio.sleep(wait_interval)
                             waited += wait_interval
                             
-                            from models.domain_analysis import DetailedDataType
                             saved_data = await self.db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
                             if saved_data:
                                 backlinks_data = saved_data.json_data
@@ -581,7 +578,6 @@ class AnalysisService:
                     detailed_data_available["backlinks"] = True
                     operation_logger.log_data_collection("backlinks", record_count=len(backlinks_data.get("items", [])))
                     # Save detailed data to database
-                    from models.domain_analysis import DetailedAnalysisData, DetailedDataType
                     detailed_data = DetailedAnalysisData( domain_name=domain, data_type=DetailedDataType.BACKLINKS, json_data=backlinks_data )
                     await self.db.store_detailed_data(detailed_data)
                 
