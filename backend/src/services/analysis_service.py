@@ -801,8 +801,13 @@ class AnalysisService:
         rank_overview = None
         if rank_data and rank_data.get("items"):
             items = rank_data.get("items", [])
-            # Sort by date
-            items.sort(key=lambda x: x.get("date", ""))
+            # Sort by date when available, otherwise by year/month payloads.
+            items.sort(
+                key=lambda x: (
+                    x.get("date")
+                    or f"{x.get('year', 0)}-{int(x.get('month', 0) or 0):02d}-01"
+                )
+            )
             
             organic_keywords_count = []
             organic_traffic = []
@@ -810,6 +815,8 @@ class AnalysisService:
             
             for item in items:
                 date_str = item.get("date")
+                if not date_str and item.get("year") and item.get("month"):
+                    date_str = f"{item['year']}-{int(item['month']):02d}-01"
                 if not date_str:
                     continue
                 

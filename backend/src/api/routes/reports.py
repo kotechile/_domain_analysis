@@ -86,6 +86,48 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
         report.data_for_seo_metrics.organic_traffic_est in (None, 0)
         and report.historical_data
         and report.historical_data.rank_overview
+    ):
+        rank_overview = report.historical_data.rank_overview
+        if (
+            not rank_overview.organic_traffic
+            and rank_overview.raw_items
+        ):
+            try:
+                from models.domain_analysis import HistoricalMetricPoint
+
+                recovered_points = []
+                for item in rank_overview.raw_items:
+                    year = item.get("year")
+                    month = item.get("month")
+                    organic = item.get("metrics", {}).get("organic")
+                    if not year or not month or not organic:
+                        continue
+                    recovered_points.append(
+                        HistoricalMetricPoint(
+                            date=f"{year}-{int(month):02d}-01",
+                            value=float(organic.get("etv", 0)),
+                        )
+                    )
+
+                if recovered_points:
+                    recovered_points.sort(key=lambda point: point.date)
+                    rank_overview.organic_traffic = recovered_points
+                    if not rank_overview.organic_traffic_value:
+                        rank_overview.organic_traffic_value = [
+                            HistoricalMetricPoint(date=point.date, value=point.value)
+                            for point in recovered_points
+                        ]
+            except Exception as hydration_error:
+                logger.warning(
+                    "Failed to recover traffic series from historical raw_items",
+                    domain=report.domain_name,
+                    error=str(hydration_error),
+                )
+
+    if (
+        report.data_for_seo_metrics.organic_traffic_est in (None, 0)
+        and report.historical_data
+        and report.historical_data.rank_overview
         and report.historical_data.rank_overview.organic_traffic
     ):
         try:
