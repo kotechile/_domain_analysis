@@ -284,38 +284,58 @@ class DatabaseService:
             try:
                 result = await client.table('reports').upsert(payload, on_conflict='domain_name, user_id').execute()
             except Exception as e:
-                # Older deployments may temporarily lag behind the app schema.
-                # Retry without newer optional columns so analysis can still start.
                 error_text = str(e).lower()
-                optional_fields = [
-                    'display_payload',
-                    'historical_data',
-                    'detailed_data_available',
-                    'analysis_phase',
-                    'analysis_mode',
-                    'progress_data',
-                ]
-                removed_fields = []
+                if 'no unique or exclusion constraint matching the on conflict specification' in error_text:
+                    logger.warning(
+                        "Falling back to manual report save because composite ON CONFLICT constraint is unavailable",
+                        domain=report.domain_name,
+                        user_id=report.user_id,
+                        original_error=str(e),
+                    )
+                    result = await self._save_report_without_upsert(client, payload)
+                else:
+                    optional_fields = [
+                        'display_payload',
+                        'historical_data',
+                        'detailed_data_available',
+                        'analysis_phase',
+                        'analysis_mode',
+                        'progress_data',
+                    ]
+                    removed_fields = []
 
-                if 'column' not in error_text:
-                    raise
+                    if 'column' not in error_text:
+                        raise
 
-                for field in optional_fields:
-                    if field in error_text and field in payload:
-                        payload.pop(field, None)
-                        removed_fields.append(field)
+                    for field in optional_fields:
+                        if field in error_text and field in payload:
+                            payload.pop(field, None)
+                            removed_fields.append(field)
 
-                if not removed_fields:
-                    raise
+                    if not removed_fields:
+                        raise
 
-                logger.warning(
-                    "Retrying report save without unsupported columns",
-                    domain=report.domain_name,
-                    user_id=report.user_id,
-                    removed_fields=removed_fields,
-                    original_error=str(e),
-                )
-                result = await client.table('reports').upsert(payload, on_conflict='domain_name, user_id').execute()
+                    logger.warning(
+                        "Retrying report save without unsupported columns",
+                        domain=report.domain_name,
+                        user_id=report.user_id,
+                        removed_fields=removed_fields,
+                        original_error=str(e),
+                    )
+                    try:
+                        result = await client.table('reports').upsert(payload, on_conflict='domain_name, user_id').execute()
+                    except Exception as retry_error:
+                        retry_error_text = str(retry_error).lower()
+                        if 'no unique or exclusion constraint matching the on conflict specification' in retry_error_text:
+                            logger.warning(
+                                "Falling back to manual report save because composite ON CONFLICT constraint is unavailable",
+                                domain=report.domain_name,
+                                user_id=report.user_id,
+                                original_error=str(retry_error),
+                            )
+                            result = await self._save_report_without_upsert(client, payload)
+                        else:
+                            raise
             
             report_id = result.data[0]['id'] if result.data else None
             logger.info("Report saved successfully", domain=report.domain_name, report_id=report_id)
@@ -329,6 +349,35 @@ class DatabaseService:
                 error=str(e),
             )
             raise
+
+    async def _save_report_without_upsert(self, client: AsyncClient, payload: Dict[str, Any]):
+        """Fallback report persistence path that avoids ON CONFLICT requirements."""
+        domain_name = payload['domain_name']
+        user_id = payload.get('user_id')
+
+        logger.info(
+            "Using manual report save fallback",
+            domain=domain_name,
+            user_id=user_id,
+        )
+
+        query = client.table('reports').select('id').eq('domain_name', domain_name)
+        if user_id:
+            query = query.eq('user_id', user_id)
+        else:
+            query = query.is_('user_id', 'null')
+
+        existing = await query.order('analysis_timestamp', desc=True).limit(1).execute()
+
+        if existing.data:
+            report_id = existing.data[0]['id']
+            update_payload = payload.copy()
+            update_payload.pop('domain_name', None)
+            result = await client.table('reports').update(update_payload).eq('id', report_id).execute()
+            if result.data:
+                return result
+
+        return await client.table('reports').insert(payload).execute()
     
     async def get_report(self, domain_name: str, user_id: Optional[str] = None) -> Optional[DomainAnalysisReport]:
         """Get domain analysis report by domain name, optionally scoped to a user."""
