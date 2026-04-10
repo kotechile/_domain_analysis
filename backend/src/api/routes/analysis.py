@@ -142,7 +142,7 @@ async def analyze_domain( request: DomainAnalysisRequest, background_tasks: Back
         
         logger.info("Domain analysis started", domain=request.domain, mode=request.mode, report_id=report_id, user_id=current_user.id)
         
-        return AnalysisResponse( success=True, message=f"Analysis started successfully ({'Summary' if action_name == 'ai_domain_summary' else 'Deep'})", report_id=report_id, estimated_completion_time=15 if action_name == "ai_domain_summary" else 45 )
+        return AnalysisResponse( success=True, message=f"Analysis started successfully ({'Summary' if action_name == 'ai_domain_summary' else 'Deep'})", report_id=report_id, estimated_completion_time=15 if action_name == "ai_domain_summary" else 180 )
         
     except HTTPException as e:
         logger.warning(

@@ -91,6 +91,17 @@ class AnalysisService:
             if not report:
                 report = DomainAnalysisReport( domain_name=domain, analysis_timestamp=start_time, status=AnalysisStatus.IN_PROGRESS, analysis_mode=analysis_mode, analysis_phase=AnalysisPhase.ESSENTIAL )
                 await self.db.save_report(report)
+            else:
+                # The API route creates a pending placeholder report before the
+                # background job starts. Promote it to in-progress here so the UI
+                # reflects that work is actively underway.
+                report.status = AnalysisStatus.IN_PROGRESS
+                report.analysis_timestamp = start_time
+                report.analysis_mode = analysis_mode
+                report.analysis_phase = AnalysisPhase.ESSENTIAL
+                report.error_message = None
+                report.processing_time_seconds = None
+                await self.db.save_report(report)
             
             # Phase 1: Essential Data Collection
             progress_tracker.start_operation("essential_data")
