@@ -863,10 +863,9 @@ class DatabaseService:
         client = await self._get_client()
         try:
             if data_type == DetailedDataType.BACKLINKS:
-                columns = 'id, domain_name, source_url, href, anchor, domain_name_source, dr, created_at'
                 try:
                     result = await client.table('domain_backlinks') \
-                        .select(columns, count='exact') \
+                        .select('*', count='exact') \
                         .eq('domain_name', domain_name) \
                         .order('dr', ascending=False, nulls_last=True) \
                         .range(offset, offset + limit - 1) \
@@ -884,19 +883,38 @@ class DatabaseService:
                         domain=domain_name,
                         error=str(ordered_error),
                     )
-                    result = await client.table('domain_backlinks') \
-                        .select(columns, count='exact') \
-                        .eq('domain_name', domain_name) \
-                        .order('created_at', ascending=False) \
-                        .range(offset, offset + limit - 1) \
-                        .execute()
-                    logger.info(
-                        "Backlink relational fallback query succeeded",
-                        domain=domain_name,
-                        total_count=result.count if result.count is not None else len(result.data or []),
-                        returned_count=len(result.data or []),
-                        first_item_keys=sorted((result.data or [])[0].keys()) if (result.data or []) else [],
-                    )
+                    try:
+                        result = await client.table('domain_backlinks') \
+                            .select('*', count='exact') \
+                            .eq('domain_name', domain_name) \
+                            .order('created_at', ascending=False) \
+                            .range(offset, offset + limit - 1) \
+                            .execute()
+                        logger.info(
+                            "Backlink relational fallback query succeeded",
+                            domain=domain_name,
+                            total_count=result.count if result.count is not None else len(result.data or []),
+                            returned_count=len(result.data or []),
+                            first_item_keys=sorted((result.data or [])[0].keys()) if (result.data or []) else [],
+                        )
+                    except Exception as fallback_error:
+                        logger.warning(
+                            "Created-at backlink query failed; retrying without explicit ordering",
+                            domain=domain_name,
+                            error=str(fallback_error),
+                        )
+                        result = await client.table('domain_backlinks') \
+                            .select('*', count='exact') \
+                            .eq('domain_name', domain_name) \
+                            .range(offset, offset + limit - 1) \
+                            .execute()
+                        logger.info(
+                            "Backlink relational unordered query succeeded",
+                            domain=domain_name,
+                            total_count=result.count if result.count is not None else len(result.data or []),
+                            returned_count=len(result.data or []),
+                            first_item_keys=sorted((result.data or [])[0].keys()) if (result.data or []) else [],
+                        )
 
                 return {
                     'items': result.data or [],
@@ -923,7 +941,7 @@ class DatabaseService:
             elif data_type == DetailedDataType.REFERRING_DOMAINS:
                 query = query.order('dr', ascending=False).order('backlinks_count', ascending=False)
             elif data_type == DetailedDataType.BACKLINKS:
-                query = query.order('dr', ascending=False)
+                query = query.order('dr', ascending=False, nulls_last=True)
 
             result = await query.execute()
 

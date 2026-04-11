@@ -15,6 +15,7 @@ from services.external_apis import DataForSEOService
 from services.pdf_service import PDFService
 from services.analysis_service import AnalysisService
 from services.report_display_service import (
+    build_referring_domains_display,
     shape_backlink_items,
     shape_keyword_items,
     shape_referring_domain_items,
@@ -310,7 +311,7 @@ async def get_report_details(
                     "items": relational_shaper(relational_result["items"]),
                 }
 
-            payload_section = (report.display_payload or {}).get(payload_key, {})
+            payload_section = (getattr(report, "display_payload", None) or {}).get(payload_key, {})
             payload_items = payload_section.get("items", [])
             if payload_items:
                 logger.info(
@@ -325,6 +326,31 @@ async def get_report_details(
                     "total_count": payload_section.get("total_count", len(payload_items)),
                     "items": sliced_items,
                 }
+
+            try:
+                legacy_detailed_data = await db.get_detailed_data(domain, data_type)
+                legacy_items = (legacy_detailed_data.json_data if legacy_detailed_data else {}).get("items", [])
+                if legacy_items:
+                    shaped_items = relational_shaper(legacy_items)
+                    sliced_items = shaped_items[offset:offset + limit]
+                    logger.info(
+                        "Report detail section resolved from legacy detailed data",
+                        domain=domain,
+                        section=payload_key,
+                        total_count=legacy_detailed_data.json_data.get("total_count", len(shaped_items)),
+                        returned_count=len(sliced_items),
+                    )
+                    return {
+                        "total_count": legacy_detailed_data.json_data.get("total_count", len(shaped_items)),
+                        "items": sliced_items,
+                    }
+            except Exception as legacy_error:
+                logger.warning(
+                    "Legacy detailed-data fallback failed",
+                    domain=domain,
+                    section=payload_key,
+                    error=str(legacy_error),
+                )
 
             if data_type == DetailedDataType.BACKLINKS:
                 try:
@@ -392,6 +418,26 @@ async def get_report_details(
                     domain=domain,
                     error=str(rel_error),
                 )
+                try:
+                    backlink_legacy_data = await db.get_detailed_data(domain, DetailedDataType.BACKLINKS)
+                    backlink_legacy_items = (backlink_legacy_data.json_data if backlink_legacy_data else {}).get("items", [])
+                    if backlink_legacy_items:
+                        derived_display = build_referring_domains_display(
+                            raw_referring_domains=None,
+                            raw_backlinks=backlink_legacy_items,
+                            limit=backlinks_limit,
+                            offset=backlinks_offset,
+                        )
+                        referring_domains_result = {
+                            "total_count": derived_display["total_count"],
+                            "items": derived_display["items"],
+                        }
+                except Exception as legacy_error:
+                    logger.warning(
+                        "Legacy backlink fallback failed for referring domains",
+                        domain=domain,
+                        error=str(legacy_error),
+                    )
         else:
             referring_domains_result = empty_section()
 

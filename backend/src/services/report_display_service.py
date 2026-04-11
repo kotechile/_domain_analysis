@@ -3,6 +3,7 @@ Helpers for building lightweight report-detail display payloads.
 """
 
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 
 def _coerce_int(value: Any, default: int = 0) -> int:
@@ -71,12 +72,21 @@ def build_keywords_display(raw_keywords: Optional[List[Dict[str, Any]]], limit: 
 
 
 def normalize_backlink_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    url_from = item.get("source_url") or item.get("url_from") or item.get("url", "")
+    source_domain = item.get("domain_name_source") or item.get("domain_from") or item.get("domain", "")
+
+    if not source_domain and url_from:
+        try:
+            source_domain = urlparse(url_from).netloc
+        except Exception:
+            source_domain = ""
+
     return {
-        "domain": item.get("domain_name_source") or item.get("domain_from") or item.get("domain", ""),
+        "domain": source_domain,
         "domain_rank": _coerce_int(item.get("dr", item.get("domain_from_rank", item.get("domain_rank", 0)))),
         "anchor_text": item.get("anchor_text") or item.get("anchor", ""),
         "backlinks_count": _coerce_int(item.get("links_count", item.get("backlinks_count", 1)), 1),
-        "url_from": item.get("source_url") or item.get("url_from") or item.get("url", ""),
+        "url_from": url_from,
         "url_to": item.get("href") or item.get("url_to") or item.get("target", ""),
         "link_type": item.get("type", item.get("link_type", "")),
         "link_attributes": item.get("attributes", item.get("link_attributes", "")),

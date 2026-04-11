@@ -93,6 +93,37 @@ async def test_report_details_shapes_relational_backlink_rows(patch_owned_report
 
 
 @pytest.mark.asyncio
+async def test_report_details_derives_backlink_domain_from_source_url_when_relational_row_is_sparse(patch_owned_report):
+    patch_owned_report.get_detailed_items.side_effect = [
+        {
+            "items": [
+                {
+                    "source_url": "https://sparse.example/post",
+                    "anchor": "anchor text",
+                    "href": "https://target.example/",
+                }
+            ],
+            "total_count": 1,
+        }
+    ]
+
+    result = await get_report_details(
+        "example.com",
+        keywords_limit=25,
+        backlinks_limit=25,
+        keywords_offset=0,
+        backlinks_offset=0,
+        sections="backlinks",
+        current_user={"id": "user-1"},
+    )
+
+    assert result["backlinks"]["total_count"] == 1
+    assert result["backlinks"]["items"][0]["domain"] == "sparse.example"
+    assert result["backlinks"]["items"][0]["url_from"] == "https://sparse.example/post"
+    assert result["backlinks"]["items"][0]["anchor_text"] == "anchor text"
+
+
+@pytest.mark.asyncio
 async def test_report_details_uses_backlinks_json_to_derive_referring_domains_when_section_missing(patch_owned_report):
     patch_owned_report.get_derived_referring_domains.side_effect = Exception("missing derived rows")
     patch_owned_report.get_detailed_data.side_effect = [
