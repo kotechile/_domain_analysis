@@ -187,6 +187,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
 
         this.loading.set(true);
         this.error.set(null);
+        this.loadedDetailTabs.clear();
 
         try {
             // Trigger fresh analysis

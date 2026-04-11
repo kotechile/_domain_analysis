@@ -386,23 +386,27 @@ async def refresh_analysis_data(domain: str, data_types: Optional[list] = None, 
         
         # Refresh data
         refreshed_count = 0
+        total_cost = 0.0
         for data_type in valid_data_types:
             # Delete existing data if force refresh
             if force:
                 await db.delete_detailed_data(domain, data_type)
-            
+
             # Collect fresh data (methods return (data, cost) tuple)
-            total_cost = 0.0
             if data_type == DetailedDataType.BACKLINKS:
                 data, cost = await analysis_service.dataforseo_async_service.get_detailed_backlinks_async(domain, 1000)
                 total_cost += cost
+                if data:
+                    # Sync summary metric in reports table
+                    count = len(data.get("items", []))
+                    await db.update_report_backlinks_count(domain, count)
             elif data_type == DetailedDataType.KEYWORDS:
                 data, cost = await analysis_service.dataforseo_async_service.get_detailed_keywords_async(domain, 1000)
                 total_cost += cost
             elif data_type == DetailedDataType.REFERRING_DOMAINS:
                 data, cost = await analysis_service.dataforseo_async_service.get_referring_domains_async(domain, 800)
                 total_cost += cost
-            
+
             if data:
                 from models.domain_analysis import DetailedAnalysisData
                 detailed_data = DetailedAnalysisData( domain_name=domain, data_type=data_type, json_data=data )

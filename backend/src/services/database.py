@@ -278,6 +278,30 @@ class DatabaseService:
         # Indexes are created in _create_tables method
         pass
     
+    async def update_report_backlinks_count(self, domain_name: str, count: int):
+        """Update only the total_backlinks metric in the reports table for a domain."""
+        client = await self._get_client()
+        try:
+            # We need to preserve other metrics in data_for_seo_metrics.
+            # Since it's a JSONB field, we can't easily do a partial update in some Supabase versions
+            # without using RPC or a complex update.
+            # The safest way is to get the existing report, update the field, and save it.
+            report = await self.get_report(domain_name)
+            if not report:
+                logger.warning("Cannot update backlinks count: report not found", domain=domain_name)
+                return
+
+            if report.data_for_seo_metrics:
+                report.data_for_seo_metrics['total_backlinks'] = count
+            else:
+                report.data_for_seo_metrics = {'total_backlinks': count}
+
+            await self.save_report(report)
+            logger.info("Updated summary backlinks count", domain=domain_name, count=count)
+        except Exception as e:
+            logger.error("Failed to update report backlinks count", domain=domain_name, error=str(e))
+            raise
+
     async def save_report(self, report: DomainAnalysisReport) -> str:
         """Save domain analysis report to database"""
         client = await self._get_client()
