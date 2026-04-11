@@ -309,10 +309,62 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
 async def _build_report_export_payload(db, report: DomainAnalysisReport) -> dict:
     """Build a hydrated, export-friendly payload with the top rows from each detail section."""
     report = await _hydrate_report_response(db, report)
+    keywords_result = {"total_count": 0, "items": []}
+    backlinks_result = {"total_count": 0, "items": []}
+    referring_domains_result = {"total_count": 0, "items": []}
 
-    keywords_result = await db.get_detailed_items(report.domain_name, DetailedDataType.KEYWORDS, 25, 0)
-    backlinks_result = await db.get_detailed_items(report.domain_name, DetailedDataType.BACKLINKS, 25, 0)
-    referring_domains_result = await db.get_derived_referring_domains(report.domain_name, 25, 0)
+    try:
+        keywords_result = await db.get_detailed_items(report.domain_name, DetailedDataType.KEYWORDS, 25, 0)
+    except Exception as keywords_error:
+        logger.warning(
+            "Failed to load export keywords from relational store",
+            domain=report.domain_name,
+            error=str(keywords_error),
+        )
+
+    try:
+        backlinks_result = await db.get_detailed_items(report.domain_name, DetailedDataType.BACKLINKS, 25, 0)
+    except Exception as backlinks_error:
+        logger.warning(
+            "Failed to load export backlinks from relational store",
+            domain=report.domain_name,
+            error=str(backlinks_error),
+        )
+
+    try:
+        referring_domains_result = await db.get_derived_referring_domains(report.domain_name, 25, 0)
+    except Exception as refdomains_error:
+        logger.warning(
+            "Failed to load export referring domains from derived store",
+            domain=report.domain_name,
+            error=str(refdomains_error),
+        )
+
+    display_payload = getattr(report, "display_payload", None) or {}
+
+    if not keywords_result["items"]:
+        payload_keywords = (display_payload.get("keywords") or {}).get("items", [])
+        if payload_keywords:
+            keywords_result = {
+                "total_count": (display_payload.get("keywords") or {}).get("total_count", len(payload_keywords)),
+                "items": payload_keywords[:25],
+            }
+
+    if not backlinks_result["items"]:
+        payload_backlinks = (display_payload.get("backlinks") or {}).get("items", [])
+        if payload_backlinks:
+            backlinks_result = {
+                "total_count": (display_payload.get("backlinks") or {}).get("total_count", len(payload_backlinks)),
+                "items": payload_backlinks[:25],
+            }
+
+    if not referring_domains_result["items"]:
+        payload_refdomains = (display_payload.get("referring_domains") or {}).get("items", [])
+        if payload_refdomains:
+            referring_domains_result = {
+                "total_count": (display_payload.get("referring_domains") or {}).get("total_count", len(payload_refdomains)),
+                "items": payload_refdomains[:25],
+            }
 
     if not referring_domains_result["items"] and backlinks_result["items"]:
         derived_refdomains = build_referring_domains_display(
