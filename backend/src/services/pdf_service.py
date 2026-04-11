@@ -1,353 +1,413 @@
 """
-PDF Generation Service for Domain Analysis Reports
+PDF generation service for executive domain analysis exports.
 """
 
 import io
 from datetime import datetime
-from typing import Dict, Any, Optional
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.lib.colors import HexColor, black, darkblue, darkred, darkgreen
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT, TA_JUSTIFY
-from reportlab.lib import colors
+from typing import Any, Dict, Iterable, List
+
 import structlog
+from reportlab.lib import colors
+from reportlab.lib.colors import HexColor
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 logger = structlog.get_logger(__name__)
 
 
 class PDFService:
-    """Service for generating PDF reports from domain analysis data"""
-    
+    """Service for generating executive PDF reports from hydrated report data."""
+
     def __init__(self):
         self.styles = getSampleStyleSheet()
         self._setup_custom_styles()
-    
+
     def _setup_custom_styles(self):
-        """Setup custom paragraph styles for the PDF"""
-        # Title style
-        self.styles.add(ParagraphStyle( name='CustomTitle', parent=self.styles['Title'], fontSize=24, textColor=darkblue, spaceAfter=30, alignment=TA_CENTER ))
-        
-        # Section header style
-        self.styles.add(ParagraphStyle(
-            name='SectionHeader', parent=self.styles['Heading2'], fontSize=16, textColor=darkblue,
-            spaceBefore=20, spaceAfter=12, borderWidth=1, borderColor=darkblue, borderPadding=8,
-            backColor=HexColor('#f0f8ff')
-        ))
-        
-        # Subsection header style
-        self.styles.add(ParagraphStyle(
-            name='SubsectionHeader', parent=self.styles['Heading3'], fontSize=14, textColor=darkblue,
-            spaceBefore=15, spaceAfter=8
-        ))
-        
-        # Recommendation style
-        self.styles.add(ParagraphStyle(
-            name='Recommendation', parent=self.styles['Normal'], fontSize=14, textColor=black,
-            spaceBefore=10, spaceAfter=10, borderWidth=1, borderColor=black, borderPadding=10,
-            backColor=HexColor('#f9f9f9')
-        ))
-        
-        # Pro/Con style
-        self.styles.add(ParagraphStyle( name='ProItem', parent=self.styles['Normal'], fontSize=11, textColor=darkgreen, spaceBefore=5, spaceAfter=5, leftIndent=20 ))
-        
-        self.styles.add(ParagraphStyle( name='ConItem', parent=self.styles['Normal'], fontSize=11, textColor=darkred, spaceBefore=5, spaceAfter=5, leftIndent=20 ))
-    
+        self.styles.add(
+            ParagraphStyle(
+                name="ReportTitle",
+                parent=self.styles["Title"],
+                fontSize=24,
+                leading=30,
+                textColor=HexColor("#0f172a"),
+                alignment=TA_CENTER,
+                spaceAfter=20,
+            )
+        )
+        self.styles.add(
+            ParagraphStyle(
+                name="SectionHeader",
+                parent=self.styles["Heading2"],
+                fontSize=15,
+                leading=19,
+                textColor=HexColor("#0f172a"),
+                backColor=HexColor("#f8fafc"),
+                borderPadding=8,
+                spaceBefore=10,
+                spaceAfter=10,
+            )
+        )
+        self.styles.add(
+            ParagraphStyle(
+                name="Muted",
+                parent=self.styles["Normal"],
+                fontSize=9,
+                leading=12,
+                textColor=HexColor("#475569"),
+            )
+        )
+        self.styles.add(
+            ParagraphStyle(
+                name="Body",
+                parent=self.styles["Normal"],
+                fontSize=10,
+                leading=15,
+                textColor=HexColor("#111827"),
+            )
+        )
+        self.styles.add(
+            ParagraphStyle(
+                name="BulletItem",
+                parent=self.styles["Normal"],
+                fontSize=10,
+                leading=14,
+                leftIndent=12,
+                bulletIndent=0,
+                textColor=HexColor("#111827"),
+            )
+        )
+
     def generate_domain_analysis_pdf(self, domain: str, report_data: Dict[str, Any]) -> bytes:
-        """Generate a comprehensive PDF report for domain analysis"""
+        """Generate an executive PDF report for a domain."""
         try:
             buffer = io.BytesIO()
-            doc = SimpleDocTemplate( buffer, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72 )
-            
-            # ) Build the story (content
-            story = []
-            
-            # Title page
-            story.extend(self._build_title_page(domain, report_data))
-            story.append(PageBreak())
-            
-            # Executive Summary
-            story.extend(self._build_executive_summary(domain, report_data))
-            story.append(PageBreak())
-            
-            # Buy Recommendation
-            story.extend(self._build_buy_recommendation(report_data))
-            story.append(PageBreak())
-            
-            # Valuable Assets
-            story.extend(self._build_valuable_assets(report_data))
-            
-            # Major Concerns
-            story.extend(self._build_major_concerns(report_data))
-            story.append(PageBreak())
-            
-            # Content Strategy
-            story.extend(self._build_content_strategy(report_data))
-            
-            # Action Plan
+            doc = SimpleDocTemplate(
+                buffer,
+                pagesize=A4,
+                rightMargin=0.6 * inch,
+                leftMargin=0.6 * inch,
+                topMargin=0.6 * inch,
+                bottomMargin=0.6 * inch,
+            )
+
+            story: List[Any] = []
+            story.extend(self._build_header(domain, report_data))
+            story.extend(self._build_metric_snapshot(report_data))
+            story.extend(self._build_ai_memo(report_data))
+            story.extend(self._build_wayback_section(report_data))
+            story.extend(self._build_list_section("Dominance Points", report_data.get("llm_analysis", {}).get("good_highlights", [])))
+            story.extend(self._build_list_section("Major Concerns", report_data.get("llm_analysis", {}).get("major_concerns", [])))
             story.extend(self._build_action_plan(report_data))
-            story.append(PageBreak())
-            
-            # Pros and Cons
-            story.extend(self._build_pros_and_cons(report_data))
-            
-            # Technical Details
-            story.extend(self._build_technical_details(domain, report_data))
-            
-            # Build PDF
-            doc.build(story)
-            
-            # Get PDF bytes
+            story.extend(self._build_traffic_history(report_data))
+            story.extend(self._build_backlinks_section(report_data))
+            story.extend(self._build_refdomains_section(report_data))
+            story.extend(self._build_keywords_section(report_data))
+
+            doc.build(story, onFirstPage=self._add_page_footer, onLaterPages=self._add_page_footer)
+
             pdf_bytes = buffer.getvalue()
             buffer.close()
-            
             logger.info("PDF generated successfully", domain=domain, size_bytes=len(pdf_bytes))
             return pdf_bytes
-            
-        except Exception as e:
-            logger.error("Failed to generate PDF", domain=domain, error=str(e))
+        except Exception as exc:
+            logger.error("Failed to generate PDF", domain=domain, error=str(exc))
             raise
-    
-    def _build_title_page(self, domain: str, report_data: Dict[str, Any]) -> list:
-        """Build the title page"""
-        story = []
-        
-        # Main title
-        story.append(Paragraph(f"Domain Analysis Report", self.styles['CustomTitle']))
-        story.append(Spacer(1, 20))
-        
-        # Domain name
-        story.append(Paragraph(f"<b>Domain:</b> {domain}", self.styles['Heading1']))
-        story.append(Spacer(1, 20))
-        
-        # Report date
-        current_date = datetime.now().strftime("%B %d, %Y")
-        story.append(Paragraph(f"<b>Report Date:</b> {current_date}", self.styles['Normal']))
-        story.append(Spacer(1, 20))
-        
-        # Confidence score
-        llm_analysis = report_data.get('llm_analysis', {})
-        confidence = llm_analysis.get('confidence_score', 0)
-        story.append(Paragraph(f"<b>Analysis Confidence:</b> {confidence:.1%}", self.styles['Normal']))
-        story.append(Spacer(1, 30))
-        
-        # Executive summary preview
-        summary = llm_analysis.get('summary', 'No summary available')
-        if len(summary) > 300:
-            summary = summary[:300] + "..."
-        
-        story.append(Paragraph("<b>Executive Summary:</b>", self.styles['Heading3']))
-        story.append(Paragraph(summary, self.styles['Normal']))
-        
+
+    def _build_header(self, domain: str, report_data: Dict[str, Any]) -> List[Any]:
+        story: List[Any] = [
+            Paragraph("Domain Scout Executive Report", self.styles["ReportTitle"]),
+            Paragraph(domain, self.styles["Heading1"]),
+            Spacer(1, 0.08 * inch),
+        ]
+
+        report_date = self._format_timestamp(report_data.get("analysis_timestamp"))
+        generated_at = self._format_timestamp(report_data.get("generated_at"))
+        processing_time = report_data.get("processing_time_seconds")
+
+        meta_rows = [
+            ["Report timestamp", report_date],
+            ["Generated at", generated_at],
+            ["Processing time", f"{processing_time:.1f}s" if isinstance(processing_time, (int, float)) else "N/A"],
+        ]
+        story.append(self._build_key_value_table(meta_rows, [1.8 * inch, 4.6 * inch]))
+        story.append(Spacer(1, 0.18 * inch))
         return story
-    
-    def _build_executive_summary(self, domain: str, report_data: Dict[str, Any]) -> list:
-        """Build the executive summary section"""
-        story = []
-        
-        story.append(Paragraph("Executive Summary", self.styles['SectionHeader']))
-        
-        llm_analysis = report_data.get('llm_analysis', {})
-        summary = llm_analysis.get('summary', 'No summary available')
-        
-        story.append(Paragraph(summary, self.styles['Normal']))
-        
+
+    def _build_metric_snapshot(self, report_data: Dict[str, Any]) -> List[Any]:
+        metrics = report_data.get("data_for_seo_metrics", {})
+        llm_analysis = report_data.get("llm_analysis", {})
+        buy_recommendation = (llm_analysis.get("buy_recommendation") or {}).get("recommendation", "PENDING")
+        confidence = llm_analysis.get("confidence_score", 0) or 0
+
+        rows = [
+            ["Domain Rating", self._fmt_number(metrics.get("domain_rating_dr"))],
+            ["Organic Traffic", self._fmt_number(metrics.get("organic_traffic_est"))],
+            ["Backlinks", self._fmt_number(metrics.get("total_backlinks"))],
+            ["Referring Domains", self._fmt_number(metrics.get("total_referring_domains"))],
+            ["SaaS AI Consensus", buy_recommendation],
+            ["Confidence Score", f"{confidence:.0%}"],
+        ]
+
+        return [
+            Paragraph("Executive Snapshot", self.styles["SectionHeader"]),
+            self._build_key_value_table(rows, [2.2 * inch, 4.2 * inch]),
+            Spacer(1, 0.18 * inch),
+        ]
+
+    def _build_ai_memo(self, report_data: Dict[str, Any]) -> List[Any]:
+        llm_analysis = report_data.get("llm_analysis", {})
+        buy_recommendation = llm_analysis.get("buy_recommendation", {}) or {}
+        story: List[Any] = [Paragraph("Executive Summary Memo", self.styles["SectionHeader"])]
+
+        summary = llm_analysis.get("summary") or "No executive memo available."
+        story.append(Paragraph(summary, self.styles["Body"]))
+
+        reasoning = buy_recommendation.get("reasoning")
+        if reasoning:
+            story.append(Spacer(1, 0.08 * inch))
+            story.append(Paragraph(f"<b>Recommendation reasoning:</b> {reasoning}", self.styles["Body"]))
+
+        story.append(Spacer(1, 0.18 * inch))
         return story
-    
-    def _build_buy_recommendation(self, report_data: Dict[str, Any]) -> list:
-        """Build the buy recommendation section"""
-        story = []
-        
-        story.append(Paragraph("Buy Recommendation", self.styles['SectionHeader']))
-        
-        llm_analysis = report_data.get('llm_analysis', {})
-        buy_rec = llm_analysis.get('buy_recommendation', {})
-        
-        if buy_rec:
-            recommendation = buy_rec.get('recommendation', 'UNKNOWN')
-            confidence = buy_rec.get('confidence', 0)
-            risk_level = buy_rec.get('risk_level', 'unknown')
-            potential_value = buy_rec.get('potential_value', 'unknown')
-            reasoning = buy_rec.get('reasoning', 'No reasoning provided')
-            
-            # Recommendation box
-            rec_text = f"""
-            <b>Recommendation:</b> {recommendation}<br/>
-            <b>Confidence:</b> {confidence:.1%}<br/>
-            <b>Risk Level:</b> {risk_level.title()}<br/>
-            <b>Potential Value:</b> {potential_value.title()}
-            """
-            story.append(Paragraph(rec_text, self.styles['Recommendation']))
-            
-            # Reasoning
-            story.append(Paragraph("<b>Reasoning:</b>", self.styles['SubsectionHeader']))
-            story.append(Paragraph(reasoning, self.styles['Normal']))
-        
-        return story
-    
-    def _build_valuable_assets(self, report_data: Dict[str, Any]) -> list:
-        """Build the valuable assets section"""
-        story = []
-        
-        story.append(Paragraph("Valuable Assets", self.styles['SectionHeader']))
-        
-        llm_analysis = report_data.get('llm_analysis', {})
-        assets = llm_analysis.get('valuable_assets', [])
-        
-        if assets:
-            for asset in assets:
-                story.append(Paragraph(f"• {asset}", self.styles['Normal']))
+
+    def _build_wayback_section(self, report_data: Dict[str, Any]) -> List[Any]:
+        wayback = report_data.get("wayback_machine_summary", {})
+        rows = [
+            ["First snapshot", self._fmt_value(wayback.get("first_capture_year"))],
+            ["Total captures", self._fmt_number(wayback.get("total_captures"))],
+            ["Historical risk", self._fmt_value(wayback.get("historical_risk_assessment"), "No critical history risks detected.")],
+        ]
+        return [
+            Paragraph("Wayback Pulse", self.styles["SectionHeader"]),
+            self._build_key_value_table(rows, [1.8 * inch, 4.6 * inch]),
+            Spacer(1, 0.18 * inch),
+        ]
+
+    def _build_list_section(self, title: str, items: Iterable[str]) -> List[Any]:
+        story: List[Any] = [Paragraph(title, self.styles["SectionHeader"])]
+        values = [item for item in (items or []) if item]
+        if not values:
+            story.append(Paragraph("No items available.", self.styles["Body"]))
         else:
-            story.append(Paragraph("No specific valuable assets identified.", self.styles['Normal']))
-        
+            for item in values:
+                story.append(Paragraph(item, self.styles["BulletItem"], bulletText="•"))
+        story.append(Spacer(1, 0.18 * inch))
         return story
-    
-    def _build_major_concerns(self, report_data: Dict[str, Any]) -> list:
-        """Build the major concerns section"""
-        story = []
-        
-        story.append(Paragraph("Major Concerns", self.styles['SectionHeader']))
-        
-        llm_analysis = report_data.get('llm_analysis', {})
-        concerns = llm_analysis.get('major_concerns', [])
-        
-        if concerns:
-            for concern in concerns:
-                story.append(Paragraph(f"• {concern}", self.styles['Normal']))
+
+    def _build_action_plan(self, report_data: Dict[str, Any]) -> List[Any]:
+        action_plan = report_data.get("llm_analysis", {}).get("action_plan", {}) or {}
+        story: List[Any] = [Paragraph("Action Plan", self.styles["SectionHeader"])]
+        sections = [
+            ("Immediate Actions", action_plan.get("immediate_actions", [])),
+            ("First Month", action_plan.get("first_month", [])),
+            ("Long-Term Strategy", action_plan.get("long_term_strategy", [])),
+        ]
+
+        for label, items in sections:
+            story.append(Paragraph(label, self.styles["Heading4"]))
+            if items:
+                for item in items:
+                    story.append(Paragraph(item, self.styles["BulletItem"], bulletText="•"))
+            else:
+                story.append(Paragraph("No actions listed.", self.styles["Body"]))
+            story.append(Spacer(1, 0.08 * inch))
+
+        story.append(Spacer(1, 0.1 * inch))
+        return story
+
+    def _build_traffic_history(self, report_data: Dict[str, Any]) -> List[Any]:
+        story: List[Any] = [Paragraph("Traffic History", self.styles["SectionHeader"])]
+        rank_overview = (report_data.get("historical_data") or {}).get("rank_overview", {}) or {}
+        traffic_points = rank_overview.get("organic_traffic", []) or []
+
+        if not traffic_points:
+            story.append(Paragraph("Traffic history is not available for this report.", self.styles["Body"]))
+            story.append(Spacer(1, 0.18 * inch))
+            return story
+
+        recent_points = traffic_points[-12:]
+        rows = [["Date", "Organic Traffic"]]
+        for point in recent_points:
+            rows.append([self._fmt_value(point.get("date")), self._fmt_number(point.get("value"))])
+
+        story.append(Paragraph("Recent monthly traffic points", self.styles["Muted"]))
+        story.append(self._build_table(rows, [2.0 * inch, 2.2 * inch]))
+        story.append(Spacer(1, 0.18 * inch))
+        return story
+
+    def _build_backlinks_section(self, report_data: Dict[str, Any]) -> List[Any]:
+        backlinks = report_data.get("backlinks", {}) or {}
+        items = backlinks.get("items", []) or []
+        story: List[Any] = [
+            Paragraph("Backlinks Summary", self.styles["SectionHeader"]),
+            Paragraph(
+                f"Top {len(items)} backlinks shown out of {self._fmt_number(backlinks.get('total_count'))}.",
+                self.styles["Muted"],
+            ),
+        ]
+
+        if not items:
+            story.append(Paragraph("No backlink rows available.", self.styles["Body"]))
         else:
-            story.append(Paragraph("No major concerns identified.", self.styles['Normal']))
-        
+            rows = [["Source Domain", "DR", "Source URL", "Anchor", "Target"]]
+            for item in items:
+                rows.append([
+                    self._truncate(item.get("domain"), 28),
+                    self._fmt_number(item.get("domain_rank")),
+                    self._truncate(item.get("url_from"), 42),
+                    self._truncate(item.get("anchor_text"), 24),
+                    self._truncate(item.get("url_to"), 42),
+                ])
+            story.append(self._build_table(rows, [1.3 * inch, 0.5 * inch, 1.95 * inch, 1.2 * inch, 1.95 * inch], font_size=7.5))
+
+        story.append(Spacer(1, 0.18 * inch))
         return story
-    
-    def _build_content_strategy(self, report_data: Dict[str, Any]) -> list:
-        """Build the content strategy section"""
-        story = []
-        
-        story.append(Paragraph("Content Strategy", self.styles['SectionHeader']))
-        
-        llm_analysis = report_data.get('llm_analysis', {})
-        content_strategy = llm_analysis.get('content_strategy', {})
-        
-        if content_strategy:
-            primary_niche = content_strategy.get('primary_niche', 'Not specified')
-            story.append(Paragraph(f"<b>Primary Niche:</b> {primary_niche}", self.styles['Normal']))
-            
-            secondary_niches = content_strategy.get('secondary_niches', [])
-            if secondary_niches:
-                story.append(Paragraph("<b>Secondary Niches:</b>", self.styles['SubsectionHeader']))
-                for niche in secondary_niches:
-                    story.append(Paragraph(f"• {niche}", self.styles['Normal']))
-            
-            first_articles = content_strategy.get('first_articles', [])
-            if first_articles:
-                story.append(Paragraph("<b>Recommended First Articles:</b>", self.styles['SubsectionHeader']))
-                for article in first_articles:
-                    story.append(Paragraph(f"• {article}", self.styles['Normal']))
-            
-            target_keywords = content_strategy.get('target_keywords', [])
-            if target_keywords:
-                story.append(Paragraph("<b>Target Keywords:</b>", self.styles['SubsectionHeader']))
-                for keyword in target_keywords:
-                    story.append(Paragraph(f"• {keyword}", self.styles['Normal']))
-        
-        return story
-    
-    def _build_action_plan(self, report_data: Dict[str, Any]) -> list:
-        """Build the action plan section"""
-        story = []
-        
-        story.append(Paragraph("Action Plan", self.styles['SectionHeader']))
-        
-        llm_analysis = report_data.get('llm_analysis', {})
-        action_plan = llm_analysis.get('action_plan', {})
-        
-        if action_plan:
-            immediate_actions = action_plan.get('immediate_actions', [])
-            if immediate_actions:
-                story.append(Paragraph("<b>Immediate Actions:</b>", self.styles['SubsectionHeader']))
-                for action in immediate_actions:
-                    story.append(Paragraph(f"• {action}", self.styles['Normal']))
-            
-            first_month = action_plan.get('first_month', [])
-            if first_month:
-                story.append(Paragraph("<b>First Month:</b>", self.styles['SubsectionHeader']))
-                for action in first_month:
-                    story.append(Paragraph(f"• {action}", self.styles['Normal']))
-            
-            long_term = action_plan.get('long_term_strategy', [])
-            if long_term:
-                story.append(Paragraph("<b>Long-term Strategy:</b>", self.styles['SubsectionHeader']))
-                for action in long_term:
-                    story.append(Paragraph(f"• {action}", self.styles['Normal']))
-        
-        return story
-    
-    def _build_pros_and_cons(self, report_data: Dict[str, Any]) -> list:
-        """Build the pros and cons section"""
-        story = []
-        
-        story.append(Paragraph("Pros and Cons Analysis", self.styles['SectionHeader']))
-        
-        llm_analysis = report_data.get('llm_analysis', {})
-        pros_cons = llm_analysis.get('pros_and_cons', [])
-        
-        if pros_cons:
-            for item in pros_cons:
-                item_type = item.get('type', 'unknown')
-                description = item.get('description', 'No description')
-                impact = item.get('impact', 'unknown')
-                example = item.get('example', 'No example')
-                
-                if item_type == 'pro':
-                    story.append(Paragraph(f"<b>✓ PRO ({impact.title()} Impact):</b> {description}", self.styles['ProItem']))
-                else:
-                    story.append(Paragraph(f"<b>✗ CON ({impact.title()} Impact):</b> {description}", self.styles['ConItem']))
-                
-                if example and example != 'No example':
-                    story.append(Paragraph(f"<i>Example: {example}</i>", self.styles['Normal']))
-                story.append(Spacer(1, 8))
+
+    def _build_refdomains_section(self, report_data: Dict[str, Any]) -> List[Any]:
+        ref_domains = report_data.get("referring_domains", {}) or {}
+        items = ref_domains.get("items", []) or []
+        story: List[Any] = [
+            Paragraph("Referring Domains Summary", self.styles["SectionHeader"]),
+            Paragraph(
+                f"Top {len(items)} referring domains shown out of {self._fmt_number(ref_domains.get('total_count'))}.",
+                self.styles["Muted"],
+            ),
+        ]
+
+        if not items:
+            story.append(Paragraph("No referring domain rows available.", self.styles["Body"]))
         else:
-            story.append(Paragraph("No pros and cons analysis available.", self.styles['Normal']))
-        
+            rows = [["Domain", "DR", "Backlinks", "Anchor", "First Seen"]]
+            for item in items:
+                rows.append([
+                    self._truncate(item.get("domain"), 32),
+                    self._fmt_number(item.get("domain_rank")),
+                    self._fmt_number(item.get("backlinks_count")),
+                    self._truncate(item.get("anchor_text"), 26),
+                    self._fmt_value(item.get("first_seen"), "N/A"),
+                ])
+            story.append(self._build_table(rows, [2.0 * inch, 0.55 * inch, 0.85 * inch, 1.5 * inch, 1.3 * inch], font_size=8))
+
+        story.append(Spacer(1, 0.18 * inch))
         return story
-    
-    def _build_technical_details(self, domain: str, report_data: Dict[str, Any]) -> list:
-        """Build the technical details section"""
-        story = []
-        
-        story.append(Paragraph("Technical Details", self.styles['SectionHeader']))
-        
-        # Domain metrics
-        data_for_seo_metrics = report_data.get('data_for_seo_metrics', {})
-        if data_for_seo_metrics:
-            story.append(Paragraph("<b>SEO Metrics:</b>", self.styles['SubsectionHeader']))
-            
-            metrics_data = [ ['Metric', 'Value'], ['Domain Authority (DR)', str(data_for_seo_metrics.get('domain_rating_dr', 'N/A'))], ['Organic Traffic', f"{data_for_seo_metrics.get('organic_traffic_est', 0):,.0f}"], ['Total Keywords', str(data_for_seo_metrics.get('total_keywords', 'N/A'))], ['Total Backlinks', f"{data_for_seo_metrics.get('total_backlinks', 0):,}"], ['Referring Domains', str(data_for_seo_metrics.get('referring_domains', 'N/A'))]
-            ]
-            
-            metrics_table = Table(metrics_data)
-            metrics_table.setStyle(TableStyle([ ('BACKGROUND', (0, 0), (-1, 0), colors.grey), ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke), ('ALIGN', (0, 0), (-1, -1), 'CENTER'), ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'), ('FONTSIZE', (0, 0), (-1, 0), 12), ('BOTTOMPADDING', (0, 0), (-1, 0), 12), ('BACKGROUND', (0, 1), (-1, -1), colors.beige), ('GRID', (0, 0), (-1, -1), 1, colors.black)
-            ]))
-            
-            story.append(metrics_table)
-            story.append(Spacer(1, 20))
-        
-        # Wayback Machine data
-        wayback_summary = report_data.get('wayback_machine_summary', {})
-        if wayback_summary and wayback_summary.get('total_captures') is not None:
-            story.append(Paragraph("<b>Historical Data:</b>", self.styles['SubsectionHeader']))
-            
-            total_captures = wayback_summary.get('total_captures', 0)
-            first_capture = wayback_summary.get('first_capture_date', 'Unknown')
-            last_capture = wayback_summary.get('last_capture_date', 'Unknown')
-            
-            story.append(Paragraph(f"• Total captures: {total_captures:,}", self.styles['Normal']))
-            story.append(Paragraph(f"• First capture: {first_capture}", self.styles['Normal']))
-            story.append(Paragraph(f"• Last capture: {last_capture}", self.styles['Normal']))
+
+    def _build_keywords_section(self, report_data: Dict[str, Any]) -> List[Any]:
+        keywords = report_data.get("keywords", {}) or {}
+        items = keywords.get("items", []) or []
+        story: List[Any] = [
+            Paragraph("Keywords Summary", self.styles["SectionHeader"]),
+            Paragraph(
+                f"Top {len(items)} keywords shown out of {self._fmt_number(keywords.get('total_count'))}.",
+                self.styles["Muted"],
+            ),
+        ]
+
+        if not items:
+            story.append(Paragraph("No keyword rows available.", self.styles["Body"]))
         else:
-            story.append(Paragraph("<b>Historical Data:</b>", self.styles['SubsectionHeader']))
-            story.append(Paragraph("• Historical data not available for this domain", self.styles['Normal']))
-            story.append(Paragraph("• Wayback Machine data was not collected during analysis", self.styles['Normal']))
-        
+            rows = [["Keyword", "Position", "Volume", "CPC", "Ranking URL"]]
+            for item in items:
+                rows.append([
+                    self._truncate(item.get("keyword"), 28),
+                    self._fmt_number(item.get("position")),
+                    self._fmt_number(item.get("search_volume")),
+                    self._fmt_currency(item.get("cpc")),
+                    self._truncate(item.get("ranking_url"), 42),
+                ])
+            story.append(self._build_table(rows, [1.9 * inch, 0.65 * inch, 0.8 * inch, 0.6 * inch, 2.45 * inch], font_size=8))
+
+        story.append(Spacer(1, 0.18 * inch))
         return story
+
+    def _build_table(self, rows: List[List[str]], col_widths: List[float], font_size: float = 9) -> Table:
+        table = Table(rows, colWidths=col_widths, repeatRows=1)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), HexColor("#0f172a")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), font_size),
+                    ("ALIGN", (1, 1), (2, -1), "CENTER"),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [HexColor("#f8fafc"), colors.white]),
+                    ("GRID", (0, 0), (-1, -1), 0.25, HexColor("#cbd5e1")),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                    ("TOPPADDING", (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ]
+            )
+        )
+        return table
+
+    def _build_key_value_table(self, rows: List[List[str]], col_widths: List[float]) -> Table:
+        table = Table(rows, colWidths=col_widths)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (0, -1), HexColor("#f8fafc")),
+                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                    ("TEXTCOLOR", (0, 0), (-1, -1), HexColor("#111827")),
+                    ("GRID", (0, 0), (-1, -1), 0.25, HexColor("#cbd5e1")),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                    ("TOPPADDING", (0, 0), (-1, -1), 7),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ]
+            )
+        )
+        return table
+
+    def _fmt_number(self, value: Any) -> str:
+        if value in (None, ""):
+            return "0"
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return str(value)
+        if number.is_integer():
+            return f"{int(number):,}"
+        return f"{number:,.2f}"
+
+    def _fmt_currency(self, value: Any) -> str:
+        if value in (None, ""):
+            return "$0.00"
+        try:
+            return f"${float(value):,.2f}"
+        except (TypeError, ValueError):
+            return str(value)
+
+    def _fmt_value(self, value: Any, default: str = "N/A") -> str:
+        if value in (None, ""):
+            return default
+        return str(value)
+
+    def _truncate(self, value: Any, max_len: int) -> str:
+        text = self._fmt_value(value, "")
+        if len(text) <= max_len:
+            return text
+        return f"{text[:max_len - 1]}…"
+
+    def _format_timestamp(self, value: Any) -> str:
+        if not value:
+            return "N/A"
+        try:
+            if isinstance(value, datetime):
+                dt = value
+            else:
+                dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            return dt.strftime("%B %d, %Y %H:%M")
+        except Exception:
+            return str(value)
+
+    def _add_page_footer(self, canvas, doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(HexColor("#64748b"))
+        canvas.drawString(doc.leftMargin, 0.35 * inch, f"Generated by Domain Scout • Page {doc.page}")
+        canvas.restoreState()

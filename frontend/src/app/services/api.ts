@@ -44,6 +44,12 @@ export class ApiService {
     return this.http.get<Models.ReportResponse>(`${this.baseUrl}/reports/${domain}`);
   }
 
+  downloadExecutivePdf(domain: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/reports/${domain}/export/pdf`, {
+      responseType: 'blob'
+    });
+  }
+
   deleteReport(domain: string): Observable<{ success: boolean; message: string }> {
     return this.http.delete<{ success: boolean; message: string }>(`${this.baseUrl}/reports/${domain}`);
   }

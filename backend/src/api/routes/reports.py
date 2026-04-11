@@ -306,6 +306,50 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
     return report
 
 
+async def _build_report_export_payload(db, report: DomainAnalysisReport) -> dict:
+    """Build a hydrated, export-friendly payload with the top rows from each detail section."""
+    report = await _hydrate_report_response(db, report)
+
+    keywords_result = await db.get_detailed_items(report.domain_name, DetailedDataType.KEYWORDS, 25, 0)
+    backlinks_result = await db.get_detailed_items(report.domain_name, DetailedDataType.BACKLINKS, 25, 0)
+    referring_domains_result = await db.get_derived_referring_domains(report.domain_name, 25, 0)
+
+    if not referring_domains_result["items"] and backlinks_result["items"]:
+        derived_refdomains = build_referring_domains_display(
+            raw_referring_domains=None,
+            raw_backlinks=backlinks_result["items"],
+            limit=25,
+            offset=0,
+        )
+        referring_domains_result = {
+            "total_count": derived_refdomains["total_count"],
+            "items": derived_refdomains["items"],
+        }
+
+    return {
+        "domain": report.domain_name,
+        "generated_at": datetime.utcnow().isoformat(),
+        "analysis_timestamp": report.analysis_timestamp.isoformat() if getattr(report, "analysis_timestamp", None) else None,
+        "processing_time_seconds": report.processing_time_seconds,
+        "data_for_seo_metrics": report.data_for_seo_metrics.dict() if report.data_for_seo_metrics else {},
+        "llm_analysis": report.llm_analysis.dict() if report.llm_analysis else {},
+        "wayback_machine_summary": report.wayback_machine_summary.dict() if report.wayback_machine_summary else {},
+        "historical_data": report.historical_data.dict() if report.historical_data else {},
+        "backlinks": {
+            "total_count": backlinks_result["total_count"],
+            "items": shape_backlink_items(backlinks_result["items"]),
+        },
+        "referring_domains": {
+            "total_count": referring_domains_result["total_count"],
+            "items": shape_referring_domain_items(referring_domains_result["items"]),
+        },
+        "keywords": {
+            "total_count": keywords_result["total_count"],
+            "items": shape_keyword_items(keywords_result["items"]),
+        },
+    }
+
+
 @router.get("/reports/{domain}", response_model=ReportResponse)
 async def get_report(domain: str, current_user = Depends(get_current_user)):
     """
@@ -1066,33 +1110,31 @@ def _generate_fallback_analysis(domain: str, data: dict, include_backlinks: bool
     return { "buy_recommendation": { "recommendation": buy_recommendation, "confidence": 0.7, "reasoning": reasoning, "risk_level": risk_level, "potential_value": potential_value }, "valuable_assets": valuable_assets, "major_concerns": major_concerns, "content_strategy": content_strategy, "action_plan": action_plan, "pros_and_cons": pros_and_cons, "summary": f"Domain analysis for {domain} - {buy_recommendation} recommendation based on {total_backlinks} backlinks and {total_keywords} keywords", "confidence_score": 0.7 }
 
 
-@router.get("/reports/{domain}/pdf")
-async def export_report_pdf(domain: str):
+@router.get("/reports/{domain}/export/pdf")
+async def export_report_pdf(domain: str, current_user = Depends(get_current_user)):
     """
-    Export domain analysis report as PDF
+    Export domain analysis report as executive PDF
     """
     try:
-        db = get_database()
-        report = await db.get_report(domain)
-        
-        if not report:
-            raise HTTPException(status_code=404, detail="Report not found")
-        
-        # Convert report to dictionary for PDF generation
-        report_data = { "domain": domain, "data_for_seo_metrics": report.data_for_seo_metrics.dict() if report.data_for_seo_metrics else {}, "wayback_machine_summary": report.wayback_machine_summary.dict() if report.wayback_machine_summary else {}, "llm_analysis": report.llm_analysis.dict() if report.llm_analysis else {} }
-        
-        # Generate PDF
+        db, report = await _get_owned_report_or_404(domain, current_user)
+        report_data = await _build_report_export_payload(db, report)
         pdf_service = PDFService()
         pdf_bytes = pdf_service.generate_domain_analysis_pdf(domain, report_data)
-        
-        # Create streaming response
-        pdf_stream = io.BytesIO(pdf_bytes)
-        
-        return StreamingResponse( io.BytesIO(pdf_bytes), media_type="application/pdf", headers={ "Content-Disposition": f"attachment; filename=domain_analysis_{domain}.pdf" } )
-        
+
+        return StreamingResponse(
+            io.BytesIO(pdf_bytes),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={domain}-executive-report.pdf"},
+        )
     except Exception as e:
         logger.error("Failed to export PDF", domain=domain, error=str(e))
         raise HTTPException(status_code=500, detail="Failed to generate PDF report")
+
+
+@router.get("/reports/{domain}/pdf")
+async def export_report_pdf_legacy(domain: str, current_user = Depends(get_current_user)):
+    """Legacy PDF export alias."""
+    return await export_report_pdf(domain, current_user)
 
 
 @router.delete("/reports/{domain}")

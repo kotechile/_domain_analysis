@@ -73,6 +73,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     domain = signal<string | null>(null);
     report = signal<DomainAnalysisReport | null>(null);
     loading = signal<boolean>(true);
+    downloadingReport = signal<boolean>(false);
     error = signal<string | null>(null);
     activeTab = signal<string>('overview');
     backlinks = signal<ReferringDomain[]>([]);
@@ -237,6 +238,27 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
                 this.error.set('Failed to start re-analysis. Please check your credit balance.');
             }
             this.loading.set(false);
+        }
+    }
+
+    async downloadReport() {
+        const d = this.domain();
+        if (!d || this.downloadingReport()) return;
+
+        this.downloadingReport.set(true);
+        try {
+            const blob = await firstValueFrom(this.api.downloadExecutivePdf(d));
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${d}-executive-report.pdf`;
+            link.click();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Error downloading report:', err);
+            this.error.set('Failed to download report. Please try again.');
+        } finally {
+            this.downloadingReport.set(false);
         }
     }
 
