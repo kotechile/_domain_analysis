@@ -816,13 +816,21 @@ class DatabaseService:
             )
 
             backlinks_result = await client.table('domain_backlinks') \
-                .select('domain_name_source, dr') \
+                .select('domain_name_source, source_url, dr') \
                 .eq('domain_name', domain_name) \
                 .execute()
 
             records_by_domain: Dict[str, Dict[str, Any]] = {}
             for item in backlinks_result.data or []:
                 source_domain = item.get('domain_name_source')
+                if not source_domain:
+                    source_url = item.get('source_url') or ''
+                    if source_url:
+                        try:
+                            from urllib.parse import urlparse
+                            source_domain = urlparse(source_url).netloc
+                        except Exception:
+                            source_domain = ''
                 if not source_domain:
                     continue
 

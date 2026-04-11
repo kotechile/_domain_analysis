@@ -121,29 +121,30 @@ def build_referring_domains_display(
     if not items and raw_backlinks:
         derived_domains: Dict[str, Dict[str, Any]] = {}
         for item in raw_backlinks:
-            domain = item.get("domain_from") or item.get("domain") or ""
+            normalized_backlink = normalize_backlink_item(item)
+            domain = normalized_backlink.get("domain") or ""
             if not domain:
                 continue
 
             if domain not in derived_domains:
                 derived_domains[domain] = {
                     "domain": domain,
-                    "domain_rank": _coerce_int(item.get("domain_from_rank", item.get("domain_rank", 0))),
-                    "anchor_text": item.get("anchor") or item.get("anchor_text", ""),
+                    "domain_rank": _coerce_int(normalized_backlink.get("domain_rank", 0)),
+                    "anchor_text": normalized_backlink.get("anchor_text", ""),
                     "backlinks_count": 0,
-                    "first_seen": item.get("first_seen", ""),
-                    "last_seen": item.get("last_seen", ""),
+                    "first_seen": normalized_backlink.get("first_seen", ""),
+                    "last_seen": normalized_backlink.get("last_seen", ""),
                 }
 
             derived_domains[domain]["backlinks_count"] += _coerce_int(
-                item.get("links_count", item.get("backlinks_count", 1)),
+                normalized_backlink.get("backlinks_count", 1),
                 1,
             )
 
             if not derived_domains[domain]["first_seen"]:
-                derived_domains[domain]["first_seen"] = item.get("first_seen", "")
-            if item.get("last_seen"):
-                derived_domains[domain]["last_seen"] = item.get("last_seen", "")
+                derived_domains[domain]["first_seen"] = normalized_backlink.get("first_seen", "")
+            if normalized_backlink.get("last_seen"):
+                derived_domains[domain]["last_seen"] = normalized_backlink.get("last_seen", "")
 
         items = sorted(
             derived_domains.values(),

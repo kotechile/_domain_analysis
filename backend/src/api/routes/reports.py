@@ -83,6 +83,19 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
             if (report.data_for_seo_metrics.total_referring_domains or 0) < referring_domains_result["total_count"]:
                 report.data_for_seo_metrics.total_referring_domains = referring_domains_result["total_count"]
                 report_changed = True
+        elif backlinks_result["total_count"] > 0:
+            all_backlinks_result = await db.get_detailed_items(report.domain_name, DetailedDataType.BACKLINKS, 10000, 0)
+            derived_referring_domains = build_referring_domains_display(
+                raw_referring_domains=None,
+                raw_backlinks=all_backlinks_result["items"],
+                limit=1,
+                offset=0,
+            )
+            if derived_referring_domains["total_count"] > 0:
+                report.detailed_data_available["referring_domains"] = True
+                if (report.data_for_seo_metrics.total_referring_domains or 0) < derived_referring_domains["total_count"]:
+                    report.data_for_seo_metrics.total_referring_domains = derived_referring_domains["total_count"]
+                    report_changed = True
     except Exception as hydration_error:
         logger.warning(
             "Failed to hydrate report detail counts from relational data",
@@ -98,7 +111,8 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
     if not payload_backlinks:
         try:
             raw_data = await db.get_raw_data(report.domain_name, DataSource.DATAFORSEO)
-            raw_backlinks = (raw_data or {}).get("backlinks", {})
+            raw_data = raw_data if isinstance(raw_data, dict) else {}
+            raw_backlinks = raw_data.get("backlinks", {})
             raw_backlink_items = raw_backlinks.get("items", []) if isinstance(raw_backlinks, dict) else []
             if raw_backlink_items:
                 shaped_backlinks = shape_backlink_items(raw_backlink_items)
@@ -202,21 +216,51 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
     total_keywords = report.data_for_seo_metrics.total_keywords or 0
     confidence_score = (report.llm_analysis.confidence_score or 0) if report.llm_analysis else 0
     summary_text = (report.llm_analysis.summary or "").lower() if report.llm_analysis else ""
+    recommendation_reasoning = (
+        (report.llm_analysis.buy_recommendation or {}).get("reasoning", "").lower()
+        if report.llm_analysis and report.llm_analysis.buy_recommendation
+        else ""
+    )
 
+    stale_ai_phrases = (
+        "0 backlinks",
+        "no backlinks",
+        "0 links",
+        "zero backlinks",
+        "zero link",
+        "lacks a backlink profile",
+        "without supporting links",
+    )
+
+    report_status = getattr(report.status, "value", report.status)
+    ai_missing = report.llm_analysis is None and report_status == "completed"
     ai_looks_stale = (
         report.llm_analysis is not None
-        and total_backlinks > 0
         and (
-            confidence_score <= 0.01
-            or "0 backlinks" in summary_text
-            or "no backlinks" in summary_text
+            (total_backlinks > 0 and any(phrase in summary_text for phrase in stale_ai_phrases))
+            or (total_backlinks > 0 and any(phrase in recommendation_reasoning for phrase in stale_ai_phrases))
+            or (total_backlinks > 0 and confidence_score <= 0.01)
+            or (total_backlinks > 0 and total_referring_domains > 0 and "0 referring domains" in summary_text)
+            or (total_backlinks > 0 and total_referring_domains > 0 and "0 referring domains" in recommendation_reasoning)
         )
     )
 
-    if ai_looks_stale:
+    if ai_missing or ai_looks_stale:
         try:
-            backlinks_data = await db.get_detailed_data(report.domain_name, DetailedDataType.BACKLINKS)
-            keywords_data = await db.get_detailed_data(report.domain_name, DetailedDataType.KEYWORDS)
+            backlinks_items_result = await db.get_detailed_items(report.domain_name, DetailedDataType.BACKLINKS, 1000, 0)
+            keywords_items_result = await db.get_detailed_items(report.domain_name, DetailedDataType.KEYWORDS, 1000, 0)
+            if total_referring_domains == 0 and backlinks_items_result["items"]:
+                derived_referring_domains = build_referring_domains_display(
+                    raw_referring_domains=None,
+                    raw_backlinks=backlinks_items_result["items"],
+                    limit=1,
+                    offset=0,
+                )
+                if derived_referring_domains["total_count"] > 0:
+                    total_referring_domains = derived_referring_domains["total_count"]
+                    report.data_for_seo_metrics.total_referring_domains = total_referring_domains
+                    report.detailed_data_available["referring_domains"] = True
+                    report_changed = True
 
             fallback_analysis = _generate_fallback_analysis(
                 report.domain_name,
@@ -230,10 +274,10 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
                         "referring_domains": total_referring_domains,
                     },
                     "backlinks": {
-                        "items": (backlinks_data.json_data if backlinks_data else {}).get("items", []),
+                        "items": backlinks_items_result["items"],
                     },
                     "keywords": {
-                        "items": (keywords_data.json_data if keywords_data else {}).get("items", []),
+                        "items": keywords_items_result["items"],
                     },
                     "wayback": report.wayback_machine_summary.dict() if report.wayback_machine_summary else {},
                 },
@@ -486,6 +530,17 @@ async def get_report_details(
                     referring_domains_result = {
                         "total_count": derived_result["total_count"],
                         "items": shape_referring_domain_items(derived_result["items"]),
+                    }
+                elif backlinks_result["items"]:
+                    derived_display = build_referring_domains_display(
+                        raw_referring_domains=None,
+                        raw_backlinks=backlinks_result["items"],
+                        limit=backlinks_limit,
+                        offset=backlinks_offset,
+                    )
+                    referring_domains_result = {
+                        "total_count": derived_display["total_count"],
+                        "items": derived_display["items"],
                     }
             except Exception as rel_error:
                 logger.warning(

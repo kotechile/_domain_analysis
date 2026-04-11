@@ -93,7 +93,7 @@
                     {{ report()?.llm_analysis?.buy_recommendation?.recommendation || 'PENDING' }}
                 </div>
                 <span class="text-[10px] font-bold opacity-30 uppercase italic text-center">
-                    {{ (report()?.llm_analysis?.confidence_score || 0) | number:'1.0-0' }}% Confidence Score
+                    {{ (report()?.llm_analysis?.confidence_score || 0) | percent:'1.0-0' }} Confidence Score
                 </span>
             </div>
         </div>
