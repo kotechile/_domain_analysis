@@ -844,7 +844,7 @@ class DatabaseService:
                     result = await client.table('domain_backlinks') \
                         .select(columns, count='exact') \
                         .eq('domain_name', domain_name) \
-                        .order('dr', ascending=False) \
+                        .order('dr', ascending=False, nulls_last=True) \
                         .range(offset, offset + limit - 1) \
                         .execute()
                     logger.info(

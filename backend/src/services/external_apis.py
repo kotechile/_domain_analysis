@@ -1207,7 +1207,14 @@ class LLMService:
         - **Fair (5-6)**: Mixed quality, some irrelevant links, moderate diversity
         - **Poor (3-4)**: Low-DR domains (30-), many irrelevant links, limited diversity
         - **Toxic (1-2)**: Spammy domains, over-optimized anchors, suspicious patterns
-        
+
+        CONFIDENCE SCORING GUIDELINES:
+        The confidence_score (0.0 to 1.0) should reflect the reliability of the analysis based on data availability:
+        - **High Confidence (0.8 - 1.0)**: All key metrics (DR, Organic Traffic, Backlinks, Keywords) are present, detailed data is available, and the metrics are consistent.
+        - **Medium Confidence (0.5 - 0.7)**: Most key metrics are available, but some detailed data is missing or there are minor contradictions in the data.
+        - **Low Confidence (0.1 - 0.4)**: Critical metrics are missing, detailed data is sparse, or the data is highly contradictory.
+        - **Very Low Confidence (0.0 - 0.1)**: Almost no meaningful data is available for the domain.
+
         ANALYSIS REQUIREMENTS:
         - Provide comprehensive analysis based on complete detailed data
         - Include specific backlink quality metrics and insights
