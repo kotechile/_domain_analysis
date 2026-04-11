@@ -96,10 +96,14 @@ class PDFService:
             story: List[Any] = []
             story.extend(self._build_header(domain, report_data))
             story.extend(self._build_metric_snapshot(report_data))
+            story.extend(self._build_recommendation_details(report_data))
             story.extend(self._build_ai_memo(report_data))
             story.extend(self._build_wayback_section(report_data))
+            story.extend(self._build_list_section("Valuable Assets", report_data.get("llm_analysis", {}).get("valuable_assets", [])))
             story.extend(self._build_list_section("Dominance Points", report_data.get("llm_analysis", {}).get("good_highlights", [])))
             story.extend(self._build_list_section("Major Concerns", report_data.get("llm_analysis", {}).get("major_concerns", [])))
+            story.extend(self._build_pros_and_cons(report_data))
+            story.extend(self._build_content_strategy(report_data))
             story.extend(self._build_action_plan(report_data))
             story.extend(self._build_traffic_history(report_data))
             story.extend(self._build_backlinks_section(report_data))
@@ -173,6 +177,24 @@ class PDFService:
         story.append(Spacer(1, 0.18 * inch))
         return story
 
+    def _build_recommendation_details(self, report_data: Dict[str, Any]) -> List[Any]:
+        llm_analysis = report_data.get("llm_analysis", {}) or {}
+        recommendation = llm_analysis.get("buy_recommendation", {}) or {}
+        confidence = llm_analysis.get("confidence_score", 0) or 0
+
+        rows = [
+            ["Recommendation", self._fmt_value(recommendation.get("recommendation"), "PENDING")],
+            ["Risk Level", self._fmt_value(recommendation.get("risk_level"), "N/A").upper()],
+            ["Potential Value", self._fmt_value(recommendation.get("potential_value"), "N/A").upper()],
+            ["Confidence", f"{confidence:.0%}"],
+        ]
+
+        return [
+            Paragraph("Recommendation Details", self.styles["SectionHeader"]),
+            self._build_key_value_table(rows, [1.8 * inch, 4.6 * inch]),
+            Spacer(1, 0.18 * inch),
+        ]
+
     def _build_wayback_section(self, report_data: Dict[str, Any]) -> List[Any]:
         wayback = report_data.get("wayback_machine_summary", {})
         rows = [
@@ -216,6 +238,42 @@ class PDFService:
             story.append(Spacer(1, 0.08 * inch))
 
         story.append(Spacer(1, 0.1 * inch))
+        return story
+
+    def _build_content_strategy(self, report_data: Dict[str, Any]) -> List[Any]:
+        content_strategy = report_data.get("llm_analysis", {}).get("content_strategy", {}) or {}
+        story: List[Any] = [Paragraph("Content Strategy", self.styles["SectionHeader"])]
+
+        rows = [
+            ["Primary Niche", self._fmt_value(content_strategy.get("primary_niche"))],
+            ["Secondary Niches", self._join_list(content_strategy.get("secondary_niches"))],
+            ["Target Keywords", self._join_list(content_strategy.get("target_keywords"))],
+            ["Suggested First Articles", self._join_list(content_strategy.get("first_articles"))],
+        ]
+        story.append(self._build_key_value_table(rows, [1.8 * inch, 4.6 * inch]))
+        story.append(Spacer(1, 0.18 * inch))
+        return story
+
+    def _build_pros_and_cons(self, report_data: Dict[str, Any]) -> List[Any]:
+        items = (report_data.get("llm_analysis", {}) or {}).get("pros_and_cons", []) or []
+        story: List[Any] = [Paragraph("Buyer Pros & Cons", self.styles["SectionHeader"])]
+
+        if not items:
+            story.append(Paragraph("No pros and cons were generated for this report.", self.styles["Body"]))
+            story.append(Spacer(1, 0.18 * inch))
+            return story
+
+        rows = [["Type", "Impact", "Description", "Example"]]
+        for item in items:
+            rows.append([
+                self._fmt_value(item.get("type"), "note").upper(),
+                self._fmt_value(item.get("impact"), "N/A").upper(),
+                self._truncate(item.get("description"), 56),
+                self._truncate(item.get("example"), 48),
+            ])
+
+        story.append(self._build_table(rows, [0.75 * inch, 0.8 * inch, 3.0 * inch, 2.0 * inch], font_size=8))
+        story.append(Spacer(1, 0.18 * inch))
         return story
 
     def _build_traffic_history(self, report_data: Dict[str, Any]) -> List[Any]:
@@ -385,6 +443,14 @@ class PDFService:
     def _fmt_value(self, value: Any, default: str = "N/A") -> str:
         if value in (None, ""):
             return default
+        return str(value)
+
+    def _join_list(self, value: Any, default: str = "N/A") -> str:
+        if not value:
+            return default
+        if isinstance(value, list):
+            cleaned = [str(item) for item in value if item not in (None, "")]
+            return ", ".join(cleaned) if cleaned else default
         return str(value)
 
     def _truncate(self, value: Any, max_len: int) -> str:

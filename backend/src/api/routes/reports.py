@@ -25,6 +25,7 @@ from middleware.auth_middleware import get_current_user
 
 logger = structlog.get_logger()
 router = APIRouter()
+EXPORT_DETAIL_LIMIT = 100
 
 
 def _get_user_id(current_user: Any) -> Optional[str]:
@@ -343,7 +344,7 @@ async def _build_report_export_payload(db, report: DomainAnalysisReport) -> dict
     referring_domains_result = {"total_count": 0, "items": []}
 
     try:
-        keywords_result = await db.get_detailed_items(report.domain_name, DetailedDataType.KEYWORDS, 25, 0)
+        keywords_result = await db.get_detailed_items(report.domain_name, DetailedDataType.KEYWORDS, EXPORT_DETAIL_LIMIT, 0)
     except Exception as keywords_error:
         logger.warning(
             "Failed to load export keywords from relational store",
@@ -352,7 +353,7 @@ async def _build_report_export_payload(db, report: DomainAnalysisReport) -> dict
         )
 
     try:
-        backlinks_result = await db.get_detailed_items(report.domain_name, DetailedDataType.BACKLINKS, 25, 0)
+        backlinks_result = await db.get_detailed_items(report.domain_name, DetailedDataType.BACKLINKS, EXPORT_DETAIL_LIMIT, 0)
     except Exception as backlinks_error:
         logger.warning(
             "Failed to load export backlinks from relational store",
@@ -361,7 +362,7 @@ async def _build_report_export_payload(db, report: DomainAnalysisReport) -> dict
         )
 
     try:
-        referring_domains_result = await db.get_derived_referring_domains(report.domain_name, 25, 0)
+        referring_domains_result = await db.get_derived_referring_domains(report.domain_name, EXPORT_DETAIL_LIMIT, 0)
     except Exception as refdomains_error:
         logger.warning(
             "Failed to load export referring domains from derived store",
@@ -376,7 +377,7 @@ async def _build_report_export_payload(db, report: DomainAnalysisReport) -> dict
         if payload_keywords:
             keywords_result = {
                 "total_count": (display_payload.get("keywords") or {}).get("total_count", len(payload_keywords)),
-                "items": payload_keywords[:25],
+                "items": payload_keywords[:EXPORT_DETAIL_LIMIT],
             }
 
     if not backlinks_result["items"]:
@@ -384,7 +385,7 @@ async def _build_report_export_payload(db, report: DomainAnalysisReport) -> dict
         if payload_backlinks:
             backlinks_result = {
                 "total_count": (display_payload.get("backlinks") or {}).get("total_count", len(payload_backlinks)),
-                "items": payload_backlinks[:25],
+                "items": payload_backlinks[:EXPORT_DETAIL_LIMIT],
             }
 
     if not referring_domains_result["items"]:
@@ -392,14 +393,14 @@ async def _build_report_export_payload(db, report: DomainAnalysisReport) -> dict
         if payload_refdomains:
             referring_domains_result = {
                 "total_count": (display_payload.get("referring_domains") or {}).get("total_count", len(payload_refdomains)),
-                "items": payload_refdomains[:25],
+                "items": payload_refdomains[:EXPORT_DETAIL_LIMIT],
             }
 
     if not referring_domains_result["items"] and backlinks_result["items"]:
         derived_refdomains = build_referring_domains_display(
             raw_referring_domains=None,
             raw_backlinks=backlinks_result["items"],
-            limit=25,
+            limit=EXPORT_DETAIL_LIMIT,
             offset=0,
         )
         referring_domains_result = {
