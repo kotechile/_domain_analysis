@@ -3,7 +3,7 @@ import { CommonModule, TitleCasePipe, DatePipe, DecimalPipe } from '@angular/com
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api';
-import { LucideAngularModule, Search, Filter, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Sparkles, TrendingUp, History, ShieldCheck, Star, Target, Zap } from 'lucide-angular';
+import { LucideAngularModule, Filter, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Sparkles, TrendingUp, History, ShieldCheck, Star, Target, Menu, X } from 'lucide-angular';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { CreditService } from '../../services/credit';
 import { firstValueFrom, interval, Subscription } from 'rxjs';
@@ -76,16 +76,6 @@ import { Auction } from '../../models/domain.model';
     .platform-namesilo { background: #f0fdf4; color: #15803d; border-color: #15803d33; }
     .platform-default { background: var(--card-bg); color: var(--text-color); border-color: var(--border-color); }
     
-    .search-input {
-      @apply w-full h-11 pl-10 pr-4 rounded-xl text-sm font-semibold border-none transition-all shadow-sm;
-      background: var(--card-bg);
-      color: var(--text-color);
-      box-shadow: 0 0 0 1px var(--border-color);
-    }
-    .search-input:focus {
-      @apply ring-2 ring-offset-0;
-      box-shadow: 0 0 0 2px var(--accent-color);
-    }
   `]
 })
 export class MarketplaceComponent implements OnInit, OnDestroy {
@@ -96,7 +86,6 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   private fetchTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Icons
-  readonly Search = Search;
   readonly Filter = Filter;
   readonly ArrowUpDown = ArrowUpDown;
   readonly ArrowUp = ArrowUp;
@@ -108,7 +97,8 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   readonly ShieldCheck = ShieldCheck;
   readonly Star = Star;
   readonly Target = Target;
-  readonly Zap = Zap;
+  readonly Menu = Menu;
+  readonly X = X;
 
   // State Signals
   auctions = signal<Auction[]>([]);
@@ -136,7 +126,6 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   private notFoundCount = new Map<string, number>(); // Track 404 errors per job
 
   // Filter Signals
-  searchQuery = signal<string>('');
   sortBy = signal<string>('expiration_date');
   sortOrder = signal<'asc' | 'desc'>('asc');
   preferredOnly = signal<boolean>(false);
@@ -147,8 +136,12 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   minScore = signal<number | null>(null);
   maxScore = signal<number | null>(null);
   selectedPlatforms = signal<string[]>([]);
+  selectedTlds = signal<string[]>([]);
   offeringType = signal<string>(''); // 'auction', 'buy_now', 'backorder'
   showFilters = signal<boolean>(false);
+  showMobileActions = signal<boolean>(false);
+  availableTlds = signal<string[]>([]);
+  readonly commonTlds = ['.com', '.net', '.ai', '.org', '.io', '.co', '.app', '.dev'];
 
   // Date Filters (Empty by default to show all results)
   expirationFromDate = signal<string>('');
@@ -162,16 +155,23 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
   activeFilterCount = computed(() => {
     let count = 0;
-    if (this.searchQuery()) count++;
     if (this.preferredOnly()) count++;
     if (this.scoredOnly()) count++;
     if (this.statisticsOnly()) count++;
     if (this.minScore() !== null && this.minScore() !== undefined) count++;
     if (this.maxScore() !== null && this.maxScore() !== undefined) count++;
     if (this.selectedPlatforms().length > 0) count++;
+    if (this.selectedTlds().length > 0) count++;
     if (this.offeringType()) count++;
     if (this.expirationFromDate() || this.expirationToDate()) count++;
     return count;
+  });
+
+  otherTlds = computed(() => this.availableTlds().filter(tld => !this.commonTlds.includes(tld)));
+
+  allOtherTldsSelected = computed(() => {
+    const others = this.otherTlds();
+    return others.length > 0 && others.every(tld => this.selectedTlds().includes(tld));
   });
 
   fillGapsDisplayPercent = computed(() => {
@@ -197,7 +197,6 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
   constructor() {
     effect(() => {
-      this.searchQuery();
       this.sortBy();
       this.sortOrder();
       this.preferredOnly();
@@ -206,6 +205,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
       this.minScore();
       this.maxScore();
       this.selectedPlatforms();
+      this.selectedTlds();
       this.offeringType();
       this.expirationFromDate();
       this.expirationToDate();
@@ -522,7 +522,6 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     // Sync signals from URL query parameters on initial load so filters persist across refreshes
     const qp = this.route.snapshot.queryParams;
 
-    if (qp['search']) this.searchQuery.set(qp['search']);
     if (qp['sort']) this.sortBy.set(qp['sort']);
     if (qp['order']) this.sortOrder.set(qp['order'] as 'asc' | 'desc');
     if (qp['preferred']) this.preferredOnly.set(qp['preferred'] === 'true');
@@ -531,11 +530,23 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (qp['min_score']) this.minScore.set(Number(qp['min_score']));
     if (qp['max_score']) this.maxScore.set(Number(qp['max_score']));
     if (qp['platforms']) this.selectedPlatforms.set(qp['platforms'].split(','));
+    if (qp['tlds']) this.selectedTlds.set(qp['tlds'].split(',').filter(Boolean));
     if (qp['offering_type']) this.offeringType.set(qp['offering_type']);
     this.setExpirationRange(qp['exp_from'] || '', qp['exp_to'] || '');
 
     this.filtersHydrated = true;
+    this.loadAvailableTlds();
     this.scheduleFetchAuctions();
+  }
+
+  async loadAvailableTlds() {
+    try {
+      const response = await firstValueFrom(this.api.getAuctionTlds());
+      this.availableTlds.set(response.tlds || []);
+    } catch (error) {
+      console.error('Failed to load auction TLDs:', error);
+      this.availableTlds.set(this.commonTlds);
+    }
   }
 
   onExpirationFromDateChange(value: string) {
@@ -544,36 +555,6 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
   onExpirationToDateChange(value: string) {
     this.normalizeExpirationRange('to', value);
-  }
-
-  isStale(dateStr: string | undefined): boolean {
-    if (!dateStr) return true;
-    const lastUpdate = new Date(dateStr);
-    const now = new Date();
-    const diffHours = (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60);
-    return diffHours > 24;
-  }
-
-  async refreshDomain(event: Event, domain: string) {
-    event.stopPropagation();
-
-    if (!confirm(`Refresh SEO metrics for ${domain}? (Cost: 5 credits)`)) {
-      return;
-    }
-
-    try {
-      const res = await firstValueFrom(this.api.triggerDomainRefresh(domain));
-      if (res.success) {
-        this.snackBar.open(`Refresh triggered for ${domain}. Metrics will update shortly.`, 'Close', { duration: 5000 });
-        // Refresh balance in header
-        this.creditService.refreshData();
-        // Optionally refresh table list, but metrics update via n8n so it might take a moment
-        this.fetchAuctions();
-      }
-    } catch (e: any) {
-      const errorMsg = e.error?.error || 'Failed to trigger refresh';
-      this.snackBar.open(errorMsg, 'Close', { duration: 5000, panelClass: ['error-snackbar'] });
-    }
   }
 
   async triggerBulkRefresh() {
@@ -586,13 +567,13 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     // Build the exact same filter set that the table currently uses
     const filters: Record<string, any> = {};
 
-    if (this.searchQuery()) filters['search'] = this.searchQuery();
     if (this.preferredOnly()) filters['preferred'] = true;
     if (this.scoredOnly()) filters['scored'] = true;
     if (this.statisticsOnly()) filters['has_statistics'] = true;
     if (this.expirationFromDate()) filters['expiration_from_date'] = this.expirationFromDate();
     if (this.expirationToDate()) filters['expiration_to_date'] = this.expirationToDate();
     if (this.selectedPlatforms().length) filters['auction_sites'] = this.selectedPlatforms();
+    if (this.selectedTlds().length) filters['tlds'] = this.selectedTlds();
     if (this.offeringType()) filters['offering_type'] = this.offeringType();
     if (this.minScore() !== null) filters['min_score'] = this.minScore();
     if (this.maxScore() !== null) filters['max_score'] = this.maxScore();
@@ -666,13 +647,13 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
     // Same filter set as the table, passed to force-refresh endpoint
     const filters: Record<string, any> = {};
-    if (this.searchQuery()) filters['search'] = this.searchQuery();
     if (this.preferredOnly()) filters['preferred'] = true;
     if (this.scoredOnly()) filters['scored'] = true;
     if (this.statisticsOnly()) filters['has_statistics'] = true;
     if (this.expirationFromDate()) filters['expiration_from_date'] = this.expirationFromDate();
     if (this.expirationToDate()) filters['expiration_to_date'] = this.expirationToDate();
     if (this.selectedPlatforms().length) filters['auction_sites'] = this.selectedPlatforms();
+    if (this.selectedTlds().length) filters['tlds'] = this.selectedTlds();
     if (this.offeringType()) filters['offering_type'] = this.offeringType();
     if (this.minScore() !== null) filters['min_score'] = this.minScore();
     if (this.maxScore() !== null) filters['max_score'] = this.maxScore();
@@ -730,7 +711,6 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     this.loading.set(true);
 
     // Explicitly unwrap signals to track them as dependencies for the effect
-    const search = this.searchQuery();
     const sort = this.sortBy();
     const order = this.sortOrder();
     const preferred = this.preferredOnly();
@@ -739,6 +719,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     const minS = this.minScore();
     const maxS = this.maxScore();
     const platforms = this.selectedPlatforms();
+    const tlds = this.selectedTlds();
     const offType = this.offeringType();
     const normalizedExpirationRange = this.getNormalizedExpirationRange(
       this.expirationFromDate(),
@@ -760,16 +741,15 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
         has_statistics: hasStatistics ? true : undefined,
         expiration_from_date: expFrom || undefined,
         expiration_to_date: expTo || undefined,
-        search: search || undefined,
         min_score: minS ?? undefined,
         max_score: maxS ?? undefined,
         auction_sites: platforms.length > 0 ? platforms : undefined,
+        tlds: tlds.length > 0 ? tlds : undefined,
         offering_type: offType || undefined
       };
 
       // Update URL silently so users can bookmark or refresh with current filters
       const queryParams: any = {
-        search: search || undefined,
         sort: sort !== 'expiration_date' ? sort : undefined,
         order: order !== 'asc' ? order : undefined,
         preferred: preferred ? 'true' : undefined,
@@ -778,6 +758,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
         min_score: minS ?? undefined,
         max_score: maxS ?? undefined,
         platforms: platforms.length > 0 ? platforms.join(',') : undefined,
+        tlds: tlds.length > 0 ? tlds.join(',') : undefined,
         offering_type: offType || undefined,
         exp_from: expFrom || undefined,
         exp_to: expTo || undefined
@@ -813,11 +794,6 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
       this.sortOrder.set('asc');
     }
     this.offset.set(0); // Reset pagination
-  }
-
-  onSearch(event: any) {
-    this.searchQuery.set(event.target.value);
-    this.offset.set(0);
   }
 
   togglePreferred() {
@@ -859,14 +835,18 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     this.showFilters.set(!this.showFilters());
   }
 
+  toggleMobileActions() {
+    this.showMobileActions.set(!this.showMobileActions());
+  }
+
   resetFilters() {
-    this.searchQuery.set('');
     this.preferredOnly.set(false);
     this.scoredOnly.set(false);
     this.statisticsOnly.set(false);
     this.minScore.set(null);
     this.maxScore.set(null);
     this.selectedPlatforms.set([]);
+    this.selectedTlds.set([]);
     this.offeringType.set('');
     this.expirationFromDate.set('');
     this.expirationToDate.set('');
@@ -879,6 +859,30 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
       this.selectedPlatforms.set(current.filter(p => p !== platform));
     } else {
       this.selectedPlatforms.set([...current, platform]);
+    }
+    this.offset.set(0);
+  }
+
+  toggleTld(tld: string) {
+    const current = this.selectedTlds();
+    if (current.includes(tld)) {
+      this.selectedTlds.set(current.filter(item => item !== tld));
+    } else {
+      this.selectedTlds.set([...current, tld]);
+    }
+    this.offset.set(0);
+  }
+
+  toggleOtherTlds() {
+    const otherTlds = this.otherTlds();
+    if (!otherTlds.length) {
+      return;
+    }
+
+    if (this.allOtherTldsSelected()) {
+      this.selectedTlds.set(this.selectedTlds().filter(tld => !otherTlds.includes(tld)));
+    } else {
+      this.selectedTlds.set(Array.from(new Set([...this.selectedTlds(), ...otherTlds])));
     }
     this.offset.set(0);
   }

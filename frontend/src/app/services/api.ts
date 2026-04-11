@@ -110,6 +110,10 @@ export class ApiService {
     return this.http.get<Models.AuctionReportResponse>(`${this.baseUrl}/auctions/report`, { params });
   }
 
+  getAuctionTlds(): Observable<{ tlds: string[] }> {
+    return this.http.get<{ tlds: string[] }>(`${this.baseUrl}/auctions/tlds`);
+  }
+
   /**
    * Credits & Billing
    */

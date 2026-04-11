@@ -875,7 +875,7 @@ class DatabaseService:
                     result = await client.table('domain_backlinks') \
                         .select('*', count='exact') \
                         .eq('domain_name', domain_name) \
-                        .order('dr', ascending=False, nulls_last=True) \
+                        .order('dr', False, nulls_last=True) \
                         .range(offset, offset + limit - 1) \
                         .execute()
                     logger.info(
@@ -895,7 +895,7 @@ class DatabaseService:
                         result = await client.table('domain_backlinks') \
                             .select('*', count='exact') \
                             .eq('domain_name', domain_name) \
-                            .order('created_at', ascending=False) \
+                            .order('created_at', False) \
                             .range(offset, offset + limit - 1) \
                             .execute()
                         logger.info(
@@ -945,11 +945,11 @@ class DatabaseService:
             query = client.table(table_name).select('*').eq('domain_name', domain_name).range(offset, offset + limit - 1)
 
             if data_type == DetailedDataType.KEYWORDS:
-                query = query.order('position', ascending=True)
+                query = query.order('position', True)
             elif data_type == DetailedDataType.REFERRING_DOMAINS:
-                query = query.order('dr', ascending=False).order('backlinks_count', ascending=False)
+                query = query.order('dr', False).order('backlinks_count', False)
             elif data_type == DetailedDataType.BACKLINKS:
-                query = query.order('dr', ascending=False, nulls_last=True)
+                query = query.order('dr', False, nulls_last=True)
 
             result = await query.execute()
 
@@ -1947,6 +1947,14 @@ class DatabaseService:
         try:
             if not client:
                 raise Exception("Supabase client not available")
+
+            valid_sort_fields = [
+                'expiration_date', 'score', 'ranking', 'name_rank', 'opportunity_rank',
+                'opportunity_score', 'organic_search_rank', 'created_at', 'domain',
+                'backlinks', 'referring_domains', 'backlinks_spam_score', 'domain_rating',
+                'organic_traffic', 'current_bid', 'offer_type', 'keywords_count',
+                'first_seen', 'auction_site', 'updated_at'
+            ]
             
             # Build query - always filter out records marked for deletion
             query = client.table('auctions').select('*').eq('to_delete', False)
@@ -1975,16 +1983,12 @@ class DatabaseService:
                     query = query.ilike('domain', f'%{tld}')
                 if filters.get('tlds'):
                     # Filter by multiple TLDs: domain should end with any of the specified TLDs
-                    # ] TLDs come as a list like [".com", ".io", ".ai"
                     tlds = filters['tlds']
                     if isinstance(tlds, list) and len(tlds) > 0:
-                        # ) Normalize TLDs (ensure they start with .
                         normalized_tlds = [tld if tld.startswith('.') else f'.{tld}' for tld in tlds if tld]
-                        # Use OR condition for multiple TLDs - PostgREST doesn't support OR directly, # so we'll use a workaround with multiple ilike filters
-                        # For now, we'll filter by the first TLD and let the frontend handle multiple
-                        # TODO: Implement proper OR filtering for multiple TLDs
                         if normalized_tlds:
-                            query = query.ilike('domain', f'%{normalized_tlds[0]}')
+                            tld_filters = ",".join([f"domain.ilike.%{tld}" for tld in normalized_tlds])
+                            query = query.or_(tld_filters)
                 if filters.get('offering_type'):
                     query = query.eq('offer_type', filters['offering_type'])
                 if filters.get('expiration_from_date'):
@@ -2026,7 +2030,6 @@ class DatabaseService:
                 query = query.gte('expiration_date', now)
             
             # Apply sorting
-            valid_sort_fields = ['expiration_date', 'score', 'ranking', 'name_rank', 'opportunity_rank', 'opportunity_score', 'organic_search_rank', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score', 'domain_rating', 'organic_traffic']
             if sort_by not in valid_sort_fields:
                 sort_by = 'expiration_date'
             
@@ -2112,6 +2115,15 @@ class DatabaseService:
             if not client:
                 raise Exception("Supabase client not available")
 
+            valid_sort_fields = [
+                'expiration_date', 'score', 'ranking', 'name_rank', 'opportunity_rank',
+                'opportunity_score', 'organic_search_rank', 'created_at', 'domain',
+                'backlinks', 'referring_domains', 'backlinks_spam_score', 'domain_rating',
+                'organic_traffic', 'current_bid', 'offer_type', 'keywords_count',
+                'first_seen', 'auction_site', 'updated_at'
+            ]
+            safe_sort_by = sort_by if sort_by in valid_sort_fields else 'updated_at'
+
             # 7-day staleness cutoff
             cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
 
@@ -2135,7 +2147,8 @@ class DatabaseService:
                     if isinstance(tlds, list) and len(tlds) > 0:
                         normalized_tlds = [t if t.startswith('.') else f'.{t}' for t in tlds if t]
                         if normalized_tlds:
-                            query = query.ilike('domain', f'%{normalized_tlds[0]}')
+                            tld_filters = ",".join([f"domain.ilike.%{tld}" for tld in normalized_tlds])
+                            query = query.or_(tld_filters)
                 if filters.get('offering_type'):
                     query = query.eq('offer_type', filters['offering_type'])
                 if filters.get('expiration_from_date'):
@@ -2163,7 +2176,7 @@ class DatabaseService:
 
             if force_refresh:
                 # Force mode: just return top N by requested sort, no missing-metrics check
-                query = query.order(sort_by, desc=(sort_order.lower() == 'desc'))
+                query = query.order(safe_sort_by, desc=(sort_order.lower() == 'desc'))
                 logger.info("Executing force refresh query", filters=filters, limit=limit)
                 result = await query.limit(limit).execute()
                 candidates = result.data if result.data else []
@@ -2191,6 +2204,13 @@ class DatabaseService:
                         if not tld.startswith('.'):
                             tld = '.' + tld
                         where_conditions.append(f"domain ILIKE '%{tld}'")
+                    if filters.get('tlds'):
+                        tlds = filters['tlds']
+                        if isinstance(tlds, list) and len(tlds) > 0:
+                            normalized_tlds = [t if t.startswith('.') else f'.{t}' for t in tlds if t]
+                            if normalized_tlds:
+                                tld_conditions = " OR ".join([f"domain ILIKE '%{tld}'" for tld in normalized_tlds])
+                                where_conditions.append(f"({tld_conditions})")
                     if filters.get('expiration_from_date'):
                         where_conditions.append(f"expiration_date >= '{filters['expiration_from_date']}'")
                     else:
@@ -2222,8 +2242,6 @@ class DatabaseService:
                 where_clause = " AND ".join(where_conditions)
 
                 # Sanitize sort fields to prevent injection
-                valid_sort_fields = ['expiration_date', 'score', 'ranking', 'name_rank', 'opportunity_rank', 'opportunity_score', 'organic_search_rank', 'created_at', 'domain', 'backlinks', 'referring_domains', 'backlinks_spam_score', 'domain_rating', 'organic_traffic', 'updated_at']
-                safe_sort_by = sort_by if sort_by in valid_sort_fields else 'updated_at'
                 safe_sort_order = 'DESC' if sort_order.lower() == 'desc' else 'ASC'
                 nulls_clause = 'NULLS LAST' if safe_sort_order == 'DESC' else 'NULLS FIRST'
 

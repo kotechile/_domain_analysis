@@ -1,7 +1,7 @@
-import { Component, inject, signal, computed } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ApiService } from '../../services/api';
 import { CreditService } from '../../services/credit';
 import { LucideAngularModule, Search, ShieldCheck, History, TrendingUp, Sparkles, AlertCircle } from 'lucide-angular';
@@ -10,7 +10,7 @@ import { firstValueFrom } from 'rxjs';
 @Component({
   selector: 'app-domain-analysis',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, LucideAngularModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, LucideAngularModule],
   templateUrl: './domain-analysis.html',
   styles: [`
     .hero-glow {
@@ -29,10 +29,11 @@ import { firstValueFrom } from 'rxjs';
     }
   `]
 })
-export class DomainAnalysisComponent {
+export class DomainAnalysisComponent implements OnInit {
   private fb = inject(FormBuilder);
   private api = inject(ApiService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   creditService = inject(CreditService);
 
   // Icons
@@ -52,6 +53,15 @@ export class DomainAnalysisComponent {
     domain: ['', [Validators.required, Validators.pattern(/^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/)]],
     mode: ['dual']
   });
+
+  ngOnInit() {
+    const domain = this.route.snapshot.queryParamMap.get('domain');
+    if (!domain) return;
+
+    this.analysisForm.patchValue({
+      domain: this.api.formatDomain(domain)
+    });
+  }
 
   async startAnalysis() {
     if (this.analysisForm.invalid || this.isLoading()) return;

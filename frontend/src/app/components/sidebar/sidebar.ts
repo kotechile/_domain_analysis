@@ -59,7 +59,7 @@ export class SidebarComponent {
 
   navItems = [
     { path: '/', label: 'Deep Analysis', icon: BrainCircuit },
-    { path: '/reports', label: 'Recent Scans', icon: History },
+    { path: '/reports', label: 'Recent Reports', icon: History },
     { path: '/marketplace', label: 'Marketplace', icon: Table },
     { path: '/billing', label: 'Billing & Credits', icon: CreditCard }
   ];

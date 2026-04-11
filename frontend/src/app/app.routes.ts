@@ -14,6 +14,7 @@ export const routes: Routes = [
     { path: 'login', component: LoginComponent },
     { path: 'auth/callback', component: AuthCallbackComponent },
     { path: '', component: DomainAnalysisComponent, canActivate: [AuthGuard] },
+    { path: 'deepanalysis', component: DomainAnalysisComponent, canActivate: [AuthGuard] },
     { path: 'marketplace', component: MarketplaceComponent, canActivate: [AuthGuard] },
     // { path: 'import', component: ImportComponent, canActivate: [AuthGuard] },
     { path: 'reports', component: ReportsListComponent, canActivate: [AuthGuard] },

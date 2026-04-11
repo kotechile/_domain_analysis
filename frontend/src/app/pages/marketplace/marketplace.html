@@ -1,102 +1,166 @@
 <div class="w-full mx-auto px-4 py-8 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-1000">
 
     <!-- Page Header & Filter Toolbar -->
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div class="flex flex-col xl:flex-row xl:items-start justify-between gap-6">
         <div class="space-y-2">
             <h1 class="text-4xl font-bold tracking-tight" style="color: var(--text-color)">Domain Marketplace</h1>
             <p class="text-sm opacity-50" style="color: var(--text-color)">Curated auctions with real-time SEO & AI
                 analysis metrics.</p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-3">
-            <!-- Search Domain -->
-            <div class="relative w-full sm:w-64 search-container group">
-                <i-lucide [name]="Search"
-                    class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 opacity-30 group-focus-within:opacity-100 transition-all"></i-lucide>
-                <input type="text" placeholder="Quick search..." [ngModel]="searchQuery()" (input)="onSearch($event)"
-                    class="search-input transition-all">
-            </div>
-
-            <!-- Advanced Filters Toggle -->
-            <button (click)="toggleFilters()"
-                class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 shrink-0 relative"
-                [style.background]="showFilters() ? 'rgba(var(--accent-color-rgb), 0.1)' : 'var(--card-bg)'"
-                [style.color]="showFilters() ? 'var(--accent-color)' : 'var(--text-color)'"
-                [style.borderColor]="showFilters() ? 'var(--accent-color)' : 'var(--border-color)'">
-                <i-lucide [name]="Filter" class="w-4 h-4"></i-lucide>
-                <span>Filters</span>
-                @if (activeFilterCount() > 0) {
-                <span
-                    class="absolute -top-1 -right-1 w-5 h-5 bg-accent-color text-white text-[10px] flex items-center justify-center rounded-full animate-in zoom-in-50">
-                    {{ activeFilterCount() }}
-                </span>
-                }
-            </button>
-
-            <!-- Fill Metrics Button (primary action) -->
-            <div class="relative group shrink-0">
-                <button (click)="triggerBulkRefresh()"
-                    [disabled]="fillGapsInProgress() || postRefreshSyncInProgress()"
-                    class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-20 active:scale-95 hover:bg-opacity-30 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
-                    style="background: rgba(var(--accent-color-rgb), 0.1); color: var(--accent-color); border-color: rgba(var(--accent-color-rgb), 0.25);">
-                    @if (fillGapsInProgress() || postRefreshSyncInProgress()) {
-                        <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span>{{ fillGapsInProgress() ? 'Queueing Metrics…' : 'Syncing Results…' }}</span>
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/10"
-                            style="color: currentColor;">
-                            {{ fillGapsInProgress() ? fillGapsDisplayPercent() : postRefreshSyncDisplayPercent() }}%
-                        </span>
-                    } @else {
-                        <i-lucide [name]="Sparkles" class="w-4 h-4"></i-lucide>
-                        <span>Fill Metrics</span>
+        <div class="w-full xl:w-auto">
+            <div class="hidden lg:flex items-start xl:items-center justify-end gap-3">
+                <button (click)="toggleFilters()"
+                    class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 shrink-0 relative"
+                    [style.background]="showFilters() ? 'rgba(var(--accent-color-rgb), 0.1)' : 'var(--card-bg)'"
+                    [style.color]="showFilters() ? 'var(--accent-color)' : 'var(--text-color)'"
+                    [style.borderColor]="showFilters() ? 'var(--accent-color)' : 'var(--border-color)'">
+                    <i-lucide [name]="Filter" class="w-4 h-4"></i-lucide>
+                    <span>Filters</span>
+                    @if (activeFilterCount() > 0) {
+                    <span
+                        class="absolute -top-1 -right-1 w-5 h-5 bg-accent-color text-white text-[10px] flex items-center justify-center rounded-full animate-in zoom-in-50">
+                        {{ activeFilterCount() }}
+                    </span>
                     }
                 </button>
-                <!-- Tooltip -->
-                <div
-                    class="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block pointer-events-none w-72">
-                    <div class="rounded-xl px-4 py-3 text-xs shadow-2xl border border-opacity-10 leading-relaxed"
-                        style="background: var(--card-bg); color: var(--text-color); border-color: var(--border-color)">
-                        <p class="font-bold mb-1 opacity-90">✦ Fill Metrics</p>
-                        <p class="opacity-60">Finds up to 1,000 domains with <strong>no SEO metrics yet</strong>
-                            matching your current filters and sort. The rows you are currently looking at are prioritized
-                            first so the visible table fills in sooner.</p>
+
+                <div class="flex flex-col gap-2 min-w-[180px]">
+                    <button (click)="togglePreferred()"
+                        class="h-11 px-4 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center justify-between transition-all border border-opacity-10 active:scale-95"
+                        [ngStyle]="{'background': preferredOnly() ? 'var(--accent-color)' : 'var(--card-bg)',
+                                    'color': preferredOnly() ? 'white' : 'var(--text-color)',
+                                    'border-color': 'var(--border-color)'}">
+                        <span>Pinned</span>
+                        <i-lucide [name]="Star" class="w-4 h-4" [class.fill-current]="preferredOnly()"></i-lucide>
+                    </button>
+
+                    <button (click)="toggleStatistics()"
+                        class="h-11 px-4 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center justify-between transition-all border border-opacity-10 active:scale-95"
+                        [ngStyle]="{'background': statisticsOnly() ? 'var(--accent-color)' : 'var(--card-bg)',
+                                    'color': statisticsOnly() ? 'white' : 'var(--text-color)',
+                                    'border-color': 'var(--border-color)'}">
+                        <span>w/SEO Stats</span>
+                        <i-lucide [name]="ShieldCheck" class="w-4 h-4"></i-lucide>
+                    </button>
+
+                    <button (click)="toggleScored()"
+                        class="h-11 px-4 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center justify-between transition-all border border-opacity-10 active:scale-95"
+                        [ngStyle]="{'background': scoredOnly() ? 'var(--accent-color)' : 'var(--card-bg)',
+                                    'color': scoredOnly() ? 'white' : 'var(--text-color)',
+                                    'border-color': 'var(--border-color)'}">
+                        <span>w/name score</span>
+                        <i-lucide [name]="Target" class="w-4 h-4"></i-lucide>
+                    </button>
+                </div>
+
+                <div class="relative group shrink-0">
+                    <button (click)="triggerBulkRefresh()"
+                        [disabled]="fillGapsInProgress() || postRefreshSyncInProgress()"
+                        class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-20 active:scale-95 hover:bg-opacity-30 outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+                        style="background: rgba(var(--accent-color-rgb), 0.1); color: var(--accent-color); border-color: rgba(var(--accent-color-rgb), 0.25);">
+                        @if (fillGapsInProgress() || postRefreshSyncInProgress()) {
+                            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>{{ fillGapsInProgress() ? 'Queueing Metrics…' : 'Syncing Results…' }}</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/10"
+                                style="color: currentColor;">
+                                {{ fillGapsInProgress() ? fillGapsDisplayPercent() : postRefreshSyncDisplayPercent() }}%
+                            </span>
+                        } @else {
+                            <i-lucide [name]="Sparkles" class="w-4 h-4"></i-lucide>
+                            <span>Fill Metrics</span>
+                        }
+                    </button>
+                    <div
+                        class="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block pointer-events-none w-72">
+                        <div class="rounded-xl px-4 py-3 text-xs shadow-2xl border border-opacity-10 leading-relaxed"
+                            style="background: var(--card-bg); color: var(--text-color); border-color: var(--border-color)">
+                            <p class="font-bold mb-1 opacity-90">✦ Fill Metrics</p>
+                            <p class="opacity-60">Finds up to 1,000 domains with <strong>no SEO metrics yet</strong>
+                                matching your current filters and sort. The rows you are currently looking at are prioritized
+                                first so the visible table fills in sooner.</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Scored Only Toggle -->
-            <button (click)="toggleScored()"
-                class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 shrink-0"
-                [ngStyle]="{'background': scoredOnly() ? 'var(--accent-color)' : 'var(--card-bg)',
-                            'color': scoredOnly() ? 'white' : 'var(--text-color)',
-                            'border-color': 'var(--border-color)'}">
-                <i-lucide [name]="Target" class="w-4 h-4"></i-lucide>
-                <span>Scored Only</span>
-            </button>
+            <div class="lg:hidden flex items-center justify-end gap-3">
+                <button (click)="toggleFilters()"
+                    class="h-11 px-4 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 relative"
+                    [style.background]="showFilters() ? 'rgba(var(--accent-color-rgb), 0.1)' : 'var(--card-bg)'"
+                    [style.color]="showFilters() ? 'var(--accent-color)' : 'var(--text-color)'"
+                    [style.borderColor]="showFilters() ? 'var(--accent-color)' : 'var(--border-color)'">
+                    <i-lucide [name]="Filter" class="w-4 h-4"></i-lucide>
+                    <span>Filters</span>
+                    @if (activeFilterCount() > 0) {
+                    <span
+                        class="absolute -top-1 -right-1 w-5 h-5 bg-accent-color text-white text-[10px] flex items-center justify-center rounded-full">
+                        {{ activeFilterCount() }}
+                    </span>
+                    }
+                </button>
 
-            <button (click)="toggleStatistics()"
-                class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 shrink-0"
-                [ngStyle]="{'background': statisticsOnly() ? 'var(--accent-color)' : 'var(--card-bg)',
-                            'color': statisticsOnly() ? 'white' : 'var(--text-color)',
-                            'border-color': 'var(--border-color)'}">
-                <i-lucide [name]="ShieldCheck" class="w-4 h-4"></i-lucide>
-                <span>SEO Stats</span>
-            </button>
-
-            <!-- Filter Preferred Toggle -->
-            <button (click)="togglePreferred()"
-                class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-10 active:scale-95 shrink-0"
-                [ngStyle]="{'background': preferredOnly() ? 'var(--accent-color)' : 'var(--card-bg)',
-                            'color': preferredOnly() ? 'white' : 'var(--text-color)',
-                            'border-color': 'var(--border-color)'}">
-                <i-lucide [name]="Star" class="w-4 h-4" [class.fill-current]="preferredOnly()"></i-lucide>
-                <span>Pinned</span>
-            </button>
+                <button (click)="toggleMobileActions()"
+                    class="h-11 w-11 rounded-xl flex items-center justify-center border border-opacity-10 transition-all active:scale-95"
+                    [style.background]="showMobileActions() ? 'rgba(var(--accent-color-rgb), 0.1)' : 'var(--card-bg)'"
+                    [style.color]="showMobileActions() ? 'var(--accent-color)' : 'var(--text-color)'"
+                    [style.borderColor]="showMobileActions() ? 'var(--accent-color)' : 'var(--border-color)'">
+                    <i-lucide [name]="showMobileActions() ? X : Menu" class="w-4 h-4"></i-lucide>
+                </button>
+            </div>
         </div>
     </div>
+
+    @if (showMobileActions()) {
+    <div class="lg:hidden p-5 rounded-3xl border border-opacity-5 space-y-4 animate-in slide-in-from-top-4 duration-300 shadow-xl"
+        style="background: var(--card-bg); border-color: var(--border-color)">
+        <button (click)="togglePreferred()"
+            class="w-full h-11 px-4 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center justify-between transition-all border border-opacity-10 active:scale-95"
+            [ngStyle]="{'background': preferredOnly() ? 'var(--accent-color)' : 'var(--card-bg)',
+                        'color': preferredOnly() ? 'white' : 'var(--text-color)',
+                        'border-color': 'var(--border-color)'}">
+            <span>Pinned</span>
+            <i-lucide [name]="Star" class="w-4 h-4" [class.fill-current]="preferredOnly()"></i-lucide>
+        </button>
+
+        <button (click)="toggleStatistics()"
+            class="w-full h-11 px-4 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center justify-between transition-all border border-opacity-10 active:scale-95"
+            [ngStyle]="{'background': statisticsOnly() ? 'var(--accent-color)' : 'var(--card-bg)',
+                        'color': statisticsOnly() ? 'white' : 'var(--text-color)',
+                        'border-color': 'var(--border-color)'}">
+            <span>w/SEO Stats</span>
+            <i-lucide [name]="ShieldCheck" class="w-4 h-4"></i-lucide>
+        </button>
+
+        <button (click)="toggleScored()"
+            class="w-full h-11 px-4 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center justify-between transition-all border border-opacity-10 active:scale-95"
+            [ngStyle]="{'background': scoredOnly() ? 'var(--accent-color)' : 'var(--card-bg)',
+                        'color': scoredOnly() ? 'white' : 'var(--text-color)',
+                        'border-color': 'var(--border-color)'}">
+            <span>w/name score</span>
+            <i-lucide [name]="Target" class="w-4 h-4"></i-lucide>
+        </button>
+
+        <button (click)="triggerBulkRefresh()"
+            [disabled]="fillGapsInProgress() || postRefreshSyncInProgress()"
+            class="w-full h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center justify-center space-x-2 transition-all border border-opacity-20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            style="background: rgba(var(--accent-color-rgb), 0.1); color: var(--accent-color); border-color: rgba(var(--accent-color-rgb), 0.25);">
+            @if (fillGapsInProgress() || postRefreshSyncInProgress()) {
+                <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span>{{ fillGapsInProgress() ? 'Queueing Metrics…' : 'Syncing Results…' }}</span>
+            } @else {
+                <i-lucide [name]="Sparkles" class="w-4 h-4"></i-lucide>
+                <span>Fill Metrics</span>
+            }
+        </button>
+    </div>
+    }
 
     <!-- Refresh Options Row -->
     <div class="flex items-center justify-end -mt-4 mb-2">
@@ -211,7 +275,7 @@
     @if (showFilters()) {
     <div class="p-8 rounded-3xl border border-opacity-5 animate-in slide-in-from-top-4 duration-500 overflow-hidden relative shadow-2xl"
         style="background: var(--card-bg); border-color: var(--border-color)">
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-10">
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
             <!-- Platforms -->
             <div class="space-y-4">
                 <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">Core Platforms</span>
@@ -225,6 +289,33 @@
                         {{ p }}
                     </button>
                     }
+                </div>
+            </div>
+
+            <!-- TLDs -->
+            <div class="space-y-4">
+                <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">TLD Focus</span>
+                <div class="space-y-2">
+                    @for (tld of commonTlds; track tld) {
+                    <button (click)="toggleTld(tld)"
+                        class="w-full px-4 py-2 rounded-xl text-[10px] font-semibold uppercase transition-all border border-opacity-10 flex items-center justify-between"
+                        [style.background]="selectedTlds().includes(tld) ? 'var(--accent-color)' : 'rgba(var(--text-color-rgb), 0.03)'"
+                        [style.color]="selectedTlds().includes(tld) ? 'white' : 'var(--text-color)'"
+                        [style.borderColor]="'var(--border-color)'">
+                        <span>{{ tld }}</span>
+                        @if (selectedTlds().includes(tld)) {
+                        <span class="text-[9px] font-bold">ON</span>
+                        }
+                    </button>
+                    }
+                    <button (click)="toggleOtherTlds()"
+                        class="w-full px-4 py-2 rounded-xl text-[10px] font-semibold uppercase transition-all border border-opacity-10 flex items-center justify-between"
+                        [style.background]="allOtherTldsSelected() ? 'var(--accent-color)' : 'rgba(var(--text-color-rgb), 0.03)'"
+                        [style.color]="allOtherTldsSelected() ? 'white' : 'var(--text-color)'"
+                        [style.borderColor]="'var(--border-color)'">
+                        <span>All other TLDs</span>
+                        <span class="text-[9px] font-bold opacity-70">{{ otherTlds().length }}</span>
+                    </button>
                 </div>
             </div>
 
@@ -274,10 +365,13 @@
             </div>
 
             <!-- Meta Actions -->
-            <div class="flex flex-col justify-end">
+            <div class="flex flex-col justify-between gap-4">
+                <div class="text-xs opacity-50 leading-relaxed" style="color: var(--text-color)">
+                    Narrow the marketplace using platforms, TLDs, scores, and expiration timing before running deeper analysis.
+                </div>
                 <button (click)="resetFilters()"
                     class="h-11 px-6 rounded-xl text-[10px] font-semibold uppercase tracking-widest bg-red-500/10 text-red-500 hover:bg-red-500/20 active:scale-95 transition-all text-center">
-                    Reset Dynamics
+                    Reset Filters
                 </button>
             </div>
         </div>
@@ -409,7 +503,7 @@
                                 [class.sort-active]="sortBy() === 'auction_site'"></i-lucide>
                         </div>
                     </th>
-                    <th class="text-right pr-8 font-semibold">Actions</th>
+                    <th class="text-right pr-8 font-semibold">Deep Analysis</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-opacity-5 border-border-color">
@@ -575,27 +669,15 @@
                         </a>
                     </td>
                     <td class="text-right pr-4">
-                        <div class="flex items-center justify-end space-x-2">
-                            <!-- Refresh Button -->
-                            <button
-                                class="p-3 rounded-2xl border border-opacity-10 hover:bg-opacity-10 group/refresh transition-all active:scale-95 shadow-sm relative overflow-hidden"
-                                [style.borderColor]="'var(--border-color)'" [style.background]="'var(--card-bg)'"
-                                [title]="isStale(item.updated_at) ? 'Data is stale (24h+). Refresh for 5 credits' : 'Data is fresh'"
-                                (click)="refreshDomain($event, item.domain)">
-                                <i-lucide [name]="Zap" class="w-5 h-5 transition-all"
-                                    [class.opacity-100]="isStale(item.updated_at)"
-                                    [class.text-amber-500]="isStale(item.updated_at)"
-                                    [class.opacity-20]="!isStale(item.updated_at)"></i-lucide>
-                            </button>
-
-                            <button
-                                class="p-3 rounded-2xl border border-opacity-10 hover:bg-opacity-10 group/btn transition-all active:scale-95 shadow-sm"
-                                [style.borderColor]="'var(--border-color)'" [style.background]="'var(--card-bg)'"
-                                [style.color]="'var(--text-color)'" [routerLink]="['/reports', item.domain]">
-                                <i-lucide [name]="Search"
-                                    class="w-5 h-5 opacity-40 group-hover/btn:opacity-100 transition-all"></i-lucide>
-                            </button>
-                        </div>
+                        <a
+                            class="inline-flex items-center justify-center h-11 px-4 rounded-2xl border border-opacity-10 transition-all active:scale-95 shadow-sm text-[10px] font-semibold uppercase tracking-widest"
+                            [style.borderColor]="'var(--border-color)'"
+                            [style.background]="'var(--card-bg)'"
+                            [style.color]="'var(--text-color)'"
+                            [routerLink]="['/deepanalysis']"
+                            [queryParams]="{ domain: item.domain }">
+                            Deep Analysis
+                        </a>
                     </td>
                 </tr>
                 }
