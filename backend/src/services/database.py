@@ -847,6 +847,13 @@ class DatabaseService:
                         .order('dr', ascending=False) \
                         .range(offset, offset + limit - 1) \
                         .execute()
+                    logger.info(
+                        "Backlink relational query succeeded",
+                        domain=domain_name,
+                        total_count=result.count if result.count is not None else len(result.data or []),
+                        returned_count=len(result.data or []),
+                        first_item_keys=sorted((result.data or [])[0].keys()) if (result.data or []) else [],
+                    )
                 except Exception as ordered_error:
                     logger.warning(
                         "Primary backlink query failed; retrying with created_at ordering",
@@ -859,6 +866,13 @@ class DatabaseService:
                         .order('created_at', ascending=False) \
                         .range(offset, offset + limit - 1) \
                         .execute()
+                    logger.info(
+                        "Backlink relational fallback query succeeded",
+                        domain=domain_name,
+                        total_count=result.count if result.count is not None else len(result.data or []),
+                        returned_count=len(result.data or []),
+                        first_item_keys=sorted((result.data or [])[0].keys()) if (result.data or []) else [],
+                    )
 
                 return {
                     'items': result.data or [],

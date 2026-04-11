@@ -298,6 +298,13 @@ async def get_report_details(
                 relational_result = empty_section()
 
             if relational_result["items"]:
+                logger.info(
+                    "Report detail section resolved from relational data",
+                    domain=domain,
+                    section=payload_key,
+                    total_count=relational_result["total_count"],
+                    returned_count=len(relational_result["items"]),
+                )
                 return {
                     "total_count": relational_result["total_count"],
                     "items": relational_shaper(relational_result["items"]),
@@ -306,6 +313,13 @@ async def get_report_details(
             payload_section = (report.display_payload or {}).get(payload_key, {})
             payload_items = payload_section.get("items", [])
             if payload_items:
+                logger.info(
+                    "Report detail section resolved from display payload",
+                    domain=domain,
+                    section=payload_key,
+                    total_count=payload_section.get("total_count", len(payload_items)),
+                    returned_count=len(payload_items[offset:offset + limit]),
+                )
                 sliced_items = payload_items[offset:offset + limit]
                 return {
                     "total_count": payload_section.get("total_count", len(payload_items)),
@@ -320,6 +334,12 @@ async def get_report_details(
                     if raw_items:
                         shaped_items = shape_backlink_items(raw_items)
                         sliced_items = shaped_items[offset:offset + limit]
+                        logger.info(
+                            "Report detail backlinks resolved from raw cache",
+                            domain=domain,
+                            total_count=raw_backlinks.get("total_count", len(shaped_items)),
+                            returned_count=len(sliced_items),
+                        )
                         return {
                             "total_count": raw_backlinks.get("total_count", len(shaped_items)),
                             "items": sliced_items,
@@ -331,6 +351,11 @@ async def get_report_details(
                         error=str(raw_error),
                     )
 
+            logger.warning(
+                "Report detail section resolved empty",
+                domain=domain,
+                section=payload_key,
+            )
             return empty_section()
 
         keywords_result = await resolve_section(
