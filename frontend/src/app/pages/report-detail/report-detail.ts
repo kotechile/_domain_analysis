@@ -173,6 +173,32 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
                 this.backlinksTotal.set(res.backlinks?.total_count || 0);
             }
 
+            const currentReport = this.report();
+            if (currentReport?.data_for_seo_metrics) {
+                if ((res.backlinks?.total_count || 0) > (currentReport.data_for_seo_metrics.total_backlinks || 0)) {
+                    currentReport.data_for_seo_metrics.total_backlinks = res.backlinks?.total_count || 0;
+                }
+                if ((res.referring_domains?.total_count || 0) > (currentReport.data_for_seo_metrics.total_referring_domains || 0)) {
+                    currentReport.data_for_seo_metrics.total_referring_domains = res.referring_domains?.total_count || 0;
+                }
+                if ((res.keywords?.total_count || 0) > (currentReport.data_for_seo_metrics.total_keywords || 0)) {
+                    currentReport.data_for_seo_metrics.total_keywords = res.keywords?.total_count || 0;
+                }
+                this.report.set({ ...currentReport });
+            }
+
+            const needsHydratedRefresh =
+                tab === 'backlinks' &&
+                (res.backlinks?.total_count || 0) > 0 &&
+                (
+                    (currentReport?.llm_analysis?.confidence_score || 0) <= 0.01 ||
+                    (currentReport?.data_for_seo_metrics?.total_backlinks || 0) === 0
+                );
+
+            if (needsHydratedRefresh) {
+                await this.fetchReport();
+            }
+
             this.loadedDetailTabs.add(tab);
         } catch (err) {
             console.error('Error fetching report details:', err);

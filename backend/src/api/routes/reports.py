@@ -9,7 +9,7 @@ from datetime import datetime
 import structlog
 import io
 
-from models.domain_analysis import ReportResponse, DomainAnalysisReport, HistoricalData, DataForSEOMetrics, DetailedDataType
+from models.domain_analysis import ReportResponse, DomainAnalysisReport, HistoricalData, DataForSEOMetrics, DetailedDataType, LLMAnalysis
 from services.database import get_database, DataSource
 from services.external_apis import DataForSEOService
 from services.pdf_service import PDFService
@@ -51,11 +51,15 @@ async def _get_owned_report_or_404(domain: str, current_user: Any):
 
 async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAnalysisReport:
     """Backfill report counts from relational data for older/stale report rows."""
+    report_changed = False
+
     if not report.data_for_seo_metrics:
         report.data_for_seo_metrics = DataForSEOMetrics()
+        report_changed = True
 
     if not report.detailed_data_available:
         report.detailed_data_available = {}
+        report_changed = True
 
     try:
         keywords_result = await db.get_detailed_items(report.domain_name, DetailedDataType.KEYWORDS, 1, 0)
@@ -64,18 +68,21 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
 
         if keywords_result["total_count"] > 0:
             report.detailed_data_available["keywords"] = True
-            if not report.data_for_seo_metrics.total_keywords:
+            if (report.data_for_seo_metrics.total_keywords or 0) < keywords_result["total_count"]:
                 report.data_for_seo_metrics.total_keywords = keywords_result["total_count"]
+                report_changed = True
 
         if backlinks_result["total_count"] > 0:
             report.detailed_data_available["backlinks"] = True
-            if not report.data_for_seo_metrics.total_backlinks:
+            if (report.data_for_seo_metrics.total_backlinks or 0) < backlinks_result["total_count"]:
                 report.data_for_seo_metrics.total_backlinks = backlinks_result["total_count"]
+                report_changed = True
 
         if referring_domains_result["total_count"] > 0:
             report.detailed_data_available["referring_domains"] = True
-            if not report.data_for_seo_metrics.total_referring_domains:
+            if (report.data_for_seo_metrics.total_referring_domains or 0) < referring_domains_result["total_count"]:
                 report.data_for_seo_metrics.total_referring_domains = referring_domains_result["total_count"]
+                report_changed = True
     except Exception as hydration_error:
         logger.warning(
             "Failed to hydrate report detail counts from relational data",
@@ -113,18 +120,24 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
 
     if payload_keywords:
         report.detailed_data_available["keywords"] = True
-        if not report.data_for_seo_metrics.total_keywords:
+        payload_keywords_total = (display_payload.get("keywords") or {}).get("total_count", len(payload_keywords))
+        if (report.data_for_seo_metrics.total_keywords or 0) < payload_keywords_total:
             report.data_for_seo_metrics.total_keywords = (display_payload.get("keywords") or {}).get("total_count", len(payload_keywords))
+            report_changed = True
 
     if payload_backlinks:
         report.detailed_data_available["backlinks"] = True
-        if not report.data_for_seo_metrics.total_backlinks:
+        payload_backlinks_total = (display_payload.get("backlinks") or {}).get("total_count", len(payload_backlinks))
+        if (report.data_for_seo_metrics.total_backlinks or 0) < payload_backlinks_total:
             report.data_for_seo_metrics.total_backlinks = (display_payload.get("backlinks") or {}).get("total_count", len(payload_backlinks))
+            report_changed = True
 
     if payload_referring_domains:
         report.detailed_data_available["referring_domains"] = True
-        if not report.data_for_seo_metrics.total_referring_domains:
+        payload_refdomains_total = (display_payload.get("referring_domains") or {}).get("total_count", len(payload_referring_domains))
+        if (report.data_for_seo_metrics.total_referring_domains or 0) < payload_refdomains_total:
             report.data_for_seo_metrics.total_referring_domains = (display_payload.get("referring_domains") or {}).get("total_count", len(payload_referring_domains))
+            report_changed = True
 
     if report.historical_data and report.historical_data.rank_overview:
         rank_overview = report.historical_data.rank_overview
@@ -182,6 +195,68 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
                 "Failed to hydrate traffic from historical data",
                 domain=report.domain_name,
                 error=str(hydration_error),
+            )
+
+    total_backlinks = report.data_for_seo_metrics.total_backlinks or 0
+    total_referring_domains = report.data_for_seo_metrics.total_referring_domains or 0
+    total_keywords = report.data_for_seo_metrics.total_keywords or 0
+    confidence_score = (report.llm_analysis.confidence_score or 0) if report.llm_analysis else 0
+    summary_text = (report.llm_analysis.summary or "").lower() if report.llm_analysis else ""
+
+    ai_looks_stale = (
+        report.llm_analysis is not None
+        and total_backlinks > 0
+        and (
+            confidence_score <= 0.01
+            or "0 backlinks" in summary_text
+            or "no backlinks" in summary_text
+        )
+    )
+
+    if ai_looks_stale:
+        try:
+            backlinks_data = await db.get_detailed_data(report.domain_name, DetailedDataType.BACKLINKS)
+            keywords_data = await db.get_detailed_data(report.domain_name, DetailedDataType.KEYWORDS)
+
+            fallback_analysis = _generate_fallback_analysis(
+                report.domain_name,
+                {
+                    "analytics": {
+                        "domain_rank": report.data_for_seo_metrics.domain_rating_dr or 0,
+                        "organic_traffic": report.data_for_seo_metrics.organic_traffic_est or 0,
+                    },
+                    "backlinks_summary": {
+                        "backlinks": total_backlinks,
+                        "referring_domains": total_referring_domains,
+                    },
+                    "backlinks": {
+                        "items": (backlinks_data.json_data if backlinks_data else {}).get("items", []),
+                    },
+                    "keywords": {
+                        "items": (keywords_data.json_data if keywords_data else {}).get("items", []),
+                    },
+                    "wayback": report.wayback_machine_summary.dict() if report.wayback_machine_summary else {},
+                },
+                include_backlinks=True,
+                include_keywords=total_keywords > 0,
+            )
+            report.llm_analysis = LLMAnalysis(**fallback_analysis)
+            report_changed = True
+        except Exception as ai_refresh_error:
+            logger.warning(
+                "Failed to refresh stale AI memo from hydrated metrics",
+                domain=report.domain_name,
+                error=str(ai_refresh_error),
+            )
+
+    if report_changed:
+        try:
+            await db.save_report(report)
+        except Exception as save_error:
+            logger.warning(
+                "Failed to persist hydrated report fields",
+                domain=report.domain_name,
+                error=str(save_error),
             )
 
     return report
