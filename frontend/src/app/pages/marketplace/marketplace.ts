@@ -600,9 +600,8 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     try {
       // Collect currently displayed domains to prioritize them
       const displayedDomains = this.auctions().map(a => a.domain).filter(d => d);
-      const onlyDisplayed = this.onlyDisplayedDomains();
-      console.log('[Fill Gaps] Sending request with payload:', payload, 'prioritized_domains:', displayedDomains.length, 'only_displayed:', onlyDisplayed);
-      const res = await firstValueFrom(this.api.triggerBulkRefresh(payload.filters, false, payload.sort_by, payload.sort_order, displayedDomains, onlyDisplayed));
+      console.log('[Fill Gaps] Sending request with payload:', payload, 'prioritized_domains:', displayedDomains.length, 'only_displayed: false');
+      const res = await firstValueFrom(this.api.triggerBulkRefresh(payload.filters, false, payload.sort_by, payload.sort_order, displayedDomains, false));
       console.log('[Fill Gaps] Response:', res);
 
       // API returns immediately with in_progress status and job_id
@@ -679,9 +678,8 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     try {
       // Collect currently displayed domains to prioritize them
       const displayedDomains = this.auctions().map(a => a.domain).filter(d => d);
-      const onlyDisplayed = this.onlyDisplayedDomains();
-      console.log('[Force Refresh] Sending request with payload:', payload, 'prioritized_domains:', displayedDomains.length, 'only_displayed:', onlyDisplayed);
-      const res = await firstValueFrom(this.api.triggerForceRefresh(payload.filters, payload.sort_by, payload.sort_order, displayedDomains, onlyDisplayed));
+      console.log('[Force Refresh] Sending request with payload:', payload, 'prioritized_domains:', displayedDomains.length, 'only_displayed: false');
+      const res = await firstValueFrom(this.api.triggerForceRefresh(payload.filters, payload.sort_by, payload.sort_order, displayedDomains, false));
       console.log('[Force Refresh] Response:', res);
 
       if (res.success && res.in_progress && res.job_id) {
@@ -791,7 +789,17 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
       this.sortOrder.set(this.sortOrder() === 'asc' ? 'desc' : 'asc');
     } else {
       this.sortBy.set(field);
-      this.sortOrder.set('asc');
+
+      const defaultDesc = ['domain_rating', 'organic_traffic', 'keywords_count', 'backlinks', 'score'];
+      const defaultAsc = ['backlinks_spam_score'];
+
+      if (defaultDesc.includes(field)) {
+        this.sortOrder.set('desc');
+      } else if (defaultAsc.includes(field)) {
+        this.sortOrder.set('asc');
+      } else {
+        this.sortOrder.set('asc');
+      }
     }
     this.offset.set(0); // Reset pagination
   }
