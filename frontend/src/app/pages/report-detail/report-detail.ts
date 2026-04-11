@@ -47,6 +47,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     private readonly detailPageSize = 25;
     private route = inject(ActivatedRoute);
     private api = inject(ApiService);
+    private summaryMetricsRequested = false;
 
     // Icons
     readonly ArrowLeft = ArrowLeft;
@@ -104,6 +105,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
                 this.referringDomainsTotal.set(0);
                 this.keywordsTotal.set(0);
                 this.loadedDetailTabs.clear();
+                this.summaryMetricsRequested = false;
                 this.startPolling(d);
             }
         });
@@ -123,6 +125,7 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
             if (res.report) {
                 this.report.set(res.report);
                 this.error.set(res.success ? null : (res.message || null));
+                await this.ensureSummaryMetrics(res.report);
 
                 // Start polling if it's in progress
                 if (res.report.status === 'pending' || res.report.status === 'in_progress') {
@@ -256,8 +259,12 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
                         this.report.set(res.report);
                         this.error.set(res.success ? null : (res.message || null));
                         this.loading.set(false);
-                        if (res.report.status === 'completed' && this.hasDetailedData(res.report)) {
-                            this.ensureActiveTabData();
+                        if (res.report.status === 'completed') {
+                            void this.ensureSummaryMetrics(res.report).finally(() => {
+                                if (this.hasDetailedData(res.report!)) {
+                                    this.ensureActiveTabData();
+                                }
+                            });
                         }
                     } else {
                         this.loading.set(true);
@@ -280,6 +287,53 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
     setTab(tab: string) {
         this.activeTab.set(tab);
         this.ensureActiveTabData();
+    }
+
+    private async ensureSummaryMetrics(report: DomainAnalysisReport) {
+        if (this.summaryMetricsRequested || report.status !== 'completed') return;
+
+        const hasMissingToplineMetrics =
+            (report.data_for_seo_metrics?.total_backlinks || 0) === 0 ||
+            (report.data_for_seo_metrics?.total_referring_domains || 0) === 0;
+
+        if (!hasMissingToplineMetrics) return;
+
+        const d = this.domain();
+        if (!d) return;
+
+        this.summaryMetricsRequested = true;
+
+        try {
+            const res = await firstValueFrom(this.api.getReportDetails(d, {
+                sections: ['backlinks', 'referring_domains', 'keywords'],
+                backlinksLimit: 1,
+                keywordsLimit: 1,
+            }));
+
+            const currentReport = this.report();
+            if (!currentReport?.data_for_seo_metrics) return;
+
+            currentReport.data_for_seo_metrics.total_backlinks = Math.max(
+                currentReport.data_for_seo_metrics.total_backlinks || 0,
+                res.backlinks?.total_count || 0,
+            );
+            currentReport.data_for_seo_metrics.total_referring_domains = Math.max(
+                currentReport.data_for_seo_metrics.total_referring_domains || 0,
+                res.referring_domains?.total_count || 0,
+            );
+            currentReport.data_for_seo_metrics.total_keywords = Math.max(
+                currentReport.data_for_seo_metrics.total_keywords || 0,
+                res.keywords?.total_count || 0,
+            );
+
+            this.backlinksTotal.set(res.backlinks?.total_count || this.backlinksTotal());
+            this.referringDomainsTotal.set(res.referring_domains?.total_count || this.referringDomainsTotal());
+            this.keywordsTotal.set(res.keywords?.total_count || this.keywordsTotal());
+            this.report.set({ ...currentReport });
+        } catch (err) {
+            console.error('Error hydrating summary metrics:', err);
+            this.summaryMetricsRequested = false;
+        }
     }
 
     ensureActiveTabData() {
