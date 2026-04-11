@@ -10,7 +10,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 sys.path.insert(0, str(BACKEND_ROOT / "src"))
 
 from src.api.routes import reports as reports_routes
-from src.api.routes.reports import get_report_details, _hydrate_report_response
+from src.api.routes.reports import get_report_details, _hydrate_report_response, _build_report_export_payload
 from src.models.domain_analysis import DetailedAnalysisData, DetailedDataType, DataForSEOMetrics, LLMAnalysis
 
 
@@ -268,6 +268,44 @@ async def test_hydrate_report_response_derives_referring_domains_and_refreshes_s
     )
     assert hydrated.llm_analysis.confidence_score == 0.7
     db.save_report.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_build_report_export_payload_supports_mixed_model_and_dict_shapes():
+    db = AsyncMock()
+    db.get_detailed_items.side_effect = [
+        {"items": [], "total_count": 0},
+        {"items": [], "total_count": 0},
+    ]
+    db.get_derived_referring_domains.return_value = {"items": [], "total_count": 0}
+    db.get_raw_data.return_value = {}
+    db.save_report = AsyncMock()
+
+    report = SimpleNamespace(
+        domain_name="example.com",
+        status="completed",
+        analysis_timestamp="2026-04-11T21:00:00+00:00",
+        processing_time_seconds=12.5,
+        data_for_seo_metrics={"total_backlinks": 10, "total_referring_domains": 3},
+        llm_analysis={"summary": "Mixed-shape payload", "confidence_score": 0.85},
+        wayback_machine_summary={"first_capture_year": 2008},
+        historical_data={"rank_overview": {"organic_traffic": []}},
+        detailed_data_available={},
+        display_payload={
+            "backlinks": {"total_count": 10, "items": [{"domain": "source.example", "url_from": "https://source.example", "url_to": "https://example.com"}]},
+            "referring_domains": {"total_count": 3, "items": [{"domain": "source.example", "backlinks_count": 10}]},
+            "keywords": {"total_count": 2, "items": [{"keyword": "example keyword", "position": 1}]},
+        },
+    )
+
+    payload = await _build_report_export_payload(db, report)
+
+    assert payload["analysis_timestamp"] == "2026-04-11T21:00:00+00:00"
+    assert payload["data_for_seo_metrics"]["total_backlinks"] == 10
+    assert payload["llm_analysis"]["confidence_score"] == 0.85
+    assert payload["backlinks"]["total_count"] == 10
+    assert payload["referring_domains"]["total_count"] == 3
+    assert payload["keywords"]["total_count"] == 2
 
 
 @pytest.fixture(autouse=True)

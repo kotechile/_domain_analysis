@@ -252,8 +252,13 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
             const link = document.createElement('a');
             link.href = url;
             link.download = `${d}-executive-report.pdf`;
+            link.style.display = 'none';
+            document.body.appendChild(link);
             link.click();
-            window.URL.revokeObjectURL(url);
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                link.remove();
+            }, 0);
         } catch (err) {
             console.error('Error downloading report:', err);
             this.error.set('Failed to download report. Please try again.');

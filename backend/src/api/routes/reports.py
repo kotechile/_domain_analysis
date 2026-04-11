@@ -9,7 +9,7 @@ from datetime import datetime
 import structlog
 import io
 
-from models.domain_analysis import ReportResponse, DomainAnalysisReport, HistoricalData, DataForSEOMetrics, DetailedDataType, LLMAnalysis
+from models.domain_analysis import ReportResponse, DomainAnalysisReport, HistoricalData, DataForSEOMetrics, DetailedDataType, LLMAnalysis, WaybackMachineSummary
 from services.database import get_database, DataSource
 from services.external_apis import DataForSEOService
 from services.pdf_service import PDFService
@@ -52,6 +52,22 @@ async def _get_owned_report_or_404(domain: str, current_user: Any):
 async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAnalysisReport:
     """Backfill report counts from relational data for older/stale report rows."""
     report_changed = False
+
+    if isinstance(report.data_for_seo_metrics, dict):
+        report.data_for_seo_metrics = DataForSEOMetrics(**report.data_for_seo_metrics)
+        report_changed = True
+
+    if isinstance(report.llm_analysis, dict):
+        report.llm_analysis = LLMAnalysis(**report.llm_analysis)
+        report_changed = True
+
+    if isinstance(report.wayback_machine_summary, dict):
+        report.wayback_machine_summary = WaybackMachineSummary(**report.wayback_machine_summary)
+        report_changed = True
+
+    if isinstance(report.historical_data, dict):
+        report.historical_data = HistoricalData(**report.historical_data)
+        report_changed = True
 
     if not report.data_for_seo_metrics:
         report.data_for_seo_metrics = DataForSEOMetrics()
@@ -308,6 +324,19 @@ async def _hydrate_report_response(db, report: DomainAnalysisReport) -> DomainAn
 
 async def _build_report_export_payload(db, report: DomainAnalysisReport) -> dict:
     """Build a hydrated, export-friendly payload with the top rows from each detail section."""
+    def _to_export_dict(value):
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            return value
+        model_dump = getattr(value, "model_dump", None)
+        if callable(model_dump):
+            return model_dump(mode="json")
+        legacy_dict = getattr(value, "dict", None)
+        if callable(legacy_dict):
+            return legacy_dict()
+        return dict(value)
+
     report = await _hydrate_report_response(db, report)
     keywords_result = {"total_count": 0, "items": []}
     backlinks_result = {"total_count": 0, "items": []}
@@ -381,12 +410,12 @@ async def _build_report_export_payload(db, report: DomainAnalysisReport) -> dict
     return {
         "domain": report.domain_name,
         "generated_at": datetime.utcnow().isoformat(),
-        "analysis_timestamp": report.analysis_timestamp.isoformat() if getattr(report, "analysis_timestamp", None) else None,
+        "analysis_timestamp": report.analysis_timestamp.isoformat() if hasattr(getattr(report, "analysis_timestamp", None), "isoformat") else getattr(report, "analysis_timestamp", None),
         "processing_time_seconds": report.processing_time_seconds,
-        "data_for_seo_metrics": report.data_for_seo_metrics.dict() if report.data_for_seo_metrics else {},
-        "llm_analysis": report.llm_analysis.dict() if report.llm_analysis else {},
-        "wayback_machine_summary": report.wayback_machine_summary.dict() if report.wayback_machine_summary else {},
-        "historical_data": report.historical_data.dict() if report.historical_data else {},
+        "data_for_seo_metrics": _to_export_dict(report.data_for_seo_metrics),
+        "llm_analysis": _to_export_dict(report.llm_analysis),
+        "wayback_machine_summary": _to_export_dict(report.wayback_machine_summary),
+        "historical_data": _to_export_dict(report.historical_data),
         "backlinks": {
             "total_count": backlinks_result["total_count"],
             "items": shape_backlink_items(backlinks_result["items"]),
