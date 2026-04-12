@@ -518,16 +518,6 @@
                                 [class.sort-active]="sortBy() === 'expiration_date'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0" title="Marketplace Platform"
-                        class="cursor-pointer group hover:opacity-100 text-right pr-8 outline-none focus-visible:ring-2 focus-visible:ring-inset"
-                        (click)="toggleSort('auction_site')" (keydown.enter)="toggleSort('auction_site')">
-                        <div class="flex items-center justify-end space-x-2">
-                            <span>Platform</span>
-                            <i-lucide [name]="getSortIcon('auction_site')"
-                                class="w-3.5 h-3.5 opacity-0 group-hover:opacity-50 group-focus-visible:opacity-50"
-                                [class.sort-active]="sortBy() === 'auction_site'"></i-lucide>
-                        </div>
-                    </th>
                     <th class="text-right pr-8 font-semibold">Deep Analysis</th>
                 </tr>
             </thead>
@@ -535,7 +525,7 @@
                 @if (loading()) {
                 @for (item of [1,2,3,4,5,6,7,8]; track item) {
                 <tr class="animate-pulse">
-                    <td colspan="13" class="p-8">
+                    <td colspan="12" class="p-8">
                         <div class="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/4 mb-2"></div>
                         <div class="h-4 bg-gray-200 dark:bg-gray-800 rounded w-full opacity-20"></div>
                     </td>
@@ -553,10 +543,9 @@
                                     [class.fill-current]="item.preferred"></i-lucide>
                             </button>
                             <div class="flex flex-col">
-                                <a [href]="'https://web.archive.org/web/*/' + item.domain" target="_blank" rel="noopener noreferrer"
-                                    class="font-semibold text-lg hover:underline group-hover:text-accent-color transition-colors"
-                                    style="color: var(--text-color)">{{ item.domain }}</a>
-                                <div class="flex items-center space-x-2 mt-1">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="font-semibold text-lg group-hover:text-accent-color transition-colors"
+                                        style="color: var(--text-color)">{{ item.domain }}</span>
                                     @if (item.has_analysis) {
                                     <span
                                         class="text-[10px] font-semibold text-accent-color flex items-center space-x-0.5 animate-pulse">
@@ -564,6 +553,22 @@
                                         <span>AI READY</span>
                                     </span>
                                     }
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2 mt-1">
+                                    @if (item.link) {
+                                    <a [href]="item.link" target="_blank" rel="noopener noreferrer"
+                                        [class]="'platform-pill inline-flex items-center ' + getPlatformClass(item.auction_site)">
+                                        {{ item.auction_site }}
+                                    </a>
+                                    } @else {
+                                    <span [class]="'platform-pill inline-flex items-center ' + getPlatformClass(item.auction_site)">
+                                        {{ item.auction_site }}
+                                    </span>
+                                    }
+                                    <a [href]="getWaybackUrl(item.domain)" target="_blank" rel="noopener noreferrer"
+                                        class="platform-pill platform-default inline-flex items-center">
+                                        WBM
+                                    </a>
                                 </div>
                             </div>
                         </div>
@@ -653,9 +658,9 @@
                     <!-- First Seen -->
                     <td class="text-center">
                         <div class="flex flex-col items-center">
-                            @if (item.first_seen) {
+                            @if (getDisplayFirstSeen(item); as firstSeen) {
                                 <span class="text-xs font-bold" style="color: var(--text-color)">
-                                    {{ item.first_seen | date:'y' }}
+                                    {{ firstSeen | date:'y' }}
                                 </span>
                             } @else {
                                 <span class="text-xs font-bold opacity-20" style="color: var(--text-color)">-</span>
@@ -688,19 +693,14 @@
                         </div>
                     </td>
                     <td class="text-right pr-4">
-                        <a [href]="item.link" target="_blank"
-                            [class]="'platform-pill inline-block ' + getPlatformClass(item.auction_site)">
-                            {{ item.auction_site }}
-                        </a>
-                    </td>
-                    <td class="text-right pr-4">
                         <a
-                            class="inline-flex items-center justify-center h-11 px-4 rounded-2xl border border-opacity-10 transition-all active:scale-95 shadow-sm text-[10px] font-semibold uppercase tracking-widest"
+                            class="inline-flex items-center justify-center gap-1.5 h-11 px-4 rounded-2xl border border-opacity-10 transition-all active:scale-95 shadow-sm text-[10px] font-semibold uppercase tracking-widest"
                             [style.borderColor]="'var(--border-color)'"
                             [style.background]="'var(--card-bg)'"
                             [style.color]="'var(--text-color)'"
                             [routerLink]="['/deepanalysis']"
                             [queryParams]="{ domain: item.domain }">
+                            <i-lucide [name]="Gauge" class="w-3.5 h-3.5"></i-lucide>
                             Deep Analysis
                         </a>
                     </td>
@@ -708,7 +708,7 @@
                 }
                 @} @else if (!loading()) {
                 <tr>
-                    <td colspan="13" class="p-20 text-center opacity-30 font-semibold tracking-widest uppercase">
+                    <td colspan="12" class="p-20 text-center opacity-30 font-semibold tracking-widest uppercase">
                         No domains found matching your criteria.
                     </td>
                 </tr>

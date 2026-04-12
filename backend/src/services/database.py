@@ -2236,7 +2236,8 @@ class DatabaseService:
             # Return auctions directly
             report_items = []
             for auction in auctions:
-                report_item = { **auction, 'statistics': auction.get('page_statistics') } # Get statistics from auctions table if available
+                normalized_auction = self._normalize_auction_first_seen(auction)
+                report_item = { **normalized_auction, 'statistics': normalized_auction.get('page_statistics') } # Get statistics from auctions table if available
                 report_items.append(report_item)
             
             # For better accuracy, check if there are more records
@@ -2249,7 +2250,53 @@ class DatabaseService:
         except Exception as e:
             logger.error("Failed to get auctions with statistics", error=str(e))
             raise
-    
+
+    def _normalize_auction_first_seen(self, auction: Dict[str, Any]) -> Dict[str, Any]:
+        first_seen = self._parse_datetime_value(auction.get('first_seen'))
+        if not first_seen:
+            auction['first_seen'] = None
+            return auction
+
+        if self._extract_source_first_seen(auction.get('source_data')):
+            return auction
+
+        import_timestamp = (
+            self._parse_datetime_value(auction.get('last_import_timestamp'))
+            or self._parse_datetime_value(auction.get('created_at'))
+        )
+
+        if import_timestamp and abs((first_seen - import_timestamp).total_seconds()) < 300:
+            auction['first_seen'] = None
+
+        return auction
+
+    def _extract_source_first_seen(self, source_data: Optional[Dict[str, Any]]) -> Optional[str]:
+        if not source_data:
+            return None
+
+        for key in ('registeredDate', 'Domain Created On', 'creationDate', 'createdDate', 'created_at', 'domainCreatedOn'):
+            value = source_data.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+
+        return None
+
+    def _parse_datetime_value(self, value: Any) -> Optional[datetime]:
+        if not value:
+            return None
+
+        if isinstance(value, datetime):
+            return value
+
+        if isinstance(value, str):
+            normalized = value.replace('Z', '+00:00')
+            try:
+                return datetime.fromisoformat(normalized)
+            except ValueError:
+                return None
+
+        return None
+
     async def get_auctions_missing_any_metric_with_filters( self, filters: Optional[Dict[str, Any]] = None, sort_by: str = 'expiration_date', sort_order: str = 'asc', limit: int = 1000, force_refresh: bool = False ) -> List[Dict[str, Any]]:
         """
         "Find and Fill" — Get up to `limit` domains that:

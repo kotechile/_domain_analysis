@@ -3,7 +3,7 @@ import { CommonModule, TitleCasePipe, DatePipe, DecimalPipe } from '@angular/com
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api';
-import { LucideAngularModule, Filter, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Sparkles, TrendingUp, History, ShieldCheck, Star, Target, Menu, X } from 'lucide-angular';
+import { LucideAngularModule, Filter, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Sparkles, TrendingUp, History, ShieldCheck, Star, Target, Menu, X, Gauge } from 'lucide-angular';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { CreditService } from '../../services/credit';
 import { firstValueFrom, interval, Subscription } from 'rxjs';
@@ -99,6 +99,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   readonly Target = Target;
   readonly Menu = Menu;
   readonly X = X;
+  readonly Gauge = Gauge;
 
   // State Signals
   auctions = signal<Auction[]>([]);
@@ -920,6 +921,64 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (s.includes('sedo')) return 'platform-sedo';
     if (s.includes('namesilo')) return 'platform-namesilo';
     return 'platform-default';
+  }
+
+  getWaybackUrl(domain: string): string {
+    return `https://web.archive.org/web/*/${domain}`;
+  }
+
+  getDisplayFirstSeen(item: Auction): string | null {
+    const firstSeen = this.parseDateValue(item.first_seen);
+    if (!firstSeen) {
+      return null;
+    }
+
+    const sourceFirstSeen = this.getSourceFirstSeen(item.source_data);
+    if (sourceFirstSeen) {
+      return item.first_seen ?? null;
+    }
+
+    const itemWithImportTimestamp = item as Auction & { last_import_timestamp?: string | null };
+    const importTimestamp = this.parseDateValue(itemWithImportTimestamp.last_import_timestamp ?? item.created_at);
+
+    if (importTimestamp && Math.abs(firstSeen.getTime() - importTimestamp.getTime()) < 5 * 60 * 1000) {
+      return null;
+    }
+
+    return item.first_seen ?? null;
+  }
+
+  private getSourceFirstSeen(sourceData?: Record<string, unknown>): string | null {
+    if (!sourceData) {
+      return null;
+    }
+
+    const keys = [
+      'registeredDate',
+      'Domain Created On',
+      'creationDate',
+      'createdDate',
+      'created_at',
+      'domainCreatedOn',
+    ];
+
+    for (const key of keys) {
+      const value = sourceData[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  private parseDateValue(value?: string | null): Date | null {
+    if (!value) {
+      return null;
+    }
+
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
   /** Returns a Tailwind color class for the Domain Rating traffic-light indicator */
