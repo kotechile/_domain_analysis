@@ -280,8 +280,7 @@ async def _score_new_domains_after_import(db, import_batch_id: str, scoring_serv
                 await db.update_csv_upload_progress(
                     job_id=import_batch_id,
                     status='processing',
-                    current_stage='scoring',
-                    processed_records=total_scored
+                    current_stage='scoring'
                 )
             except Exception as e:
                 logger.warning("Failed to update progress in DB", error=str(e))
@@ -394,8 +393,7 @@ async def _score_new_domains_after_merge(db, auction_site: str, scoring_service,
             await db.update_csv_upload_progress(
                 job_id=job_id,
                 status='processing',
-                current_stage='scoring_new',
-                processed_records=total_scored
+                current_stage='scoring_new'
             )
         except Exception as e:
             logger.warning("Failed to update progress in DB", error=str(e))
