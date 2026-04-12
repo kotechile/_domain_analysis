@@ -242,7 +242,7 @@
             <div class="space-y-4">
                 <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">Core Platforms</span>
                 <div class="flex flex-wrap gap-2">
-                    @for (p of ['GoDaddy', 'Dynadot', 'Namecheap', 'Sedo', 'NameSilo']; track p) {
+                    @for (p of ['GoDaddy', 'Namecheap', 'NameSilo']; track p) {
                     <button (click)="togglePlatform(p)"
                         class="px-4 py-2 rounded-xl text-[10px] font-semibold uppercase transition-all border border-opacity-10"
                         [style.background]="selectedPlatforms().includes(p) ? 'var(--accent-color)' : 'rgba(var(--text-color-rgb), 0.03)'"
