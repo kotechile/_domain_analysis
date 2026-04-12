@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ThemeService, ThemeMode } from '../../services/theme';
 import { SupabaseService } from '../../services/supabase';
 import { CreditService } from '../../services/credit';
-import { LucideAngularModule, Moon, Sun, Monitor, Palette, Search, Bell, User, LogOut } from 'lucide-angular';
+import { LucideAngularModule, Moon, Sun, Monitor, Palette, Bell, User, LogOut } from 'lucide-angular';
 import { RouterLink, Router } from '@angular/router';
 
 @Component({
@@ -31,7 +31,6 @@ export class HeaderComponent {
   readonly Sun = Sun;
   readonly Moon = Moon;
   readonly Palette = Palette;
-  readonly Search = Search;
   readonly Bell = Bell;
   readonly User = User;
   readonly LogOut = LogOut;
