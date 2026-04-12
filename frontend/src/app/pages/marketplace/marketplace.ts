@@ -790,7 +790,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     } else {
       this.sortBy.set(field);
 
-      const defaultDesc = ['domain_rating', 'organic_traffic', 'keywords_count', 'backlinks', 'score'];
+      const defaultDesc = ['domain_rating', 'organic_traffic', 'keywords_count', 'backlinks', 'score', 'referring_domains'];
       const defaultAsc = ['backlinks_spam_score'];
 
       if (defaultDesc.includes(field)) {

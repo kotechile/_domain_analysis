@@ -2038,21 +2038,164 @@ class DatabaseService:
                 query = query.gt('score', 0)
 
 
-            if order == 'desc':
-                # For descending sorts on numeric metrics, we want NULLs at the end.
-                # PostgREST allows specifying nulls_last via the order parameter if passed as a string.
-                # However, in the Python client, passing a string like 'col.desc.nullslast'
-                # might be misinterpreted or not supported by the specific client version's .order() method.
-                # To be safe and avoid 500 errors, we use the boolean flag for desc.
-                # If NULLS LAST is required and .order() doesn't support it, we would need a RPC call.
-                query = query.order(sort_by, desc=True).order('domain', desc=True)
+            # For descending sorts on numeric metrics, we want NULLs at the end.
+            # PostgREST's Python client doesn't support NULLS LAST, so we use raw SQL via RPC
+            numeric_fields_desc_nulls_last = ['score', 'domain_rating', 'organic_traffic', 'backlinks', 'keywords_count', 'referring_domains']
+            use_raw_sql = order == 'desc' and sort_by in numeric_fields_desc_nulls_last
+            total_count = 0  # Initialize for all paths
+
+            if use_raw_sql:
+                # Build WHERE clause from filters
+                where_conditions = ["to_delete = FALSE"]
+
+                if filters:
+                    if filters.get('preferred') is not None:
+                        where_conditions.append(f"preferred = {str(filters['preferred']).lower()}")
+                    if filters.get('auction_site'):
+                        site = str(filters['auction_site']).lower().replace(' ', '')
+                        where_conditions.append(f"auction_site = '{site}'")
+                    if filters.get('offering_type'):
+                        where_conditions.append(f"offer_type = '{filters['offering_type'].lower().strip()}'")
+                    if filters.get('search'):
+                        where_conditions.append(f"domain ILIKE '%{filters['search']}%'")
+                    if filters.get('tld'):
+                        tld = filters['tld']
+                        if not tld.startswith('.'):
+                            tld = '.' + tld
+                        where_conditions.append(f"domain ILIKE '%{tld}'")
+                    if filters.get('tlds'):
+                        tlds = filters['tlds']
+                        if isinstance(tlds, list) and len(tlds) > 0:
+                            normalized_tlds = [t if t.startswith('.') else f'.{t}' for t in tlds if t]
+                            if normalized_tlds:
+                                tld_conditions = " OR ".join([f"domain ILIKE '%{tld}'" for tld in normalized_tlds])
+                                where_conditions.append(f"({tld_conditions})")
+                    if filters.get('expiration_from_date'):
+                        where_conditions.append(f"expiration_date >= '{filters['expiration_from_date']}'")
+                    if filters.get('expiration_to_date'):
+                        exp_to = filters['expiration_to_date']
+                        if isinstance(exp_to, str) and len(exp_to) == 10:
+                            exp_to = f"{exp_to}T23:59:59"
+                        where_conditions.append(f"expiration_date <= '{exp_to}'")
+                    if filters.get('min_score') is not None:
+                        where_conditions.append(f"score >= {filters['min_score']}")
+                    if filters.get('max_score') is not None:
+                        where_conditions.append(f"score <= {filters['max_score']}")
+                    if filters.get('auction_sites') and isinstance(filters['auction_sites'], list):
+                        sites = ", ".join([f"'{s}'" for s in filters['auction_sites']])
+                        where_conditions.append(f"auction_site IN ({sites})")
+                    if filters.get('scored') is not None:
+                        if filters['scored']:
+                            where_conditions.append("score > 0")
+                        else:
+                            where_conditions.append("(score IS NULL OR score = 0)")
+                    if filters.get('has_statistics') is not None:
+                        where_conditions.append(f"has_statistics = {str(filters['has_statistics']).lower()}")
+
+                # Default: only show auctions that haven't expired yet
+                if not filters or not (filters.get('expiration_from_date') or filters.get('search')):
+                    now = datetime.now(timezone.utc).isoformat()
+                    where_conditions.append(f"expiration_date >= '{now}'")
+
+                where_clause = " AND ".join(where_conditions)
+
+                # For score field, also filter out 0 values
+                score_filter = ""
+                if sort_by == 'score':
+                    score_filter = " AND score > 0"
+
+                # Build SQL with NULLS LAST for descending sort
+                sql = f"""
+                SELECT * FROM auctions
+                WHERE {where_clause}{score_filter}
+                ORDER BY {sort_by} DESC NULLS LAST, domain DESC
+                LIMIT {limit} OFFSET {offset}
+                """
+
+                # Also build count query for accurate total
+                count_sql = f"""
+                SELECT COUNT(*) as count FROM auctions
+                WHERE {where_clause}{score_filter}
+                """
+
+                logger.info("Executing auctions report with NULLS LAST SQL", sort_by=sort_by, limit=limit, offset=offset)
+
+                try:
+                    # Execute both queries in parallel
+                    sql_result, count_result = await asyncio.gather(
+                        client.rpc('exec_sql', {'sql': sql}).execute(),
+                        client.rpc('exec_sql', {'sql': count_sql}).execute()
+                    )
+                    auctions = sql_result.data if sql_result.data else []
+                    total_count = int(count_result.data[0]['count']) if count_result.data else 0
+                except Exception as rpc_err:
+                    logger.warning("RPC exec_sql not available, falling back to PostgREST", error=str(rpc_err))
+                    use_raw_sql = False
+                    # Fall back to PostgREST query below
+                    query = client.table('auctions').select('*').eq('to_delete', False)
+                    # Re-apply filters...
+                    if filters:
+                        if filters.get('search'):
+                            query = query.ilike('domain', f"%{filters['search']}%")
+                        if filters.get('preferred') is not None:
+                            query = query.eq('preferred', filters['preferred'])
+                        if filters.get('auction_site'):
+                            query = query.eq('auction_site', filters['auction_site'])
+                        if filters.get('auction_sites'):
+                            sites = filters['auction_sites']
+                            if isinstance(sites, list) and len(sites) > 0:
+                                query = query.in_('auction_site', sites)
+                        if filters.get('tld'):
+                            tld = filters['tld']
+                            if not tld.startswith('.'):
+                                tld = '.' + tld
+                            query = query.ilike('domain', f'%{tld}')
+                        if filters.get('tlds'):
+                            tlds = filters['tlds']
+                            if isinstance(tlds, list) and len(tlds) > 0:
+                                normalized_tlds = [tld if tld.startswith('.') else f'.{tld}' for tld in tlds if tld]
+                                if normalized_tlds:
+                                    tld_filters = ",".join([f"domain.ilike.%{tld}" for tld in normalized_tlds])
+                                    query = query.or_(tld_filters)
+                        if filters.get('offering_type'):
+                            query = query.eq('offer_type', filters['offering_type'])
+                        if filters.get('expiration_from_date'):
+                            query = query.gte('expiration_date', filters['expiration_from_date'])
+                        if filters.get('expiration_to_date'):
+                            exp_to = filters['expiration_to_date']
+                            if isinstance(exp_to, str) and len(exp_to) == 10:
+                                exp_to = f"{exp_to}T23:59:59Z"
+                            query = query.lte('expiration_date', exp_to)
+                        if filters.get('has_statistics') is not None:
+                            query = query.eq('has_statistics', filters['has_statistics'])
+                        if filters.get('scored') is not None:
+                            if filters['scored']:
+                                query = query.gt('score', 0)
+                            else:
+                                query = query.eq('score', 0)
+                        if filters.get('min_score') is not None:
+                            query = query.gte('score', filters['min_score'])
+                        if filters.get('max_score') is not None:
+                            query = query.lte('score', filters['max_score'])
+                    if not filters or not (filters.get('expiration_from_date') or filters.get('search')):
+                        now = datetime.now(timezone.utc).isoformat()
+                        query = query.gte('expiration_date', now)
+                    if sort_by == 'score':
+                        query = query.gt('score', 0)
+                    query = query.order(sort_by, desc=True).order('domain', desc=True)
+                    result = await query.range(offset, offset + limit - 1).execute()
+                    auctions = result.data if result.data else []
+                    # total_count will be estimated later from the result length
             else:
-                query = query.order(sort_by, desc=False).order('domain', desc=False)
-            
-            # Get total count - execute query with count header
-            client = await self._get_client()
-            result = await query.range(offset, offset + limit - 1).execute()
-            auctions = result.data if result.data else []
+                # Ascending or non-numeric fields - use PostgREST
+                if order == 'desc':
+                    query = query.order(sort_by, desc=True).order('domain', desc=True)
+                else:
+                    query = query.order(sort_by, desc=False).order('domain', desc=False)
+
+                # Get total count - execute query with count header
+                result = await query.range(offset, offset + limit - 1).execute()
+                auctions = result.data if result.data else []
             
             # Fetch domains from result
             domains = [a.get('domain') for a in auctions if a.get('domain')]
@@ -2080,15 +2223,15 @@ class DatabaseService:
             # Add has_analysis flag to results
             for a in auctions:
                 a['has_analysis'] = a.get('domain') in has_analysis_domains
-            
-            # Estimate total count - if we got a full page, there might be more
-            # This is an approximation, but for large datasets it's acceptable
-            if len(auctions) == limit:
-                # We got a full page, so there are likely more records
-                total_count = offset + limit + (1000 if len(auctions) == limit else 0)  # Conservative estimate
-            else:
-                # We got less than a full page, so this is likely the total
-                total_count = offset + len(auctions)
+
+            # Estimate total count only if not already set by raw SQL path
+            if total_count == 0:
+                if len(auctions) == limit:
+                    # We got a full page, so there are likely more records
+                    total_count = offset + limit + (1000 if len(auctions) == limit else 0)  # Conservative estimate
+                else:
+                    # We got less than a full page, so this is likely the total
+                    total_count = offset + len(auctions)
             
             # Return auctions directly
             report_items = []
