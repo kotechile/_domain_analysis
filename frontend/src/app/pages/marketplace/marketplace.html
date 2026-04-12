@@ -498,11 +498,11 @@
                                 [class.sort-active]="sortBy() === 'backlinks_spam_score'"></i-lucide>
                         </div>
                     </th>
-                    <th tabindex="0" title="Year First Seen (Age)"
+                    <th tabindex="0" title="Year First Seen"
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('first_seen')" (keydown.enter)="toggleSort('first_seen')">
                         <div class="flex items-center justify-center space-x-2">
-                            <span>Age</span>
+                            <span>First Seen</span>
                             <i-lucide [name]="getSortIcon('first_seen')"
                                 class="w-3.5 h-3.5 opacity-0 group-hover:opacity-50 group-focus-visible:opacity-50"
                                 [class.sort-active]="sortBy() === 'first_seen'"></i-lucide>
@@ -660,7 +660,7 @@
                             } @else {
                                 <span class="text-xs font-bold opacity-20" style="color: var(--text-color)">-</span>
                             }
-                            <span class="text-[9px] font-bold opacity-30 uppercase tracking-tighter">Age</span>
+                            <span class="text-[9px] font-bold opacity-30 uppercase tracking-tighter">First Seen</span>
                         </div>
                     </td>
                     <td class="text-center">

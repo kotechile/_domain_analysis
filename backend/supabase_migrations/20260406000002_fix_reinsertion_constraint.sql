@@ -87,7 +87,7 @@ BEGIN
             link,
             p_offering_type,
             source_data,
-            COALESCE(first_seen, NOW()),
+            first_seen,
             p_import_batch_id,
             NOW()
         FROM staging_deduped
