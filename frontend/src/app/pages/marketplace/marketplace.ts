@@ -150,9 +150,6 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   limit = signal<number>(50);
   offset = signal<number>(0);
 
-  // Refresh options
-  onlyDisplayedDomains = signal<boolean>(false);  // When true, only refresh currently visible domains
-
   activeFilterCount = computed(() => {
     let count = 0;
     if (this.preferredOnly()) count++;
@@ -817,10 +814,6 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   toggleStatistics() {
     this.statisticsOnly.set(!this.statisticsOnly());
     this.offset.set(0);
-  }
-
-  toggleOnlyDisplayed() {
-    this.onlyDisplayedDomains.set(!this.onlyDisplayedDomains());
   }
 
   // Helper to check if domain is expiring today or soon (within 7 days)
