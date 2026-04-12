@@ -147,6 +147,9 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   expirationFromDate = signal<string>('');
   expirationToDate = signal<string>('');
 
+  // Search
+  searchText = signal<string>('');
+
   limit = signal<number>(50);
   offset = signal<number>(0);
 
@@ -161,6 +164,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (this.selectedTlds().length > 0) count++;
     if (this.offeringType()) count++;
     if (this.expirationFromDate() || this.expirationToDate()) count++;
+    if (this.searchText()) count++;
     return count;
   });
 
@@ -206,6 +210,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
       this.offeringType();
       this.expirationFromDate();
       this.expirationToDate();
+      this.searchText();
       this.limit();
       this.offset();
 
@@ -529,6 +534,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (qp['platforms']) this.selectedPlatforms.set(qp['platforms'].split(','));
     if (qp['tlds']) this.selectedTlds.set(qp['tlds'].split(',').filter(Boolean));
     if (qp['offering_type']) this.offeringType.set(qp['offering_type']);
+    if (qp['search']) this.searchText.set(qp['search']);
     this.setExpirationRange(qp['exp_from'] || '', qp['exp_to'] || '');
 
     this.filtersHydrated = true;
@@ -724,6 +730,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     const expTo = normalizedExpirationRange.to;
     const currentOffset = this.offset();
     const currentLimit = this.limit();
+    const search = this.searchText();
 
     try {
       const filters = {
@@ -740,7 +747,8 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
         max_score: maxS ?? undefined,
         auction_sites: platforms.length > 0 ? platforms : undefined,
         tlds: tlds.length > 0 ? tlds : undefined,
-        offering_type: offType || undefined
+        offering_type: offType || undefined,
+        search: search || undefined
       };
 
       // Update URL silently so users can bookmark or refresh with current filters
@@ -756,7 +764,8 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
         tlds: tlds.length > 0 ? tlds.join(',') : undefined,
         offering_type: offType || undefined,
         exp_from: expFrom || undefined,
-        exp_to: expTo || undefined
+        exp_to: expTo || undefined,
+        search: search || undefined
       };
 
       untracked(() => {
@@ -813,6 +822,16 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
   toggleStatistics() {
     this.statisticsOnly.set(!this.statisticsOnly());
+    this.offset.set(0);
+  }
+
+  onSearchTextChange(value: string) {
+    this.searchText.set(value);
+    this.offset.set(0);
+  }
+
+  clearSearch() {
+    this.searchText.set('');
     this.offset.set(0);
   }
 
