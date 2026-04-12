@@ -24,3 +24,7 @@ large_test_auctions.csv
 
 # N8N workflows with secrets
 n8n/*.json
+
+# Nested repositories and temp files
+coolify-mcp/
+supabase/.temp/
