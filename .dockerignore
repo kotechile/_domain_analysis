@@ -63,6 +63,8 @@ tests/
 debug_*.py
 check_*.py
 clear_*.py
+coolify-mcp/
+supabase/.temp/cli-latest/ 
 
 
 
