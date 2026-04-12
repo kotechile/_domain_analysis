@@ -2039,7 +2039,13 @@ class DatabaseService:
 
 
             if order == 'desc':
-                query = query.order(sort_by, desc=True).order('domain', desc=True)
+                # For descending sorts on numeric metrics, we want NULLs at the end.
+                # PostgREST allows specifying nulls_last via the order parameter if passed as a string
+                # In the python client, we can use the format 'column_name.desc.nullslast'
+                if sort_by in ['domain_rating', 'organic_traffic', 'keywords_count', 'backlinks', 'score']:
+                    query = query.order(f'{sort_by}.desc.nullslast').order('domain', desc=True)
+                else:
+                    query = query.order(sort_by, desc=True).order('domain', desc=True)
             else:
                 query = query.order(sort_by, desc=False).order('domain', desc=False)
             
