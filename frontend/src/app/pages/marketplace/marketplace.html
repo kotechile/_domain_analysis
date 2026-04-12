@@ -544,8 +544,19 @@
                             </button>
                             <div class="flex flex-col">
                                 <div class="flex flex-wrap items-center gap-2">
+                                    @if (item.link) {
+                                    <a [href]="item.link" target="_blank" rel="noopener noreferrer"
+                                        [title]="item.auction_site"
+                                        class="font-semibold text-lg group-hover:text-accent-color transition-colors"
+                                        style="color: var(--text-color)">
+                                        {{ item.domain }}
+                                    </a>
+                                    } @else {
                                     <span class="font-semibold text-lg group-hover:text-accent-color transition-colors"
-                                        style="color: var(--text-color)">{{ item.domain }}</span>
+                                        style="color: var(--text-color)">
+                                        {{ item.domain }}
+                                    </span>
+                                    }
                                     @if (item.has_analysis) {
                                     <span
                                         class="text-[10px] font-semibold text-accent-color flex items-center space-x-0.5 animate-pulse">
@@ -555,16 +566,6 @@
                                     }
                                 </div>
                                 <div class="flex flex-wrap items-center gap-2 mt-1">
-                                    @if (item.link) {
-                                    <a [href]="item.link" target="_blank" rel="noopener noreferrer"
-                                        [class]="'platform-pill inline-flex items-center ' + getPlatformClass(item.auction_site)">
-                                        {{ item.auction_site }}
-                                    </a>
-                                    } @else {
-                                    <span [class]="'platform-pill inline-flex items-center ' + getPlatformClass(item.auction_site)">
-                                        {{ item.auction_site }}
-                                    </span>
-                                    }
                                     <a [href]="getWaybackUrl(item.domain)" target="_blank" rel="noopener noreferrer"
                                         class="platform-pill platform-default inline-flex items-center">
                                         WBM
@@ -692,16 +693,13 @@
                                 on</span>
                         </div>
                     </td>
-                    <td class="text-right pr-4">
-                        <a
-                            class="inline-flex items-center justify-center gap-1.5 h-11 px-4 rounded-2xl border border-opacity-10 transition-all active:scale-95 shadow-sm text-[10px] font-semibold uppercase tracking-widest"
-                            [style.borderColor]="'var(--border-color)'"
-                            [style.background]="'var(--card-bg)'"
-                            [style.color]="'var(--text-color)'"
-                            [routerLink]="['/deepanalysis']"
-                            [queryParams]="{ domain: item.domain }">
-                            <i-lucide [name]="Gauge" class="w-3.5 h-3.5"></i-lucide>
-                            Deep Analysis
+                    <td class="text-right pr-6">
+                        <a [routerLink]="['/deepanalysis']"
+                            [queryParams]="{ domain: item.domain }"
+                            class="inline-flex items-center justify-center p-2 rounded-lg transition-all hover:bg-black/5 dark:hover:bg-white/5"
+                            [title]="'Deep Analysis for ' + item.domain"
+                            style="color: var(--text-color)">
+                            <i-lucide [name]="ExternalLink" class="w-4 h-4 opacity-60 hover:opacity-100"></i-lucide>
                         </a>
                     </td>
                 </tr>
