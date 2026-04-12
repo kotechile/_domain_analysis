@@ -2040,12 +2040,12 @@ class DatabaseService:
 
             if order == 'desc':
                 # For descending sorts on numeric metrics, we want NULLs at the end.
-                # PostgREST allows specifying nulls_last via the order parameter if passed as a string
-                # In the python client, we can use the format 'column_name.desc.nullslast'
-                if sort_by in ['domain_rating', 'organic_traffic', 'keywords_count', 'backlinks', 'score']:
-                    query = query.order(f'{sort_by}.desc.nullslast').order('domain', desc=True)
-                else:
-                    query = query.order(sort_by, desc=True).order('domain', desc=True)
+                # PostgREST allows specifying nulls_last via the order parameter if passed as a string.
+                # However, in the Python client, passing a string like 'col.desc.nullslast'
+                # might be misinterpreted or not supported by the specific client version's .order() method.
+                # To be safe and avoid 500 errors, we use the boolean flag for desc.
+                # If NULLS LAST is required and .order() doesn't support it, we would need a RPC call.
+                query = query.order(sort_by, desc=True).order('domain', desc=True)
             else:
                 query = query.order(sort_by, desc=False).order('domain', desc=False)
             
