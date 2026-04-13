@@ -2,6 +2,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { SupabaseService } from '../../services/supabase';
+import { HostService } from '../../services/host';
 
 @Component({
   selector: 'app-auth-callback',
@@ -48,6 +49,7 @@ import { SupabaseService } from '../../services/supabase';
 export class AuthCallbackComponent implements OnInit {
   private supabase = inject(SupabaseService);
   private router = inject(Router);
+  private hostService = inject(HostService);
 
   error = signal('');
 
@@ -63,19 +65,14 @@ export class AuthCallbackComponent implements OnInit {
     }
 
     if (session) {
-      // Successfully authenticated
-      console.log('Auth callback: Session established');
-      this.router.navigate(['/app']);
+      this.router.navigateByUrl(this.hostService.appHomePath());
     } else {
-      // No session, check for hash fragment
       const hash = window.location.hash;
       if (hash) {
-        // Supabase should have processed the hash automatically
-        // Wait a moment and check again
         setTimeout(async () => {
           const { data: { session: retrySession } } = await this.supabase.client.auth.getSession();
           if (retrySession) {
-            this.router.navigate(['/app']);
+            this.router.navigateByUrl(this.hostService.appHomePath());
           } else {
             this.error.set('Authentication incomplete. Please try again.');
           }
@@ -87,6 +84,6 @@ export class AuthCallbackComponent implements OnInit {
   }
 
   goToLogin() {
-    this.router.navigate(['/login']);
+    this.router.navigateByUrl(this.hostService.isBuildomainHost() ? '/' : '/login');
   }
 }

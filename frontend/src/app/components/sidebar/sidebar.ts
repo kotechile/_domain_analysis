@@ -58,9 +58,9 @@ export class SidebarComponent {
   readonly Activity = Activity;
 
   navItems = [
-    { path: '/app', label: 'Deep Analysis', icon: BrainCircuit },
+    { path: '/app', label: 'Marketplace', icon: Table },
+    { path: '/deepanalysis', label: 'Deep Analysis', icon: BrainCircuit },
     { path: '/app/reports', label: 'Recent Reports', icon: History },
-    { path: '/app/marketplace', label: 'Marketplace', icon: Table },
     { path: '/app/billing', label: 'Billing & Credits', icon: CreditCard }
   ];
 }

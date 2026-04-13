@@ -93,7 +93,8 @@
 }
 
 .product-card {
-  position: relative;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   min-height: 31rem;
   padding: 2rem;
@@ -151,10 +152,8 @@
 }
 
 .card-actions {
-  position: absolute;
-  right: 2rem;
-  bottom: 2rem;
-  left: 2rem;
+  margin-top: auto;
+  padding-top: 2rem;
 }
 
 .primary-link,
@@ -212,7 +211,6 @@
 
   .product-card {
     min-height: auto;
-    padding-bottom: 7rem;
   }
 }
 

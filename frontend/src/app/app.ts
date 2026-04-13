@@ -4,6 +4,7 @@ import { HeaderComponent } from './components/header/header';
 import { SidebarComponent } from './components/sidebar/sidebar';
 import { LucideAngularModule } from 'lucide-angular';
 import { SupabaseService } from './services/supabase';
+import { HostService } from './services/host';
 
 @Component({
   selector: 'app-root',
@@ -65,24 +66,44 @@ import { SupabaseService } from './services/supabase';
 export class AppComponent {
   private supabase = inject(SupabaseService);
   private router = inject(Router);
+  private hostService = inject(HostService);
 
   isAuthenticated = computed(() => !!this.supabase.user());
   isLoading = this.supabase.loading;
-  isAppRoute = computed(() => this.router.url === '/app' || this.router.url.startsWith('/app/'));
+  isAppRoute = computed(() =>
+    this.router.url === '/app' ||
+    this.router.url.startsWith('/app/') ||
+    this.router.url === '/deepanalysis' ||
+    this.router.url.startsWith('/deepanalysis?')
+  );
 
   constructor() {
-    // Handle auth state changes
     effect(() => {
       const user = this.supabase.user();
       const loading = this.supabase.loading();
+      const url = this.router.url;
 
-      if (!loading) {
-        if (user) {
-          // User is logged in, ensure we're not on login page
-          if (this.router.url === '/login') {
-            this.router.navigate(['/app']);
-          }
-        }
+      if (loading) {
+        return;
+      }
+
+      if (this.hostService.isBuildomainHost() && url === '/login') {
+        this.router.navigateByUrl('/');
+        return;
+      }
+
+      if (this.hostService.isScoutHost() && url === '/') {
+        this.router.navigateByUrl('/scout');
+        return;
+      }
+
+      if (this.hostService.isContentHost() && url === '/') {
+        this.router.navigateByUrl('/content');
+        return;
+      }
+
+      if (user && url === '/login') {
+        this.router.navigateByUrl(this.hostService.appHomePath());
       }
     });
   }

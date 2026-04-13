@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { SupabaseService } from '../../services/supabase';
+import { HostService } from '../../services/host';
 import { LucideAngularModule, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-angular';
 
 @Component({
@@ -542,6 +543,7 @@ export class LoginComponent {
   private supabase = inject(SupabaseService);
   private router = inject(Router);
   private fb = inject(FormBuilder);
+  private hostService = inject(HostService);
 
   // Icons
   readonly Mail = Mail;
@@ -565,7 +567,9 @@ export class LoginComponent {
   });
 
   constructor() {
-    // Auth redirect is handled by AppComponent
+    if (this.hostService.isBuildomainHost()) {
+      this.router.navigateByUrl('/');
+    }
   }
 
   togglePassword() {
@@ -639,7 +643,7 @@ export class LoginComponent {
       if (error) {
         this.errorMessage.set(error.message);
       } else {
-        this.router.navigate(['/app']);
+        this.router.navigateByUrl(this.hostService.appHomePath());
       }
     } catch (err: any) {
       this.errorMessage.set(err.message || 'Failed to sign in');
