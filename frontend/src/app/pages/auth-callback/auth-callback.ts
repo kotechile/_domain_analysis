@@ -65,7 +65,7 @@ export class AuthCallbackComponent implements OnInit {
     if (session) {
       // Successfully authenticated
       console.log('Auth callback: Session established');
-      this.router.navigate(['/']);
+      this.router.navigate(['/app']);
     } else {
       // No session, check for hash fragment
       const hash = window.location.hash;
@@ -75,7 +75,7 @@ export class AuthCallbackComponent implements OnInit {
         setTimeout(async () => {
           const { data: { session: retrySession } } = await this.supabase.client.auth.getSession();
           if (retrySession) {
-            this.router.navigate(['/']);
+            this.router.navigate(['/app']);
           } else {
             this.error.set('Authentication incomplete. Please try again.');
           }

@@ -61,7 +61,7 @@
                     }
                 } @else if (reports().length > 0) {
                     @for (report of reports(); track report.domain_name) {
-                        <tr [routerLink]="['/reports', report.domain_name]" class="cursor-pointer group">
+                        <tr [routerLink]="['/app/reports', report.domain_name]" class="cursor-pointer group">
                             <!-- Checkbox -->
                             <td class="pl-6 pr-0" (click)="$event.stopPropagation()">
                                 <input type="checkbox"
@@ -119,7 +119,7 @@
                             <!-- Button Action -->
                             <td class="text-right">
                                 <div class="flex items-center justify-end space-x-3 pr-4">
-                                    <button class="p-2 rounded-xl bg-white/5 hover:bg-white/10 group-hover:bg-indigo-500/20 transition-all group-hover:scale-110" [routerLink]="['/reports', report.domain_name]">
+                                    <button class="p-2 rounded-xl bg-white/5 hover:bg-white/10 group-hover:bg-indigo-500/20 transition-all group-hover:scale-110" [routerLink]="['/app/reports', report.domain_name]">
                                         <i-lucide [name]="ArrowRight" class="w-4 h-4 text-indigo-500"></i-lucide>
                                     </button>
                                     <button (click)="deleteReport(report.domain_name, $event)" 
@@ -136,7 +136,7 @@
                         <td colspan="7" class="py-20 text-center space-y-6 opacity-30">
                             <i-lucide [name]="Search" class="w-12 h-12 mx-auto mb-4 stroke-1"></i-lucide>
                             <p class="font-black uppercase tracking-[0.3em] text-xs">No reports found.</p>
-                            <a routerLink="/" class="text-indigo-500 uppercase text-[10px] border-b border-indigo-500 font-black">Scan a domain now</a>
+                            <a routerLink="/app" class="text-indigo-500 uppercase text-[10px] border-b border-indigo-500 font-black">Scan a domain now</a>
                         </td>
                     </tr>
                 }

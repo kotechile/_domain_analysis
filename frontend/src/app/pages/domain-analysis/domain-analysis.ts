@@ -79,7 +79,7 @@ export class DomainAnalysisComponent implements OnInit {
     try {
       const res = await firstValueFrom(this.api.analyzeDomain(domain, mode));
       if (res.success) {
-        this.router.navigate(['/reports', domain]);
+        this.router.navigate(['/app/reports', domain]);
       } else {
         this.error.set(res.message);
         await this.creditService.refreshData(); // Re-sync actual balance on failure

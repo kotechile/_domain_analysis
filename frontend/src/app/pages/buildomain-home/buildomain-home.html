@@ -1,0 +1,62 @@
+<div class="suite-page">
+  <header class="suite-header">
+    <a routerLink="/" class="brand">Buildomain</a>
+    <nav class="suite-nav" aria-label="Primary">
+      <a routerLink="/scout">Scout</a>
+      <a routerLink="/content">Content</a>
+      <a class="header-cta" routerLink="/scout">Explore Scout</a>
+    </nav>
+  </header>
+
+  <main class="suite-main">
+    <section class="hero">
+      <p class="eyebrow">Focused tools for digital asset builders</p>
+      <h1>Discover the right domain. Build the right asset.</h1>
+      <p class="hero-copy">
+        Buildomain brings together focused apps for two connected jobs: finding high-potential
+        domains and developing what comes next.
+      </p>
+    </section>
+
+    <section class="split-grid" aria-label="Buildomain products">
+      <article class="product-card scout-card">
+        <div class="card-icon">
+          <i-lucide [name]="Compass"></i-lucide>
+        </div>
+        <p class="card-label">Scout</p>
+        <h2>Find better domain opportunities before everyone else.</h2>
+        <p class="card-copy">
+          Filter auction domains, review SEO and history signals, and validate which names are
+          actually worth your attention.
+        </p>
+        <div class="card-actions">
+          <a class="primary-link" routerLink="/scout">
+            <span>Explore Scout</span>
+            <i-lucide [name]="ArrowRight"></i-lucide>
+          </a>
+          <p class="card-note">Research domains with more confidence.</p>
+        </div>
+      </article>
+
+      <article class="product-card content-card">
+        <div class="card-icon">
+          <i-lucide [name]="FileText"></i-lucide>
+        </div>
+        <p class="card-label">Content</p>
+        <h2>Build the content engine behind the domain you choose.</h2>
+        <p class="card-copy">
+          Plan, organize, and create content for the asset you want to grow. Content workflows are
+          in development and will live as their own focused app.
+        </p>
+        <div class="card-actions">
+          <a class="secondary-link" routerLink="/content">View Placeholder</a>
+          <p class="card-note">Content workflows are in development.</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="support-copy">
+      <p>Scout helps you choose the opportunity. Content helps you develop it.</p>
+    </section>
+  </main>
+</div>

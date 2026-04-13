@@ -9,16 +9,29 @@ import { AuthCallbackComponent } from './pages/auth-callback/auth-callback';
 import { AuthGuard } from './guards/auth.guard';
 import { ReportsListComponent } from './pages/reports-list/reports-list';
 import { ImportComponent } from './pages/import/import';
+import { BuildomainHomeComponent } from './pages/buildomain-home/buildomain-home';
+import { ScoutLandingComponent } from './pages/scout-landing/scout-landing';
+import { ContentLandingComponent } from './pages/content-landing/content-landing';
 
 export const routes: Routes = [
+    { path: '', component: BuildomainHomeComponent },
+    { path: 'scout', component: ScoutLandingComponent },
+    { path: 'content', component: ContentLandingComponent },
     { path: 'login', component: LoginComponent },
     { path: 'auth/callback', component: AuthCallbackComponent },
-    { path: '', component: DomainAnalysisComponent, canActivate: [AuthGuard] },
-    { path: 'deepanalysis', component: DomainAnalysisComponent, canActivate: [AuthGuard] },
-    { path: 'marketplace', component: MarketplaceComponent, canActivate: [AuthGuard] },
-    // { path: 'import', component: ImportComponent, canActivate: [AuthGuard] },
-    { path: 'reports', component: ReportsListComponent, canActivate: [AuthGuard] },
-    { path: 'reports/:domain', component: ReportDetailComponent, canActivate: [AuthGuard] },
-    { path: 'billing', component: BillingComponent, canActivate: [AuthGuard] },
-    // { path: 'themes', component: ThemeShowcaseComponent, canActivate: [AuthGuard] }
+    { path: 'app', component: DomainAnalysisComponent, canActivate: [AuthGuard] },
+    { path: 'app/deepanalysis', redirectTo: 'app', pathMatch: 'full' },
+    { path: 'app/marketplace', component: MarketplaceComponent, canActivate: [AuthGuard] },
+    { path: 'app/import', component: ImportComponent, canActivate: [AuthGuard] },
+    { path: 'app/reports', component: ReportsListComponent, canActivate: [AuthGuard] },
+    { path: 'app/reports/:domain', component: ReportDetailComponent, canActivate: [AuthGuard] },
+    { path: 'app/billing', component: BillingComponent, canActivate: [AuthGuard] },
+    { path: 'app/themes', component: ThemeShowcaseComponent, canActivate: [AuthGuard] },
+    { path: 'deepanalysis', redirectTo: 'app', pathMatch: 'full' },
+    { path: 'marketplace', redirectTo: 'app/marketplace', pathMatch: 'full' },
+    { path: 'import', redirectTo: 'app/import', pathMatch: 'full' },
+    { path: 'reports', redirectTo: 'app/reports', pathMatch: 'full' },
+    { path: 'reports/:domain', redirectTo: 'app/reports/:domain', pathMatch: 'full' },
+    { path: 'billing', redirectTo: 'app/billing', pathMatch: 'full' },
+    { path: 'themes', redirectTo: 'app/themes', pathMatch: 'full' }
 ];

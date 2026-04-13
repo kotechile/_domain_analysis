@@ -1,18 +1,16 @@
-import { Component, inject, effect } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from '@angular/core';
 import { RouterOutlet, Router } from '@angular/router';
 import { HeaderComponent } from './components/header/header';
 import { SidebarComponent } from './components/sidebar/sidebar';
 import { LucideAngularModule } from 'lucide-angular';
-import { CommonModule } from '@angular/common';
 import { SupabaseService } from './services/supabase';
-import { LoginComponent } from './pages/login/login';
 
 @Component({
   selector: 'app-root',
-  standalone: true,
-  imports: [RouterOutlet, HeaderComponent, SidebarComponent, LucideAngularModule, CommonModule, LoginComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterOutlet, HeaderComponent, SidebarComponent, LucideAngularModule],
   template: `
-    @if (isLoading()) {
+    @if (isAppRoute() && isLoading()) {
       <!-- Loading State -->
       <div class="min-h-screen flex items-center justify-center"
            style="background: var(--bg-color); color: var(--text-color)">
@@ -26,7 +24,7 @@ import { LoginComponent } from './pages/login/login';
           </h1>
         </div>
       </div>
-    } @else if (isAuthenticated()) {
+    } @else if (isAppRoute() && isAuthenticated()) {
       <div class="min-h-screen transition-all duration-500"
            style="background: var(--bg-color); color: var(--text-color)">
 
@@ -55,7 +53,7 @@ import { LoginComponent } from './pages/login/login';
         </main>
       </div>
     } @else {
-      <app-login />
+      <router-outlet />
     }
   `,
   styles: [`
@@ -68,8 +66,9 @@ export class AppComponent {
   private supabase = inject(SupabaseService);
   private router = inject(Router);
 
-  isAuthenticated = () => !!this.supabase.user();
+  isAuthenticated = computed(() => !!this.supabase.user());
   isLoading = this.supabase.loading;
+  isAppRoute = computed(() => this.router.url === '/app' || this.router.url.startsWith('/app/'));
 
   constructor() {
     // Handle auth state changes
@@ -81,7 +80,7 @@ export class AppComponent {
         if (user) {
           // User is logged in, ensure we're not on login page
           if (this.router.url === '/login') {
-            this.router.navigate(['/']);
+            this.router.navigate(['/app']);
           }
         }
       }

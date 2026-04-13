@@ -1,0 +1,228 @@
+:host {
+  display: block;
+}
+
+.suite-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(182, 217, 201, 0.45), transparent 32%),
+    radial-gradient(circle at top right, rgba(225, 175, 130, 0.28), transparent 30%),
+    linear-gradient(135deg, #f6f1e7 0%, #f3efe8 35%, #eef3f0 100%);
+  color: #14231d;
+}
+
+.suite-header,
+.suite-main {
+  width: min(1180px, calc(100% - 3rem));
+  margin: 0 auto;
+}
+
+.suite-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 0;
+}
+
+.brand {
+  color: #14231d;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.suite-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.suite-nav a {
+  color: rgba(20, 35, 29, 0.78);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.header-cta {
+  padding: 0.8rem 1.1rem;
+  border: 1px solid rgba(20, 35, 29, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.suite-main {
+  padding: 4.5rem 0 5rem;
+}
+
+.hero {
+  max-width: 52rem;
+  margin-bottom: 3rem;
+}
+
+.eyebrow {
+  margin: 0 0 1rem;
+  color: #476c5d;
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(3rem, 6vw, 5.2rem);
+  line-height: 0.95;
+  letter-spacing: -0.05em;
+}
+
+.hero-copy {
+  max-width: 42rem;
+  margin: 1.5rem 0 0;
+  color: rgba(20, 35, 29, 0.72);
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
+
+.split-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.product-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 31rem;
+  padding: 2rem;
+  border: 1px solid rgba(20, 35, 29, 0.1);
+  border-radius: 2rem;
+  box-shadow: 0 28px 70px rgba(20, 35, 29, 0.08);
+}
+
+.scout-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.92)),
+    linear-gradient(140deg, #d6efe4, #edf8f3);
+}
+
+.content-card {
+  background:
+    linear-gradient(180deg, rgba(255, 250, 245, 0.9), rgba(255, 255, 255, 0.94)),
+    linear-gradient(140deg, #f6e5d7, #f7f1eb);
+}
+
+.card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  background: rgba(20, 35, 29, 0.08);
+  color: #14231d;
+}
+
+.card-label {
+  margin: 1.25rem 0 0.85rem;
+  color: rgba(20, 35, 29, 0.68);
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.product-card h2 {
+  max-width: 22rem;
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.25rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.card-copy {
+  max-width: 29rem;
+  margin: 1.25rem 0 0;
+  color: rgba(20, 35, 29, 0.72);
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+.card-actions {
+  position: absolute;
+  right: 2rem;
+  bottom: 2rem;
+  left: 2rem;
+}
+
+.primary-link,
+.secondary-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.95rem 1.25rem;
+  border-radius: 999px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.primary-link {
+  background: #15352a;
+  color: #f6f1e7;
+}
+
+.secondary-link {
+  background: rgba(20, 35, 29, 0.07);
+  color: #14231d;
+}
+
+.card-note {
+  margin: 0.85rem 0 0;
+  color: rgba(20, 35, 29, 0.56);
+  font-size: 0.95rem;
+}
+
+.support-copy {
+  padding: 2rem 0 0;
+}
+
+.support-copy p {
+  margin: 0;
+  color: rgba(20, 35, 29, 0.58);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+@media (max-width: 860px) {
+  .suite-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .suite-nav {
+    flex-wrap: wrap;
+  }
+
+  .split-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .product-card {
+    min-height: auto;
+    padding-bottom: 7rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .suite-header,
+  .suite-main {
+    width: min(100% - 1.5rem, 1180px);
+  }
+
+  .suite-main {
+    padding-top: 3rem;
+  }
+}

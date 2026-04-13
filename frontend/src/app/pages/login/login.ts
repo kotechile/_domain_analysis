@@ -639,7 +639,7 @@ export class LoginComponent {
       if (error) {
         this.errorMessage.set(error.message);
       } else {
-        this.router.navigate(['/']);
+        this.router.navigate(['/app']);
       }
     } catch (err: any) {
       this.errorMessage.set(err.message || 'Failed to sign in');
