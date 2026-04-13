@@ -1,7 +1,6 @@
 <header
     class="flex items-center justify-end px-4 md:px-10 h-20 border-b border-opacity-10 backdrop-blur-md sticky top-0 z-40 transition-all ml-0"
-    [class.md:ml-64]="layout.isSidebarExpanded()"
-    [class.md:ml-20]="!layout.isSidebarExpanded()"
+    [ngClass]="{'md:ml-64': layout.isSidebarExpanded(), 'md:ml-20': !layout.isSidebarExpanded()}"
     style="background: var(--card-bg); border-color: var(--border-color);">
 
     <!-- User Profile & Settings Actions -->

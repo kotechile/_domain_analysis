@@ -7,12 +7,14 @@ import { SupabaseService } from './services/supabase';
 import { HostService } from './services/host';
 import { LayoutService } from './services/layout';
 
+import { CommonModule } from '@angular/common';
+
 @Component({
   selector: 'app-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterOutlet, HeaderComponent, SidebarComponent, LucideAngularModule],
+  imports: [CommonModule, RouterOutlet, HeaderComponent, SidebarComponent, LucideAngularModule],
   template: `
-    @if (isAppRoute() && isLoading()) {
+    @if (isAppRoute && isLoading()) {
       <!-- Loading State -->
       <div class="min-h-screen flex items-center justify-center"
            style="background: var(--bg-color); color: var(--text-color)">
@@ -26,7 +28,7 @@ import { LayoutService } from './services/layout';
           </h1>
         </div>
       </div>
-    } @else if (isAppRoute() && isAuthenticated()) {
+    } @else if (isAppRoute && isAuthenticated()) {
       <div class="min-h-screen transition-all duration-500"
            style="background: var(--bg-color); color: var(--text-color)">
 
@@ -36,8 +38,7 @@ import { LayoutService } from './services/layout';
 
         <!-- Main Content Area (Responsive margins for Sidebar and Mobile Dock) -->
         <main class="transition-all duration-500 min-h-[calc(100vh-80px)] ml-0 pb-24 md:pb-0"
-              [class.md:ml-64]="layout.isSidebarExpanded()"
-              [class.md:ml-20]="!layout.isSidebarExpanded()">
+              [ngClass]="{'md:ml-64': layout.isSidebarExpanded(), 'md:ml-20': !layout.isSidebarExpanded()}">
           <div class="animate-in fade-in duration-1000">
             <router-outlet />
           </div>
@@ -74,12 +75,13 @@ export class AppComponent {
 
   isAuthenticated = computed(() => !!this.supabase.user());
   isLoading = this.supabase.loading;
-  isAppRoute = computed(() =>
-    this.router.url === '/app' ||
-    this.router.url.startsWith('/app/') ||
-    this.router.url === '/deepanalysis' ||
-    this.router.url.startsWith('/deepanalysis?')
-  );
+  
+  get isAppRoute() {
+    return this.router.url === '/app' ||
+           this.router.url.startsWith('/app/') ||
+           this.router.url === '/deepanalysis' ||
+           this.router.url.startsWith('/deepanalysis?');
+  }
 
   constructor() {
     effect(() => {
