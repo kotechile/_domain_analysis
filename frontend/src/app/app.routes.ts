@@ -9,12 +9,12 @@ import { AuthCallbackComponent } from './pages/auth-callback/auth-callback';
 import { AuthGuard } from './guards/auth.guard';
 import { ReportsListComponent } from './pages/reports-list/reports-list';
 import { ImportComponent } from './pages/import/import';
-import { BuildomainHomeComponent } from './pages/buildomain-home/buildomain-home';
+import { HostHomeComponent } from './pages/host-home/host-home';
 import { ScoutLandingComponent } from './pages/scout-landing/scout-landing';
 import { ContentLandingComponent } from './pages/content-landing/content-landing';
 
 export const routes: Routes = [
-    { path: '', component: BuildomainHomeComponent },
+    { path: '', component: HostHomeComponent },
     { path: 'scout', component: ScoutLandingComponent },
     { path: 'content', component: ContentLandingComponent },
     { path: 'login', component: LoginComponent },
