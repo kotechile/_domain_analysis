@@ -18,7 +18,7 @@ const customLock = async <T>(
   providedIn: 'root'
 })
 export class SupabaseService {
-  private supabase: SupabaseClient;
+  private supabase: SupabaseClient | null = null;
 
   // Use Angular Signals for state management
   user = signal<User | null>(null);
@@ -26,6 +26,12 @@ export class SupabaseService {
   loading = signal<boolean>(true);
 
   constructor() {
+    if (!environment.supabaseUrl || !environment.supabaseAnonKey) {
+      console.warn('Supabase config missing. Auth features are disabled for this deployment.');
+      this.loading.set(false);
+      return;
+    }
+
     this.supabase = createClient(environment.supabaseUrl, environment.supabaseAnonKey, {
       auth: {
         persistSession: true,
@@ -50,6 +56,11 @@ export class SupabaseService {
   }
 
   private async initSession() {
+    if (!this.supabase) {
+      this.loading.set(false);
+      return;
+    }
+
     const { data: { session } } = await this.supabase.auth.getSession();
     this.session.set(session);
     this.user.set(session?.user ?? null);
@@ -57,6 +68,10 @@ export class SupabaseService {
   }
 
   async signInWithGoogle() {
+    if (!this.supabase) {
+      throw new Error('Supabase is not configured for this deployment.');
+    }
+
     return await this.supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -66,6 +81,10 @@ export class SupabaseService {
   }
 
   async signInWithEmail(email: string, password: string) {
+    if (!this.supabase) {
+      throw new Error('Supabase is not configured for this deployment.');
+    }
+
     return await this.supabase.auth.signInWithPassword({
       email,
       password
@@ -73,6 +92,10 @@ export class SupabaseService {
   }
 
   async signUpWithEmail(email: string, password: string) {
+    if (!this.supabase) {
+      throw new Error('Supabase is not configured for this deployment.');
+    }
+
     return await this.supabase.auth.signUp({
       email,
       password,
@@ -83,10 +106,18 @@ export class SupabaseService {
   }
 
   async signOut() {
+    if (!this.supabase) {
+      return;
+    }
+
     await this.supabase.auth.signOut();
   }
 
   get client() {
+    if (!this.supabase) {
+      throw new Error('Supabase is not configured for this deployment.');
+    }
+
     return this.supabase;
   }
 }
