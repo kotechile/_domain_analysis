@@ -44,16 +44,10 @@ export class BillingComponent {
 
   async recharge(amount: number) {
     if (this.buying()) return;
-
-    this.buying.set(true);
-    // Simulate real payment delay
-    await new Promise(r => setTimeout(r, 1500));
-
-    const success = await this.creditService.mockPurchase(amount);
-    if (!success) {
-      alert('Transaction failed. please check your balance.');
-    }
-    this.buying.set(false);
+    
+    // Warn the user that the payment gateway is pending
+    alert("Stripe Checkout Integration is pending. Direct purchases are currently disabled for security. Please contact support to manually top up your account.");
+    return;
   }
 
   refresh() {
