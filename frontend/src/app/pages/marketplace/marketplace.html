@@ -546,10 +546,11 @@
                             </button>
                             <div class="flex flex-col">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    <span class="font-semibold text-lg group-hover:text-accent-color transition-colors"
+                                    <a [href]="item.link" target="_blank" rel="noopener noreferrer"
+                                        class="font-semibold text-lg group-hover:text-accent-color transition-colors cursor-pointer"
                                         style="color: var(--text-color)">
                                         {{ item.domain }}
-                                    </span>
+                                    </a>
                                     @if (item.has_analysis) {
                                     <span
                                         class="text-[10px] font-semibold text-accent-color flex items-center space-x-0.5 animate-pulse">
