@@ -1,9 +1,9 @@
-import { Component, inject, signal, computed, effect, OnInit, untracked, OnDestroy } from '@angular/core';
+import { Component, HostListener, inject, signal, computed, effect, OnInit, untracked, OnDestroy } from '@angular/core';
 import { CommonModule, TitleCasePipe, DatePipe, DecimalPipe } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api';
-import { LucideAngularModule, Filter, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Sparkles, TrendingUp, History, ShieldCheck, Star, Target, Menu, X, Gauge } from 'lucide-angular';
+import { LucideAngularModule, Filter, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Sparkles, TrendingUp, History, ShieldCheck, Star, Target, Menu, X, Gauge, MoreVertical, WaybackMachine } from 'lucide-angular';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { CreditService } from '../../services/credit';
 import { firstValueFrom, interval, Subscription } from 'rxjs';
@@ -100,6 +100,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   readonly Menu = Menu;
   readonly X = X;
   readonly Gauge = Gauge;
+  readonly MoreVertical = MoreVertical;
 
   // State Signals
   auctions = signal<Auction[]>([]);
@@ -125,6 +126,7 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   private postRefreshSyncSubscription: Subscription | null = null;
   private progressClockSubscription: Subscription | null = null;
   private notFoundCount = new Map<string, number>(); // Track 404 errors per job
+  openMenuId = signal<string | null>(null); // Track which dropdown menu is open
 
   // Filter Signals
   sortBy = signal<string>('expiration_date');
@@ -221,6 +223,14 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
       this.scheduleFetchAuctions();
     });
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.dropdown-menu-container')) {
+      this.closeMenu();
+    }
   }
 
   private getNormalizedExpirationRange(fromValue: string, toValue: string) {
@@ -858,6 +868,14 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
 
   toggleMobileActions() {
     this.showMobileActions.set(!this.showMobileActions());
+  }
+
+  toggleMenu(id: string) {
+    this.openMenuId.set(this.openMenuId() === id ? null : id);
+  }
+
+  closeMenu() {
+    this.openMenuId.set(null);
   }
 
   resetFilters() {

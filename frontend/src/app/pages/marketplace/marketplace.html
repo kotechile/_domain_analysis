@@ -418,6 +418,7 @@
                                 [class.sort-active]="sortBy() === 'domain'"></i-lucide>
                         </div>
                     </th>
+                    <th class="w-[60px]"></th>
                     <th tabindex="0" title="Brand Score: A heuristic assessment based on TLD, length, and readability (does not include SEO metrics)."
                         class="cursor-pointer group hover:opacity-100 text-center outline-none focus-visible:ring-2 focus-visible:ring-inset"
                         (click)="toggleSort('score')" (keydown.enter)="toggleSort('score')">
@@ -525,7 +526,7 @@
                 @if (loading()) {
                 @for (item of [1,2,3,4,5,6,7,8]; track item) {
                 <tr class="animate-pulse">
-                    <td colspan="12" class="p-8">
+                    <td colspan="13" class="p-8">
                         <div class="h-4 bg-gray-200 dark:bg-gray-800 rounded w-1/4 mb-2"></div>
                         <div class="h-4 bg-gray-200 dark:bg-gray-800 rounded w-full opacity-20"></div>
                     </td>
@@ -535,8 +536,9 @@
                 @for (item of auctions(); track item.id) {
                 <tr tabindex="0"
                     class="group transition-all outline-none focus-visible:bg-opacity-10 focus-visible:bg-accent-color/10">
+                    <!-- Domain Column -->
                     <td>
-                        <div class="flex items-start space-x-3">
+                        <div class="flex items-center space-x-3">
                             <button (click)="toggleFavorite($event, item)" class="favorite-btn shrink-0"
                                 [class.favorite-active]="item.preferred">
                                 <i-lucide [name]="Star" class="w-4 h-4"
@@ -544,19 +546,10 @@
                             </button>
                             <div class="flex flex-col">
                                 <div class="flex flex-wrap items-center gap-2">
-                                    @if (item.link) {
-                                    <a [href]="item.link" target="_blank" rel="noopener noreferrer"
-                                        [title]="item.auction_site"
-                                        class="font-semibold text-lg group-hover:text-accent-color transition-colors"
-                                        style="color: var(--text-color)">
-                                        {{ item.domain }}
-                                    </a>
-                                    } @else {
                                     <span class="font-semibold text-lg group-hover:text-accent-color transition-colors"
                                         style="color: var(--text-color)">
                                         {{ item.domain }}
                                     </span>
-                                    }
                                     @if (item.has_analysis) {
                                     <span
                                         class="text-[10px] font-semibold text-accent-color flex items-center space-x-0.5 animate-pulse">
@@ -565,13 +558,44 @@
                                     </span>
                                     }
                                 </div>
-                                <div class="flex flex-wrap items-center gap-2 mt-1">
+                            </div>
+                        </div>
+                    </td>
+
+                    <!-- Actions Menu Column -->
+                    <td class="relative">
+                        <div class="dropdown-menu-container relative inline-block">
+                            <button (click)="toggleMenu(item.id)" (click.stop)="$event.stopPropagation()"
+                                class="inline-flex items-center justify-center p-2 rounded-lg transition-all hover:bg-black/5 dark:hover:bg-white/5 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                [class.opacity-100]="openMenuId() === item.id"
+                                [title]="'Options for ' + item.domain"
+                                style="color: var(--text-color)">
+                                <i-lucide [name]="MoreVertical" class="w-4 h-4 opacity-60 hover:opacity-100"></i-lucide>
+                            </button>
+
+                            @if (openMenuId() === item.id) {
+                            <div class="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-xl shadow-xl border border-opacity-10 overflow-hidden"
+                                style="background: var(--card-bg); border-color: var(--border-color)">
+                                <div class="py-1">
+                                    @if (item.link) {
+                                    <a [href]="item.link" target="_blank" rel="noopener noreferrer"
+                                        (click)="closeMenu()"
+                                        class="flex items-center space-x-3 px-4 py-2.5 text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                                        style="color: var(--text-color)">
+                                        <i-lucide [name]="ExternalLink" class="w-4 h-4 opacity-60"></i-lucide>
+                                        <span class="font-medium">{{ item.auction_site }}</span>
+                                    </a>
+                                    }
                                     <a [href]="getWaybackUrl(item.domain)" target="_blank" rel="noopener noreferrer"
-                                        class="platform-pill platform-default inline-flex items-center">
-                                        WBM
+                                        (click)="closeMenu()"
+                                        class="flex items-center space-x-3 px-4 py-2.5 text-sm hover:bg-black/5 dark:hover:bg-white/10 transition-colors border-t border-opacity-5"
+                                        style="color: var(--text-color)">
+                                        <i-lucide [name]="History" class="w-4 h-4 opacity-60"></i-lucide>
+                                        <span class="font-medium">Wayback Machine</span>
                                     </a>
                                 </div>
                             </div>
+                            }
                         </div>
                     </td>
                     <!-- Brand Score -->
@@ -706,7 +730,7 @@
                 }
                 @} @else if (!loading()) {
                 <tr>
-                    <td colspan="12" class="p-20 text-center opacity-30 font-semibold tracking-widest uppercase">
+                    <td colspan="13" class="p-20 text-center opacity-30 font-semibold tracking-widest uppercase">
                         No domains found matching your criteria.
                     </td>
                 </tr>
