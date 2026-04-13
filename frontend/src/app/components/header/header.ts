@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ThemeService, ThemeMode } from '../../services/theme';
 import { SupabaseService } from '../../services/supabase';
 import { CreditService } from '../../services/credit';
+import { LayoutService } from '../../services/layout';
 import { LucideAngularModule, Moon, Sun, Monitor, Palette, Bell, User, LogOut } from 'lucide-angular';
 import { RouterLink, Router } from '@angular/router';
 
@@ -26,6 +27,7 @@ export class HeaderComponent {
   themeService = inject(ThemeService);
   supabase = inject(SupabaseService);
   creditService = inject(CreditService);
+  layout = inject(LayoutService);
   router = inject(Router);
 
   readonly Sun = Sun;

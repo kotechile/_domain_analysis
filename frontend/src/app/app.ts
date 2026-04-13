@@ -5,6 +5,7 @@ import { SidebarComponent } from './components/sidebar/sidebar';
 import { LucideAngularModule } from 'lucide-angular';
 import { SupabaseService } from './services/supabase';
 import { HostService } from './services/host';
+import { LayoutService } from './services/layout';
 
 @Component({
   selector: 'app-root',
@@ -33,8 +34,10 @@ import { HostService } from './services/host';
         <app-sidebar />
         <app-header />
 
-        <!-- Main Content Area (Offset for Sidebar) -->
-        <main class="transition-all duration-500" style="margin-left: 16rem; min-height: calc(100vh - 80px)">
+        <!-- Main Content Area (Responsive margins for Sidebar and Mobile Dock) -->
+        <main class="transition-all duration-500 min-h-[calc(100vh-80px)] ml-0 pb-24 md:pb-0"
+              [class.md:ml-64]="layout.isSidebarExpanded()"
+              [class.md:ml-20]="!layout.isSidebarExpanded()">
           <div class="animate-in fade-in duration-1000">
             <router-outlet />
           </div>
@@ -67,6 +70,7 @@ export class AppComponent {
   private supabase = inject(SupabaseService);
   private router = inject(Router);
   private hostService = inject(HostService);
+  layout = inject(LayoutService);
 
   isAuthenticated = computed(() => !!this.supabase.user());
   isLoading = this.supabase.loading;

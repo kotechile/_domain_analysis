@@ -1,43 +1,70 @@
-<div class="h-full flex flex-col pt-8">
+<!-- Desktop Sidebar -->
+<div class="hidden md:flex flex-col h-full fixed top-0 left-0 border-r border-opacity-10 dark:border-white/5 transition-all duration-500 z-50 pt-8 shadow-xl"
+     [class.w-64]="layout.isSidebarExpanded()"
+     [class.w-20]="!layout.isSidebarExpanded()"
+     style="background: var(--card-bg); border-color: var(--border-color);">
+     
+     <!-- Toggle Sidebar Button -->
+     <button (click)="layout.toggleSidebar()"
+             class="absolute -right-3 top-8 w-6 h-6 rounded-full flex items-center justify-center border border-opacity-20 shadow-md transition-transform hover:scale-110"
+             style="background: var(--card-bg); border-color: var(--border-color); color: var(--text-color);">
+         <i-lucide [name]="layout.isSidebarExpanded() ? ChevronLeft : ChevronRight" class="w-3.5 h-3.5"></i-lucide>
+     </button>
+
     <!-- Premium Logo Section -->
-    <div class="logo-section flex items-center space-x-3 group cursor-pointer shrink-0" routerLink="/app">
-        <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform group-hover:rotate-12 duration-500"
+    <div class="logo-section flex items-center space-x-3 group cursor-pointer shrink-0 overflow-hidden" 
+         [class.px-5]="!layout.isSidebarExpanded()"
+         [class.p-8]="layout.isSidebarExpanded()"
+         [class.mb-4]="layout.isSidebarExpanded()"
+         routerLink="/app">
+        <div class="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform group-hover:rotate-12 duration-500 shrink-0"
             style="background: linear-gradient(135deg, var(--accent-color) 0%, #4f46e5 100%)">
             <i-lucide [name]="LayoutDashboard" class="w-6 h-6"></i-lucide>
         </div>
-        <div class="flex flex-col">
+        <div class="flex flex-col whitespace-nowrap transition-opacity duration-300"
+             [class.opacity-0]="!layout.isSidebarExpanded()"
+             [class.w-0]="!layout.isSidebarExpanded()">
             <span class="text-xl font-black tracking-tighter" style="color: var(--text-color)">DOMAIN</span>
-            <span class="text-[10px] font-bold tracking-[0.3em] opacity-40 -mt-1" style="color: var(--text-color)">SCOUT
-                DNA</span>
+            <span class="text-[10px] font-bold tracking-[0.3em] opacity-40 -mt-1" style="color: var(--text-color)">SCOUT DNA</span>
         </div>
     </div>
 
     <!-- Main Navigation Sections - Scrollable -->
-    <div class="flex-grow overflow-y-auto space-y-10 px-2 py-4 custom-scrollbar">
+    <div class="flex-grow overflow-y-auto space-y-10 py-4 custom-scrollbar"
+         [class.px-2]="layout.isSidebarExpanded()"
+         [class.px-0]="!layout.isSidebarExpanded()">
         <div class="space-y-1">
-            <span class="px-7 text-[10px] font-black uppercase tracking-[0.2em] opacity-30 mb-4 block"
-                style="color: var(--text-color)">Main Platform</span>
+            @if (layout.isSidebarExpanded()) {
+                <span class="text-[10px] font-black uppercase tracking-[0.2em] opacity-30 mb-4 block px-7" style="color: var(--text-color)">
+                    Main Platform
+                </span>
+            } @else {
+                <br>
+            }
             @for (item of navItems; track item.path) {
-            <a [routerLink]="item.path" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}"
-                class="nav-item group">
-                <i-lucide [name]="item.icon"
-                    class="w-5 h-5 opacity-60 group-hover:scale-110 transition-transform"></i-lucide>
-                <span class="flex-grow text-xs">{{ item.label }}</span>
-                <i-lucide [name]="ChevronRight"
-                    class="w-3.5 h-3.5 opacity-0 group-[.active]:opacity-100 transition-all"></i-lucide>
-            </a>
+                <a [routerLink]="item.path" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}"
+                   class="nav-item group"
+                   [class.justify-center]="!layout.isSidebarExpanded()"
+                   [title]="!layout.isSidebarExpanded() ? item.label : ''">
+                    <i-lucide [name]="item.icon"
+                        class="w-5 h-5 opacity-60 group-hover:scale-110 transition-transform shrink-0"></i-lucide>
+                    @if (layout.isSidebarExpanded()) {
+                        <span class="flex-grow text-xs truncate">{{ item.label }}</span>
+                        <i-lucide [name]="ChevronRight"
+                            class="w-3.5 h-3.5 opacity-0 group-[.active]:opacity-100 transition-all shrink-0"></i-lucide>
+                    }
+                </a>
             }
         </div>
     </div>
 
     <!-- Sidebar Bottom Section -->
-    <div class="sidebar-footer shrink-0">
-        <div class="p-4 rounded-2xl space-y-3"
-            style="background: rgba(var(--accent-color-rgb, 13, 110, 253), 0.05); border: 1px solid rgba(var(--accent-color-rgb, 13, 110, 253), 0.1)">
+    <div class="sidebar-footer shrink-0 overflow-hidden" [class.hidden]="!layout.isSidebarExpanded()">
+        <div class="p-4 rounded-2xl space-y-3 transition-all duration-300"
+             style="background: rgba(var(--accent-color-rgb, 13, 110, 253), 0.05); border: 1px solid rgba(var(--accent-color-rgb, 13, 110, 253), 0.1)">
             <div class="flex items-center space-x-2 w-full overflow-hidden">
                 <i-lucide [name]="CreditCard" class="w-4 h-4 text-accent-color shrink-0"></i-lucide>
-                <span class="text-[10px] font-black uppercase tracking-widest text-accent-color opacity-80 truncate">Premium
-                    Shield</span>
+                <span class="text-[10px] font-black uppercase tracking-widest text-accent-color opacity-80 truncate">Premium Shield</span>
             </div>
             <div class="flex items-baseline space-x-1 flex-wrap">
                 <span class="text-xl font-black truncate max-w-full" style="color: var(--text-color)">
@@ -45,11 +72,36 @@
                 </span>
                 <span class="text-[10px] font-bold opacity-30 uppercase shrink-0">Credits</span>
             </div>
-            <button
-                class="w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all hover:scale-105 active:scale-95"
+            <button class="w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all hover:scale-105 active:scale-95"
                 style="background: var(--accent-color); color: var(--btn-text-color);" routerLink="/app/billing">
-                Recharge Now
+                Recharge
             </button>
         </div>
     </div>
+</div>
+
+<!-- Mobile Bottom Dock (< 768px) -->
+<div class="md:hidden flex fixed bottom-0 left-0 w-full h-20 border-t border-opacity-10 backdrop-blur-xl z-50 justify-around items-center px-2 pb-2 shadow-2xl rounded-t-3xl"
+     style="background: var(--card-bg); border-color: var(--border-color);">
+    @for (item of navItems; track item.path) {
+        <a [routerLink]="item.path" routerLinkActive="active-dock" [routerLinkActiveOptions]="{exact: true}"
+           class="flex flex-col items-center justify-center space-y-1 w-1/4 h-full group relative"
+           style="color: var(--text-color);">
+           
+           <div class="relative flex flex-col items-center justify-center w-full transition-transform group-active:scale-90 pt-1">
+               <!-- Active Indicator Pill -->
+               <div class="absolute inset-0 rounded-2xl scale-0 group-[.active-dock]:scale-100 transition-transform duration-300 -mx-1"
+                    style="background: rgba(var(--accent-color-rgb, 13, 110, 253), 0.1)"></div>
+               
+               <i-lucide [name]="item.icon" 
+                         class="w-5 h-5 opacity-40 group-[.active-dock]:opacity-100 group-hover:-translate-y-1 group-[.active-dock]:-translate-y-1 transition-all duration-300"
+                         [ngStyle]="{'color': 'var(--accent-color)'}"></i-lucide>
+               
+               <span class="text-[8px] font-black tracking-widest uppercase opacity-0 group-[.active-dock]:opacity-100 absolute -bottom-3.5 transition-all duration-300"
+                     style="color: var(--accent-color)">
+                   {{ item.label.split(' ')[0] }}
+               </span>
+           </div>
+        </a>
+    }
 </div>

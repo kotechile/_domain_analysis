@@ -1,22 +1,24 @@
 <header
-    class="flex items-center justify-end px-10 h-20 border-b border-opacity-10 backdrop-blur-md sticky top-0 z-40 transition-all"
-    style="background: var(--card-bg); border-color: var(--border-color); margin-left: 16rem;">
+    class="flex items-center justify-end px-4 md:px-10 h-20 border-b border-opacity-10 backdrop-blur-md sticky top-0 z-40 transition-all ml-0"
+    [class.md:ml-64]="layout.isSidebarExpanded()"
+    [class.md:ml-20]="!layout.isSidebarExpanded()"
+    style="background: var(--card-bg); border-color: var(--border-color);">
 
     <!-- User Profile & Settings Actions -->
-    <div class="flex items-center space-x-6 pl-8">
+    <div class="flex items-center space-x-3 md:space-x-6 md:pl-8 w-full md:w-auto overflow-x-auto overflow-y-visible no-scrollbar header-actions-scroll">
         <!-- Theme Controls -->
-        <div class="flex items-center bg-slate-100/50 dark:bg-black/20 p-1.5 rounded-2xl border border-opacity-10"
+        <div class="flex items-center bg-slate-100/50 dark:bg-black/20 p-1 md:p-1.5 rounded-2xl border border-opacity-10 shrink-0"
             style="border-color: var(--border-color)">
             @for (t of themes; track t.mode) {
-            <button (click)="changeTheme(t.mode)" class="p-2.5 rounded-xl transition-all relative group"
+            <button (click)="changeTheme(t.mode)" class="p-2 md:p-2.5 rounded-xl transition-all relative group"
                 [class.active-theme]="themeService.currentTheme() === t.mode">
-                <i-lucide [name]="t.icon" class="w-4.5 h-4.5 opacity-40 transition-opacity group-hover:opacity-100"
+                <i-lucide [name]="t.icon" class="w-4 h-4 md:w-4.5 md:h-4.5 opacity-40 transition-opacity group-hover:opacity-100"
                     [ngStyle]="{'opacity': themeService.currentTheme() === t.mode ? '1' : '0.4', 
                                           'color': themeService.currentTheme() === t.mode ? 'var(--accent-color)' : 'var(--text-color)'}">
                 </i-lucide>
                 <!-- Tooltip label -->
                 <span
-                    class="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-black text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    class="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-black text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
                     {{ t.label }}
                 </span>
                 @if (themeService.currentTheme() === t.mode) {
@@ -27,37 +29,38 @@
             }
         </div>
 
-        <div class="w-px h-6 opacity-10" style="background: var(--text-color)"></div>
+        <div class="w-px h-6 opacity-10 shrink-0" style="background: var(--text-color)"></div>
 
         <!-- Notification Bubble -->
         <button
-            class="relative p-2.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-xs font-black shadow-sm"
+            class="relative p-2 md:p-2.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-xs font-black shadow-sm shrink-0"
             style="color: var(--text-color)">
-            <i-lucide [name]="Bell" class="w-5 h-5 opacity-40"></i-lucide>
+            <i-lucide [name]="Bell" class="w-4 h-4 md:w-5 md:h-5 opacity-40"></i-lucide>
             <span
-                class="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-500 border-2 border-white dark:border-slate-900"></span>
+                class="absolute top-1.5 right-1.5 md:top-2 md:right-2 w-2 h-2 rounded-full bg-red-500 border-2 border-white dark:border-slate-900"></span>
         </button>
 
         <!-- Logout Button -->
         <button
             (click)="logout()"
-            class="p-2.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-xs font-black shadow-sm"
+            class="p-2 md:p-2.5 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-all text-xs font-black shadow-sm shrink-0"
             style="color: var(--text-color)"
             title="Sign Out">
-            <i-lucide [name]="LogOut" class="w-5 h-5 opacity-40"></i-lucide>
+            <i-lucide [name]="LogOut" class="w-4 h-4 md:w-5 md:h-5 opacity-40"></i-lucide>
         </button>
 
-        <div class="w-px h-6 opacity-10" style="background: var(--text-color)"></div>
+        <div class="w-px h-6 opacity-10 shrink-0" style="background: var(--text-color)"></div>
 
-        <div class="flex items-center space-x-3 group cursor-pointer p-1.5 pr-4 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-all"
+        <!-- Profile Section -->
+        <div class="flex items-center space-x-2 md:space-x-3 group cursor-pointer p-1 md:p-1.5 md:pr-4 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/5 transition-all shrink-0"
             routerLink="/app/billing">
             <div
-                class="user-avatar w-10 h-10 rounded-2xl flex items-center justify-center font-black text-lg group-hover:scale-110 transition-transform shadow-md">
+                class="user-avatar w-8 h-8 md:w-10 md:h-10 rounded-2xl flex items-center justify-center font-black text-sm md:text-lg group-hover:scale-110 transition-transform shadow-md shrink-0">
                 {{ getUserInitials() }}
             </div>
-            <div class="flex flex-col">
-                <span class="text-xs font-black" style="color: var(--text-color)">{{ getUserName() }}</span>
-                <span class="text-[9px] font-black uppercase tracking-widest" [style.color]="'var(--accent-color)'">
+            <div class="hidden sm:flex flex-col">
+                <span class="text-[10px] md:text-xs font-black" style="color: var(--text-color)">{{ getUserName() }}</span>
+                <span class="text-[8px] md:text-[9px] font-black uppercase tracking-widest" [style.color]="'var(--accent-color)'">
                     {{ creditService.balance() | number }} Credits
                 </span>
             </div>

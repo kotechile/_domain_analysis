@@ -1,9 +1,10 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { LucideAngularModule, Search, Table, Settings, CreditCard, ChevronRight, LayoutDashboard, BrainCircuit, History, Activity } from 'lucide-angular';
+import { LucideAngularModule, Search, Table, Settings, CreditCard, ChevronRight, ChevronLeft, LayoutDashboard, BrainCircuit, History, Activity } from 'lucide-angular';
 import { SupabaseService } from '../../services/supabase';
 import { CreditService } from '../../services/credit';
+import { LayoutService } from '../../services/layout';
 
 @Component({
   selector: 'app-sidebar',
@@ -12,9 +13,7 @@ import { CreditService } from '../../services/credit';
   templateUrl: './sidebar.html',
   styles: [`
     :host {
-      @apply fixed left-0 top-0 h-full w-64 border-r border-opacity-10 dark:border-white/5 transition-all duration-500 z-50;
-      background: var(--card-bg);
-      border-color: var(--border-color);
+      @apply block z-50;
     }
     
     .nav-item {
@@ -46,12 +45,14 @@ import { CreditService } from '../../services/credit';
 export class SidebarComponent {
   supabase = inject(SupabaseService);
   creditService = inject(CreditService);
+  layout = inject(LayoutService);
 
   readonly Search = Search;
   readonly Table = Table;
   readonly Settings = Settings;
   readonly CreditCard = CreditCard;
   readonly ChevronRight = ChevronRight;
+  readonly ChevronLeft = ChevronLeft;
   readonly LayoutDashboard = LayoutDashboard;
   readonly BrainCircuit = BrainCircuit;
   readonly History = History;
