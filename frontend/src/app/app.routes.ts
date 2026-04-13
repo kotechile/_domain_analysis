@@ -12,6 +12,8 @@ import { ImportComponent } from './pages/import/import';
 import { HostHomeComponent } from './pages/host-home/host-home';
 import { ScoutLandingComponent } from './pages/scout-landing/scout-landing';
 import { ContentLandingComponent } from './pages/content-landing/content-landing';
+import { TermsComponent } from './pages/legal/terms';
+import { PrivacyComponent } from './pages/legal/privacy';
 
 export const routes: Routes = [
     { path: '', component: HostHomeComponent },
@@ -19,6 +21,8 @@ export const routes: Routes = [
     { path: 'content', component: ContentLandingComponent },
     { path: 'login', component: LoginComponent },
     { path: 'auth/callback', component: AuthCallbackComponent },
+    { path: 'terms', component: TermsComponent },
+    { path: 'privacy', component: PrivacyComponent },
     { path: 'app', component: MarketplaceComponent, canActivate: [AuthGuard] },
     { path: 'deepanalysis', component: DomainAnalysisComponent, canActivate: [AuthGuard] },
     { path: 'app/deepanalysis', redirectTo: 'deepanalysis', pathMatch: 'full' },

@@ -108,19 +108,27 @@ async def get_payments( limit: int = 20, offset: int = 0, current_user = Depends
 async def purchase_credits( request: PurchaseRequest, current_user = Depends(get_current_user) ):
     """
     Simulate a credit purchase. In a real app, this would be handled via payment gateway webhooks. """
-    try:
-        if request.amount <= 0:
-            raise HTTPException(status_code=400, detail="Amount must be positive")
-            
-        db = get_database()
-        credits_service = CreditsService(db)
-        
-        # Generate a reference ID if not provided
-        ref_id = request.reference_id or f"purchase_{int(datetime.utcnow().timestamp())}"
-        
-        new_balance = await credits_service.add_credits( user_id=current_user.id, amount=request.amount, description=request.description, reference_id=ref_id )
-        
-        return PurchaseResponse( success=True, new_balance=new_balance, message="Credits added successfully" )
-    except Exception as e:
-        logger.error("Failed to purchase credits", user_id=str(current_user.id), error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to process purchase")
+    # Disable direct purchases in production for security.
+    # Must use a hosted checkout session and process via webhook.
+    raise HTTPException(status_code=501, detail="Direct purchases are disabled in production. Please use the hosted Stripe checkout flow.")
+
+from fastapi import Request
+
+@router.post("/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    """
+    Secure webhook for Stripe events (e.g., checkout.session.completed).
+    Must verify Stripe signature before granting credits.
+    """
+    # payload = await request.body()
+    # sig_header = request.headers.get("stripe-signature")
+    
+    # TODO: Verify signature using stripe.Webhook.construct_event
+    # event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    
+    # if event['type'] == 'checkout.session.completed':
+    #     session = event['data']['object']
+    #     user_id = session.get('client_reference_id')
+    #     # give credits based on session.amount_total
+    
+    return {"status": "success", "message": "Webhook placeholder active"}
