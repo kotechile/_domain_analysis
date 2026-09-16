@@ -115,3 +115,46 @@ def test_generate_domain_analysis_pdf_handles_extended_sections():
 
     assert pdf_bytes.startswith(b"%PDF")
     assert len(pdf_bytes) > 1000
+
+
+def test_generate_domain_analysis_pdf_long_urls():
+    service = PDFService()
+    long_url = "https://wellroost.com/unveiling-the-emporia-vue-energy-monitor-your-path-to-energy-efficiency/?query=param&test=1#anchor"
+    cell = service._fmt_url_cell(long_url)
+    assert cell is not None
+    # Verify XML escaping and zero-width spaces
+    assert "https" in cell.text
+    assert "&amp;" in cell.text
+
+    payload = {
+        "analysis_timestamp": "2026-04-11T20:00:00Z",
+        "keywords": {
+            "total_count": 1,
+            "items": [
+                {
+                    "keyword": "emporia vue monitor",
+                    "position": 3,
+                    "search_volume": 4500,
+                    "cpc": 2.10,
+                    "ranking_url": long_url,
+                }
+            ],
+        },
+        "backlinks": {
+            "total_count": 1,
+            "items": [
+                {
+                    "domain": "source.example",
+                    "domain_rank": 70,
+                    "url_from": "https://source.example/very/deep/article/path/about/energy/efficiency",
+                    "anchor_text": "energy efficiency",
+                    "url_to": long_url,
+                }
+            ],
+        },
+    }
+
+    pdf_bytes = service.generate_domain_analysis_pdf("wellroost.com", payload)
+    assert pdf_bytes.startswith(b"%PDF")
+    assert len(pdf_bytes) > 1000
+

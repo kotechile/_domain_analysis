@@ -47,6 +47,66 @@
                     }
                 </button>
 
+                <div class="relative shrink-0">
+                    <button (click)="toggleSavedQueries()"
+                        class="h-11 px-5 rounded-xl text-xs font-semibold uppercase tracking-widest flex items-center space-x-2 transition-all border border-opacity-20 active:scale-95 relative"
+                        [style.background]="showSavedQueries() ? 'rgba(var(--accent-color-rgb), 0.1)' : 'var(--card-bg)'"
+                        [style.color]="showSavedQueries() ? 'var(--accent-color)' : 'var(--text-color)'"
+                        [style.borderColor]="showSavedQueries() ? 'rgba(var(--accent-color-rgb), 0.25)' : 'rgba(var(--accent-color-rgb), 0.25)'">
+                        <i-lucide [name]="Bookmark" class="w-4 h-4"></i-lucide>
+                        <span>Saved</span>
+                        @if (savedQueries().length > 0) {
+                        <span
+                            class="absolute -top-1 -right-1 w-5 h-5 bg-accent-color text-white text-[10px] flex items-center justify-center rounded-full">
+                            {{ savedQueries().length }}
+                        </span>
+                        }
+                    </button>
+                    @if (showSavedQueries()) {
+                    <div class="absolute right-0 top-full mt-2 z-50 w-80 rounded-2xl shadow-2xl border border-opacity-10 overflow-hidden"
+                        style="background: var(--card-bg); border-color: var(--border-color)">
+                        <div class="p-4 border-b border-opacity-10" style="border-color: var(--border-color)">
+                            <div class="flex items-center space-x-2">
+                                <input type="text" [ngModel]="saveQueryName()"
+                                    (ngModelChange)="saveQueryName.set($event)"
+                                    placeholder="Save current filters as..."
+                                    class="flex-1 h-9 px-3 rounded-lg text-xs font-semibold outline-none ring-1 ring-black/5 dark:ring-white/10 bg-black/5 dark:bg-white/5"
+                                    style="color: var(--text-color)">
+                                <button (click)="saveCurrentQuery()"
+                                    class="h-9 px-3 rounded-lg text-xs font-semibold uppercase transition-all active:scale-95"
+                                    style="background: var(--accent-color); color: white;">
+                                    <i-lucide [name]="Save" class="w-3.5 h-3.5"></i-lucide>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto">
+                            @if (savedQueries().length === 0) {
+                            <div class="p-4 text-xs opacity-40 text-center">No saved queries yet</div>
+                            } @else {
+                            @for (sq of savedQueries(); track sq.id) {
+                            <button (click)="loadSavedQuery(sq)"
+                                class="w-full flex items-center justify-between px-4 py-3 hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-left"
+                                style="color: var(--text-color)">
+                                <div class="flex items-center space-x-3 min-w-0">
+                                    <i-lucide [name]="Search" class="w-3.5 h-3.5 opacity-40 shrink-0"></i-lucide>
+                                    <div class="min-w-0">
+                                        <div class="text-xs font-semibold truncate">{{ sq.name }}</div>
+                                        <div class="text-[10px] opacity-40 truncate">{{ sq.query_params | json }}</div>
+                                    </div>
+                                </div>
+                                <button (click)="deleteSavedQuery(sq, $event)"
+                                    class="shrink-0 p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-500 transition-all"
+                                    title="Delete saved query">
+                                    <i-lucide [name]="Trash2" class="w-3.5 h-3.5 opacity-40"></i-lucide>
+                                </button>
+                            </button>
+                            }
+                            }
+                        </div>
+                    </div>
+                    }
+                </div>
+
                 <div class="relative group shrink-0">
                     <button (click)="triggerBulkRefresh()"
                         [disabled]="fillGapsInProgress() || postRefreshSyncInProgress()"
@@ -246,7 +306,29 @@
             </svg>
         </button>
 
-        <div class="grid grid-cols-1 lg:grid-cols-6 gap-8">
+        <div class="grid grid-cols-1 lg:grid-cols-8 gap-8">
+            <!-- Keyword Match -->
+            <div class="space-y-4">
+                <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">Keyword Match</span>
+                <div class="relative">
+                    <input type="text"
+                        [ngModel]="keyword()"
+                        (ngModelChange)="onKeywordChange($event)"
+                        placeholder="e.g. crypto, ai, shop..."
+                        class="w-full h-11 px-4 rounded-xl text-xs font-semibold outline-none ring-1 ring-black/5 dark:ring-white/10 bg-black/5 dark:bg-white/5 transition-all focus:ring-2 focus:ring-accent-color"
+                        style="color: var(--text-color)">
+                    @if (keyword()) {
+                    <button (click)="clearKeyword()"
+                        class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                        <svg class="w-3.5 h-3.5 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                    }
+                </div>
+                <span class="text-[10px] opacity-30 leading-relaxed block">Finds domains containing the keyword in the name (trigram-accelerated)</span>
+            </div>
+
             <!-- Platforms -->
             <div class="space-y-4">
                 <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">Core Platforms</span>
@@ -352,7 +434,7 @@
                                 }
                             </div>
                         </div>
-                        <span class="text-xs font-semibold" style="color: var(--text-color)">Name Scored Only</span>
+                        <span class="text-xs font-semibold" style="color: var(--text-color)">Scored Only </span>
                     </label>
                 </div>
             </div>
@@ -368,6 +450,22 @@
                     <span class="opacity-20 font-semibold">TO</span>
                     <input type="number" placeholder="Max" [ngModel]="maxScore()"
                         (ngModelChange)="maxScore.set($event); offset.set(0)"
+                        class="w-full h-11 px-4 rounded-xl bg-black/5 dark:bg-white/5 border-none text-xs font-semibold outline-none ring-1 ring-black/5 dark:ring-white/10"
+                        style="color: var(--text-color)">
+                </div>
+            </div>
+
+            <!-- Price Range -->
+            <div class="space-y-4">
+                <span class="text-[10px] font-semibold uppercase opacity-40 tracking-widest block">Price Range ($)</span>
+                <div class="flex items-center space-x-3">
+                    <input type="number" placeholder="Min" [ngModel]="minPrice()"
+                        (ngModelChange)="minPrice.set($event); offset.set(0)"
+                        class="w-full h-11 px-4 rounded-xl bg-black/5 dark:bg-white/5 border-none text-xs font-semibold outline-none ring-1 ring-black/5 dark:ring-white/10"
+                        style="color: var(--text-color)">
+                    <span class="opacity-20 font-semibold">TO</span>
+                    <input type="number" placeholder="Max" [ngModel]="maxPrice()"
+                        (ngModelChange)="maxPrice.set($event); offset.set(0)"
                         class="w-full h-11 px-4 rounded-xl bg-black/5 dark:bg-white/5 border-none text-xs font-semibold outline-none ring-1 ring-black/5 dark:ring-white/10"
                         style="color: var(--text-color)">
                 </div>

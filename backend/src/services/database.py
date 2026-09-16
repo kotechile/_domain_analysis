@@ -875,7 +875,7 @@ class DatabaseService:
                     result = await client.table('domain_backlinks') \
                         .select('*', count='exact') \
                         .eq('domain_name', domain_name) \
-                        .order('dr', False, nulls_last=True) \
+                        .order('dr', desc=True, nullsfirst=False) \
                         .range(offset, offset + limit - 1) \
                         .execute()
                     logger.info(
@@ -895,7 +895,7 @@ class DatabaseService:
                         result = await client.table('domain_backlinks') \
                             .select('*', count='exact') \
                             .eq('domain_name', domain_name) \
-                            .order('created_at', False) \
+                            .order('created_at', desc=False) \
                             .range(offset, offset + limit - 1) \
                             .execute()
                         logger.info(
@@ -945,11 +945,11 @@ class DatabaseService:
             query = client.table(table_name).select('*').eq('domain_name', domain_name).range(offset, offset + limit - 1)
 
             if data_type == DetailedDataType.KEYWORDS:
-                query = query.order('position', True)
+                query = query.order('position', desc=False)
             elif data_type == DetailedDataType.REFERRING_DOMAINS:
-                query = query.order('dr', False).order('backlinks_count', False)
+                query = query.order('dr', desc=True).order('backlinks_count', desc=True)
             elif data_type == DetailedDataType.BACKLINKS:
-                query = query.order('dr', False, nulls_last=True)
+                query = query.order('dr', desc=True, nullsfirst=False)
 
             result = await query.execute()
 
@@ -1929,6 +1929,83 @@ class DatabaseService:
             logger.error("Failed to mark has_statistics", error=str(e))
             raise
     
+    @staticmethod
+    def _sanitize_sql_value(value: str) -> str:
+        return value.replace("'", "''").replace("\\", "\\\\").replace("\0", "")
+
+    @staticmethod
+    def _sanitize_sql_identifier(name: str) -> str:
+        allowed = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+        if not allowed.match(name):
+            raise ValueError(f"Invalid SQL identifier: {name}")
+        return name
+
+    def _build_where_conditions(self, filters: Optional[Dict[str, Any]] = None) -> List[str]:
+        where_conditions = ["to_delete = FALSE"]
+        if not filters:
+            return where_conditions
+
+        if filters.get('preferred') is not None:
+            where_conditions.append(f"preferred = {str(filters['preferred']).lower()}")
+        if filters.get('auction_site'):
+            site = self._sanitize_sql_value(str(filters['auction_site']).lower().replace(' ', ''))
+            where_conditions.append(f"auction_site = '{site}'")
+        if filters.get('offering_type'):
+            ot = self._sanitize_sql_value(filters['offering_type'].lower().strip())
+            where_conditions.append(f"offer_type = '{ot}'")
+        if filters.get('search'):
+            s = self._sanitize_sql_value(filters['search'])
+            where_conditions.append(f"domain ILIKE '%{s}%'")
+        if filters.get('tld'):
+            tld = filters['tld']
+            if not tld.startswith('.'):
+                tld = '.' + tld
+            tld = self._sanitize_sql_value(tld)
+            where_conditions.append(f"domain ILIKE '%{tld}'")
+        if filters.get('tlds'):
+            tlds = filters['tlds']
+            if isinstance(tlds, list) and len(tlds) > 0:
+                normalized_tlds = [t if t.startswith('.') else f'.{t}' for t in tlds if t]
+                if normalized_tlds:
+                    tld_conditions = " OR ".join([f"domain ILIKE '%{self._sanitize_sql_value(tld)}%'" for tld in normalized_tlds])
+                    where_conditions.append(f"({tld_conditions})")
+        if filters.get('expiration_from_date'):
+            efd = self._sanitize_sql_value(str(filters['expiration_from_date']))
+            where_conditions.append(f"expiration_date >= '{efd}'")
+        if filters.get('expiration_to_date'):
+            exp_to = filters['expiration_to_date']
+            if isinstance(exp_to, str) and len(exp_to) == 10:
+                exp_to = f"{exp_to}T23:59:59"
+            exp_to = self._sanitize_sql_value(str(exp_to))
+            where_conditions.append(f"expiration_date <= '{exp_to}'")
+        if filters.get('min_score') is not None:
+            where_conditions.append(f"score >= {float(filters['min_score'])}")
+        if filters.get('max_score') is not None:
+            where_conditions.append(f"score <= {float(filters['max_score'])}")
+        if filters.get('min_price') is not None:
+            where_conditions.append(f"current_bid >= {float(filters['min_price'])}")
+        if filters.get('max_price') is not None:
+            where_conditions.append(f"current_bid <= {float(filters['max_price'])}")
+        if filters.get('keyword'):
+            kw = self._sanitize_sql_value(filters['keyword'])
+            where_conditions.append(f"domain ILIKE '%{kw}%'")
+        if filters.get('auction_sites') and isinstance(filters['auction_sites'], list):
+            sanitized = ", ".join([f"'{self._sanitize_sql_value(s)}'" for s in filters['auction_sites']])
+            where_conditions.append(f"auction_site IN ({sanitized})")
+        if filters.get('min_rank') is not None:
+            where_conditions.append(f"name_rank >= {int(filters['min_rank'])}")
+        if filters.get('max_rank') is not None:
+            where_conditions.append(f"name_rank <= {int(filters['max_rank'])}")
+        if filters.get('scored') is not None:
+            if filters['scored']:
+                where_conditions.append("score > 0")
+            else:
+                where_conditions.append("(score IS NULL OR score = 0)")
+        if filters.get('has_statistics') is not None:
+            where_conditions.append(f"has_statistics = {str(filters['has_statistics']).lower()}")
+
+        return where_conditions
+
     async def get_auctions_with_statistics( self, filters: Optional[Dict[str, Any]] = None, sort_by: str = 'expiration_date', order: str = 'asc', limit: int = 100, offset: int = 0 ) -> Dict[str, Any]:
         """
         Get auctions with joined statistics from bulk_domain_analysis
@@ -2021,10 +2098,16 @@ class DatabaseService:
                     query = query.gte('score', filters['min_score'])
                 if filters.get('max_score') is not None:
                     query = query.lte('score', filters['max_score'])
+                if filters.get('min_price') is not None:
+                    query = query.gte('current_bid', filters['min_price'])
+                if filters.get('max_price') is not None:
+                    query = query.lte('current_bid', filters['max_price'])
+                if filters.get('keyword'):
+                    query = query.ilike('domain', f"%{filters['keyword']}%")
             
             # Default: only show auctions that haven't expired yet
             # Apply this if no expiration_from_date filter is provided AND user is NOT searching for a specific domain
-            if not filters or not (filters.get('expiration_from_date') or filters.get('search')):
+            if not filters or not (filters.get('expiration_from_date') or filters.get('search') or filters.get('keyword')):
                 # Use current UTC time
                 now = datetime.now(timezone.utc).isoformat()
                 query = query.gte('expiration_date', now)
@@ -2045,74 +2128,30 @@ class DatabaseService:
             total_count = 0  # Initialize for all paths
 
             if use_raw_sql:
-                # Build WHERE clause from filters
-                where_conditions = ["to_delete = FALSE"]
+                where_conditions = self._build_where_conditions(filters)
 
-                if filters:
-                    if filters.get('preferred') is not None:
-                        where_conditions.append(f"preferred = {str(filters['preferred']).lower()}")
-                    if filters.get('auction_site'):
-                        site = str(filters['auction_site']).lower().replace(' ', '')
-                        where_conditions.append(f"auction_site = '{site}'")
-                    if filters.get('offering_type'):
-                        where_conditions.append(f"offer_type = '{filters['offering_type'].lower().strip()}'")
-                    if filters.get('search'):
-                        where_conditions.append(f"domain ILIKE '%{filters['search']}%'")
-                    if filters.get('tld'):
-                        tld = filters['tld']
-                        if not tld.startswith('.'):
-                            tld = '.' + tld
-                        where_conditions.append(f"domain ILIKE '%{tld}'")
-                    if filters.get('tlds'):
-                        tlds = filters['tlds']
-                        if isinstance(tlds, list) and len(tlds) > 0:
-                            normalized_tlds = [t if t.startswith('.') else f'.{t}' for t in tlds if t]
-                            if normalized_tlds:
-                                tld_conditions = " OR ".join([f"domain ILIKE '%{tld}'" for tld in normalized_tlds])
-                                where_conditions.append(f"({tld_conditions})")
-                    if filters.get('expiration_from_date'):
-                        where_conditions.append(f"expiration_date >= '{filters['expiration_from_date']}'")
-                    if filters.get('expiration_to_date'):
-                        exp_to = filters['expiration_to_date']
-                        if isinstance(exp_to, str) and len(exp_to) == 10:
-                            exp_to = f"{exp_to}T23:59:59"
-                        where_conditions.append(f"expiration_date <= '{exp_to}'")
-                    if filters.get('min_score') is not None:
-                        where_conditions.append(f"score >= {filters['min_score']}")
-                    if filters.get('max_score') is not None:
-                        where_conditions.append(f"score <= {filters['max_score']}")
-                    if filters.get('auction_sites') and isinstance(filters['auction_sites'], list):
-                        sites = ", ".join([f"'{s}'" for s in filters['auction_sites']])
-                        where_conditions.append(f"auction_site IN ({sites})")
-                    if filters.get('scored') is not None:
-                        if filters['scored']:
-                            where_conditions.append("score > 0")
-                        else:
-                            where_conditions.append("(score IS NULL OR score = 0)")
-                    if filters.get('has_statistics') is not None:
-                        where_conditions.append(f"has_statistics = {str(filters['has_statistics']).lower()}")
-
-                # Default: only show auctions that haven't expired yet
-                if not filters or not (filters.get('expiration_from_date') or filters.get('search')):
+                if not filters or not (filters.get('expiration_from_date') or filters.get('search') or filters.get('keyword')):
                     now = datetime.now(timezone.utc).isoformat()
-                    where_conditions.append(f"expiration_date >= '{now}'")
+                    where_conditions.append(f"expiration_date >= '{self._sanitize_sql_value(now)}'")
 
                 where_clause = " AND ".join(where_conditions)
 
-                # For score field, also filter out 0 values
+                safe_sort = self._sanitize_sql_identifier(sort_by) if sort_by in valid_sort_fields else 'expiration_date'
+
                 score_filter = ""
-                if sort_by == 'score':
+                if safe_sort == 'score':
                     score_filter = " AND score > 0"
 
-                # Build SQL with NULLS LAST for descending sort
+                safe_limit = min(int(limit), 1000)
+                safe_offset = max(int(offset), 0)
+
                 sql = f"""
                 SELECT * FROM auctions
                 WHERE {where_clause}{score_filter}
-                ORDER BY {sort_by} DESC NULLS LAST, domain DESC
-                LIMIT {limit} OFFSET {offset}
+                ORDER BY {safe_sort} DESC NULLS LAST, domain DESC
+                LIMIT {safe_limit} OFFSET {safe_offset}
                 """
 
-                # Also build count query for accurate total
                 count_sql = f"""
                 SELECT COUNT(*) as count FROM auctions
                 WHERE {where_clause}{score_filter}
@@ -2177,7 +2216,13 @@ class DatabaseService:
                             query = query.gte('score', filters['min_score'])
                         if filters.get('max_score') is not None:
                             query = query.lte('score', filters['max_score'])
-                    if not filters or not (filters.get('expiration_from_date') or filters.get('search')):
+                        if filters.get('min_price') is not None:
+                            query = query.gte('current_bid', filters['min_price'])
+                        if filters.get('max_price') is not None:
+                            query = query.lte('current_bid', filters['max_price'])
+                        if filters.get('keyword'):
+                            query = query.ilike('domain', f"%{filters['keyword']}%")
+                    if not filters or not (filters.get('expiration_from_date') or filters.get('search') or filters.get('keyword')):
                         now = datetime.now(timezone.utc).isoformat()
                         query = query.gte('expiration_date', now)
                     if sort_by == 'score':
@@ -2779,28 +2824,30 @@ class DatabaseService:
         return await self.update_auction_page_statistics(domain, traffic_data)
 
     async def get_unique_tlds(self) -> List[str]:
-        """
-        Get all unique TLDs from the auctions table
-        
-        Returns:
-            List of unique TLDs (e.g., ['.com', '.ai', '.net'])
-        """
         client = await self._get_client()
         try:
-            # Fetch domains and extract TLDs
-            # Limit to a large enough sample of recent auctions to get the current TLDs
-            result = await client.table('auctions').select('domain').limit(10000).execute()
+            sql = """
+            SELECT DISTINCT '.' || LOWER(SPLIT_PART(domain, '.', -1)) AS tld
+            FROM auctions
+            WHERE to_delete = FALSE AND domain IS NOT NULL AND domain LIKE '%.%'
+            ORDER BY tld
+            """
+            try:
+                result = await client.rpc('exec_sql', {'sql': sql}).execute()
+                if result.data:
+                    return [row['tld'] for row in result.data if row.get('tld')]
+            except Exception:
+                logger.warning("RPC exec_sql not available for get_unique_tlds, falling back to PostgREST")
             
+            result = await client.table('auctions').select('domain').eq('to_delete', False).limit(10000).execute()
             tlds = set()
             for auction in result.data if result.data else []:
                 domain = auction.get('domain', '')
                 if '.' in domain:
-                    # ) Extract TLD (last part after last dot
                     parts = domain.rsplit('.', 1)
                     if len(parts) == 2:
                         tld = '.' + parts[1].lower()
                         tlds.add(tld)
-            
             return sorted(list(tlds))
         except Exception as e:
             logger.error("Failed to get unique TLDs", error=str(e), exc_info=True)

@@ -2,7 +2,7 @@ import { Injectable, inject, signal, effect, computed } from '@angular/core';
 import { ApiService } from './api';
 import { SupabaseService } from './supabase';
 import { firstValueFrom } from 'rxjs';
-import { BalanceResponse, TransactionResponse } from '../models/domain.model';
+import { BalanceResponse, TransactionResponse, PlansResponse, CreditPack, SubscriptionPlan } from '../models/domain.model';
 
 @Injectable({
   providedIn: 'root'
@@ -11,19 +11,17 @@ export class CreditService {
   private api = inject(ApiService);
   private auth = inject(SupabaseService);
 
-  // States
   balance = signal<number>(0);
   transactions = signal<TransactionResponse[]>([]);
   loading = signal<boolean>(false);
   error = signal<string | null>(null);
+  plans = signal<PlansResponse | null>(null);
+  plansLoading = signal<boolean>(false);
 
-  // Computed Values
   isLowBalance = computed(() => this.balance() < 10);
   formattedBalance = computed(() => `$${this.balance().toFixed(2)}`);
 
   constructor() {
-    // 1. Initial Load
-    // Try refreshing data regardless of auth state for development fallback
     this.refreshData();
 
     effect(() => {
@@ -32,9 +30,6 @@ export class CreditService {
         this.refreshData();
       }
     });
-
-    // 2. Local-only mock updates for immediate feedback (deduction prediction)
-    // In a real SaaS, we would also use Supabase Realtime here.
   }
 
   async refreshData() {
@@ -56,10 +51,46 @@ export class CreditService {
     }
   }
 
-  /**
-   * Mock a deduction for immediate UI feedback. 
-   * Useful when starting a long-running analysis.
-   */
+  async loadPlans() {
+    this.plansLoading.set(true);
+    try {
+      const plansRes = await firstValueFrom(this.api.getPlans());
+      this.plans.set(plansRes);
+    } catch (e: any) {
+      console.error('Failed to load plans:', e);
+    } finally {
+      this.plansLoading.set(false);
+    }
+  }
+
+  async checkout(priceId: string, mode: string = 'payment', quantity: number = 1): Promise<string | null> {
+    const baseUrl = window.location.origin;
+    const successUrl = `${baseUrl}/app/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
+    const cancelUrl = `${baseUrl}/app/billing?checkout=cancelled`;
+
+    try {
+      const res = await firstValueFrom(
+        this.api.createCheckoutSession(priceId, mode, quantity, successUrl, cancelUrl)
+      );
+
+      if (res.url) {
+        window.location.href = res.url;
+        return res.session_id;
+      }
+
+      if (res.session_id) {
+        return res.session_id;
+      }
+
+      this.error.set('Failed to start checkout. Stripe may not be configured.');
+      return null;
+    } catch (e: any) {
+      console.error('Checkout failed:', e);
+      this.error.set(e?.error?.detail || 'Checkout failed. Please try again.');
+      return null;
+    }
+  }
+
   async predictDeduction(amount: number) {
     this.balance.update(current => Math.max(0, current - amount));
   }
@@ -69,7 +100,7 @@ export class CreditService {
       const res = await firstValueFrom(this.api.purchaseCredits(amount, 'Top-up through Dashboard'));
       if (res.success) {
         this.balance.set(res.new_balance);
-        await this.refreshData(); // Sync full state
+        await this.refreshData();
         return true;
       }
       return false;

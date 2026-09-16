@@ -32,7 +32,7 @@ class DataForSEOAsyncService:
     async def _get_credentials(self) -> Optional[Dict[str, str]]:
         """Get DataForSEO credentials"""
         if self._credentials is None:
-            self._credentials = self.secrets_service.get_dataforseo_credentials()
+            self._credentials = await self.secrets_service.get_dataforseo_credentials()
         return self._credentials
 
     async def get_detailed_backlinks_async(self, domain: str, limit: int = 10000, user_id: Optional[UUID] = None) -> Tuple[Optional[Dict[str, Any]], float]:

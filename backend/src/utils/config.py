@@ -114,6 +114,16 @@ class Settings(BaseSettings):
     TOP_RANK_THRESHOLD: int = 3000
     SCORING_CACHE_TTL_HOURS: int = 1
     
+    # Stripe settings
+    STRIPE_SECRET_KEY: Optional[str] = None
+    STRIPE_PUBLISHABLE_KEY: Optional[str] = None
+    STRIPE_WEBHOOK_SECRET: Optional[str] = None
+    STRIPE_PRO_PRICE_ID: Optional[str] = None
+    STRIPE_AGENCY_PRICE_ID: Optional[str] = None
+    STRIPE_CREDIT_PACK_SMALL_PRICE_ID: Optional[str] = None
+    STRIPE_CREDIT_PACK_MEDIUM_PRICE_ID: Optional[str] = None
+    STRIPE_CREDIT_PACK_LARGE_PRICE_ID: Optional[str] = None
+
     # Security settings
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30

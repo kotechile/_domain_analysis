@@ -1,0 +1,177 @@
+<div class="pricing-page">
+  <header class="pricing-header">
+    <a routerLink="/" class="brand">Buildomain</a>
+    <nav class="pricing-nav">
+      <a href="#tiers">Plans</a>
+      <a href="#credits">Credit Packs</a>
+      <a href="#faq">FAQ</a>
+      <a class="signin-link" routerLink="/login">Sign In</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero-pricing">
+      <p class="eyebrow">Pricing</p>
+      <h1>Find better domains. Pay for what you use.</h1>
+      <p class="hero-sub">Start free. Upgrade when Scout becomes your go-to research tool.</p>
+    </section>
+
+    <section id="tiers" class="tiers-section">
+      <div class="tiers-grid">
+        <!-- Free Tier -->
+        <div class="tier-card">
+          <div class="tier-icon">
+            <i-lucide [name]="Star" class="w-6 h-6"></i-lucide>
+          </div>
+          <h2 class="tier-name">Scout Free</h2>
+          <div class="tier-price">
+            <span class="price-amount">$0</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="tier-tagline">Try Scout on a small scale</p>
+          <ul class="tier-features">
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> 3 domain analyses per month</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Marketplace browsing</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Basic domain scoring</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Community support</li>
+          </ul>
+          <a class="tier-cta tier-cta-secondary" routerLink="/login">
+            Create Free Account
+            <i-lucide [name]="ArrowRight" class="w-4 h-4"></i-lucide>
+          </a>
+        </div>
+
+        <!-- Pro Tier -->
+        <div class="tier-card tier-popular">
+          <div class="popular-badge">Most Popular</div>
+          <div class="tier-icon tier-icon-accent">
+            <i-lucide [name]="Zap" class="w-6 h-6"></i-lucide>
+          </div>
+          <h2 class="tier-name">Scout Pro</h2>
+          <div class="tier-price">
+            <span class="price-amount">$19</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="tier-tagline">For active domain investors</p>
+          <ul class="tier-features">
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> 200 credits per month</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Unlimited marketplace browsing</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Full domain deep reports</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Bulk metric enrichment</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Priority processing</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Email support</li>
+          </ul>
+          <a class="tier-cta tier-cta-primary" routerLink="/login">
+            Start Pro Trial
+            <i-lucide [name]="ArrowRight" class="w-4 h-4"></i-lucide>
+          </a>
+        </div>
+
+        <!-- Agency Tier -->
+        <div class="tier-card">
+          <div class="tier-icon tier-icon-accent">
+            <i-lucide [name]="Crown" class="w-6 h-6"></i-lucide>
+          </div>
+          <h2 class="tier-name">Scout Agency</h2>
+          <div class="tier-price">
+            <span class="price-amount">$49</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="tier-tagline">Unlimited research power</p>
+          <ul class="tier-features">
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Unlimited credits</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Everything in Pro</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> API access</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Team collaboration</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Dedicated support</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Priority feature requests</li>
+          </ul>
+          <a class="tier-cta tier-cta-secondary" routerLink="/login">
+            Start Agency Trial
+            <i-lucide [name]="ArrowRight" class="w-4 h-4"></i-lucide>
+          </a>
+        </div>
+      </div>
+
+      <p class="tier-note">All plans include a free tier. No credit card required to start.</p>
+    </section>
+
+    <section id="credits" class="credits-section">
+      <div class="section-heading">
+        <p class="eyebrow">Credit packs</p>
+        <h2>Need more credits without a subscription?</h2>
+        <p class="section-subtitle">One-time credit packs for occasional researchers.</p>
+      </div>
+
+      <div class="credits-grid">
+        @for (pack of creditPacks; track pack.label) {
+        <div class="credit-card" [class.credit-popular]="pack.popular">
+          @if (pack.popular) {
+          <div class="credit-badge">Best Value</div>
+          }
+          <div class="credit-amount">{{ pack.credits | number }} credits</div>
+          <div class="credit-price">${{ pack.price }}</div>
+          <div class="credit-per">{{ (pack.price / pack.credits * 100) | number:'1.2' }}&cent;/credit</div>
+          <p class="credit-desc">{{ pack.description }}</p>
+        </div>
+        }
+      </div>
+    </section>
+
+    <section class="pay-per-section">
+      <div class="pay-per-card">
+        <div class="pay-per-content">
+          <h2>Pay per report</h2>
+          <p>Just need a single deep analysis? Buy individual domain reports for just <strong>$2.99</strong>.</p>
+          <ul class="tier-features">
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> No subscription needed</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> Full deep report with backlinks, keywords, history</li>
+            <li><i-lucide [name]="Check" class="feature-check"></i-lucide> AI-assisted investment analysis</li>
+          </ul>
+          <a class="tier-cta tier-cta-secondary" routerLink="/login">
+            Buy a Report
+            <i-lucide [name]="ArrowRight" class="w-4 h-4"></i-lucide>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="faq-section">
+      <div class="section-heading">
+        <p class="eyebrow">FAQ</p>
+        <h2>Pricing questions, answered.</h2>
+      </div>
+      <div class="faq-list">
+        <article>
+          <h3>What counts as a credit?</h3>
+          <p>One credit is consumed each time you run a full domain analysis. Browsing the marketplace and viewing basic scores are free on all plans.</p>
+        </article>
+        <article>
+          <h3>Do credits expire?</h3>
+          <p>Credits from monthly subscriptions reset each billing cycle. Credits purchased as one-time packs do not expire.</p>
+        </article>
+        <article>
+          <h3>Can I switch plans?</h3>
+          <p>Yes. Upgrade or downgrade at any time from your billing page. When you upgrade, the new credits are available immediately.</p>
+        </article>
+        <article>
+          <h3>What happens if I run out of credits?</h3>
+          <p>You can buy credit packs or upgrade your plan at any time. You'll always have access to free-tier marketplace browsing.</p>
+        </article>
+        <article>
+          <h3>Is there a refund policy?</h3>
+          <p>Credits are allocated for analysis compute and are non-refundable after use. Unused subscription credits roll over if you stay on the same plan.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="final-cta">
+      <h2>Start finding better domains today.</h2>
+      <p>Free tier. No credit card required.</p>
+      <a class="tier-cta tier-cta-primary" routerLink="/login">
+        Create Free Account
+        <i-lucide [name]="ArrowRight" class="w-4 h-4"></i-lucide>
+      </a>
+    </section>
+  </main>
+</div>

@@ -144,6 +144,21 @@ export class ApiService {
     return this.http.get<Models.TransactionResponse[]>(`${this.baseUrl}/credits/payments`, { params });
   }
 
+  getPlans(): Observable<Models.PlansResponse> {
+    return this.http.get<Models.PlansResponse>(`${this.baseUrl}/credits/plans`);
+  }
+
+  createCheckoutSession(priceId: string, mode: string = 'payment', quantity: number = 1, successUrl?: string, cancelUrl?: string): Observable<Models.CheckoutResponse> {
+    const body: Models.CheckoutRequest = {
+      price_id: priceId,
+      mode,
+      quantity,
+      success_url: successUrl,
+      cancel_url: cancelUrl
+    };
+    return this.http.post<Models.CheckoutResponse>(`${this.baseUrl}/credits/checkout`, body);
+  }
+
   triggerDomainRefresh(domain: string): Observable<{ success: boolean; message: string; credits_deducted: number }> {
     return this.http.post<{ success: boolean; message: string; credits_deducted: number }>(
       `${this.baseUrl}/auctions/domain-refresh`,
@@ -226,5 +241,23 @@ export class ApiService {
   validateDomain(domain: string): boolean {
     const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/;
     return domainRegex.test(domain);
+  }
+
+  getSavedQueries(): Observable<Models.SavedQueryListResponse> {
+    return this.http.get<Models.SavedQueryListResponse>(`${this.baseUrl}/saved-queries`);
+  }
+
+  createSavedQuery(name: string, queryParams: Record<string, any>, isDefault: boolean = false): Observable<Models.SavedQueryCreateResponse> {
+    return this.http.post<Models.SavedQueryCreateResponse>(`${this.baseUrl}/saved-queries`, {
+      name, query_params: queryParams, is_default: isDefault
+    });
+  }
+
+  updateSavedQuery(queryId: string, data: { name?: string; query_params?: Record<string, any>; is_default?: boolean }): Observable<{ success: boolean; query: Models.SavedQuery }> {
+    return this.http.put<{ success: boolean; query: Models.SavedQuery }>(`${this.baseUrl}/saved-queries/${queryId}`, data);
+  }
+
+  deleteSavedQuery(queryId: string): Observable<{ success: boolean; message: string }> {
+    return this.http.delete<{ success: boolean; message: string }>(`${this.baseUrl}/saved-queries/${queryId}`);
   }
 }

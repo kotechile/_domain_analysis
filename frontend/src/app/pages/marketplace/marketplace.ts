@@ -1,19 +1,19 @@
 import { Component, HostListener, inject, signal, computed, effect, OnInit, untracked, OnDestroy } from '@angular/core';
-import { CommonModule, TitleCasePipe, DatePipe, DecimalPipe } from '@angular/common';
+import { CommonModule, TitleCasePipe, DatePipe, DecimalPipe, JsonPipe } from '@angular/common';
 import { RouterLink, ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api';
-import { LucideAngularModule, Filter, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Sparkles, TrendingUp, History, ShieldCheck, Star, Target, Menu, X, Gauge, MoreVertical } from 'lucide-angular';
+import { LucideAngularModule, Filter, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, Sparkles, TrendingUp, History, ShieldCheck, Star, Target, Menu, X, Gauge, MoreVertical, Save, Bookmark, Trash2, Search } from 'lucide-angular';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { CreditService } from '../../services/credit';
 import { firstValueFrom, interval, Subscription } from 'rxjs';
 import { switchMap, takeWhile, take } from 'rxjs/operators';
-import { Auction } from '../../models/domain.model';
+import { Auction, SavedQuery } from '../../models/domain.model';
 
 @Component({
   selector: 'app-marketplace',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule, LucideAngularModule, DatePipe, MatSnackBarModule],
+  imports: [CommonModule, RouterLink, FormsModule, LucideAngularModule, DatePipe, MatSnackBarModule, JsonPipe],
   templateUrl: './marketplace.html',
   styles: [`
     .table-container {
@@ -101,6 +101,10 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   readonly X = X;
   readonly Gauge = Gauge;
   readonly MoreVertical = MoreVertical;
+  readonly Save = Save;
+  readonly Bookmark = Bookmark;
+  readonly Trash2 = Trash2;
+  readonly Search = Search;
 
   // State Signals
   auctions = signal<Auction[]>([]);
@@ -150,8 +154,20 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   expirationFromDate = signal<string>('');
   expirationToDate = signal<string>('');
 
+  // Price Range Filters
+  minPrice = signal<number | null>(null);
+  maxPrice = signal<number | null>(null);
+
+  // Keyword Match
+  keyword = signal<string>('');
+
   // Search
   searchText = signal<string>('');
+
+  // Saved Queries
+  savedQueries = signal<SavedQuery[]>([]);
+  showSavedQueries = signal<boolean>(false);
+  saveQueryName = signal<string>('');
 
   limit = signal<number>(50);
   offset = signal<number>(0);
@@ -168,6 +184,9 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (this.offeringType()) count++;
     if (this.expirationFromDate() || this.expirationToDate()) count++;
     if (this.searchText()) count++;
+    if (this.minPrice() !== null && this.minPrice() !== undefined) count++;
+    if (this.maxPrice() !== null && this.maxPrice() !== undefined) count++;
+    if (this.keyword()) count++;
     return count;
   });
 
@@ -214,6 +233,9 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
       this.expirationFromDate();
       this.expirationToDate();
       this.searchText();
+      this.minPrice();
+      this.maxPrice();
+      this.keyword();
       this.limit();
       this.offset();
 
@@ -532,7 +554,6 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
-    // Sync signals from URL query parameters on initial load so filters persist across refreshes
     const qp = this.route.snapshot.queryParams;
 
     if (qp['sort']) this.sortBy.set(qp['sort']);
@@ -546,10 +567,14 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (qp['tlds']) this.selectedTlds.set(qp['tlds'].split(',').filter(Boolean));
     if (qp['offering_type']) this.offeringType.set(qp['offering_type']);
     if (qp['search']) this.searchText.set(qp['search']);
+    if (qp['keyword']) this.keyword.set(qp['keyword']);
+    if (qp['min_price']) this.minPrice.set(Number(qp['min_price']));
+    if (qp['max_price']) this.maxPrice.set(Number(qp['max_price']));
     this.setExpirationRange(qp['exp_from'] || '', qp['exp_to'] || '');
 
     this.filtersHydrated = true;
     this.loadAvailableTlds();
+    this.loadSavedQueries();
     this.scheduleFetchAuctions();
   }
 
@@ -591,6 +616,9 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (this.offeringType()) filters['offering_type'] = this.offeringType();
     if (this.minScore() !== null) filters['min_score'] = this.minScore();
     if (this.maxScore() !== null) filters['max_score'] = this.maxScore();
+    if (this.minPrice() !== null) filters['min_price'] = this.minPrice();
+    if (this.maxPrice() !== null) filters['max_price'] = this.maxPrice();
+    if (this.keyword()) filters['keyword'] = this.keyword();
 
     // Include sort context so the top 1,000 domains refreshed match the top 1,000 domains in table
     const payload = {
@@ -670,6 +698,9 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     if (this.offeringType()) filters['offering_type'] = this.offeringType();
     if (this.minScore() !== null) filters['min_score'] = this.minScore();
     if (this.maxScore() !== null) filters['max_score'] = this.maxScore();
+    if (this.minPrice() !== null) filters['min_price'] = this.minPrice();
+    if (this.maxPrice() !== null) filters['max_price'] = this.maxPrice();
+    if (this.keyword()) filters['keyword'] = this.keyword();
 
     const payload = {
       filters,
@@ -742,6 +773,9 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     const currentOffset = this.offset();
     const currentLimit = this.limit();
     const search = this.searchText();
+    const minP = this.minPrice();
+    const maxP = this.maxPrice();
+    const kw = this.keyword();
 
     try {
       const filters = {
@@ -759,7 +793,10 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
         auction_sites: platforms.length > 0 ? platforms : undefined,
         tlds: tlds.length > 0 ? tlds : undefined,
         offering_type: offType || undefined,
-        search: search || undefined
+        search: search || undefined,
+        min_price: minP ?? undefined,
+        max_price: maxP ?? undefined,
+        keyword: kw || undefined
       };
 
       // Update URL silently so users can bookmark or refresh with current filters
@@ -776,7 +813,10 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
         offering_type: offType || undefined,
         exp_from: expFrom || undefined,
         exp_to: expTo || undefined,
-        search: search || undefined
+        search: search || undefined,
+        min_price: minP ?? undefined,
+        max_price: maxP ?? undefined,
+        keyword: kw || undefined
       };
 
       untracked(() => {
@@ -889,7 +929,109 @@ export class MarketplaceComponent implements OnInit, OnDestroy {
     this.offeringType.set('');
     this.expirationFromDate.set('');
     this.expirationToDate.set('');
+    this.minPrice.set(null);
+    this.maxPrice.set(null);
+    this.keyword.set('');
     this.offset.set(0);
+  }
+
+  async loadSavedQueries() {
+    try {
+      const res = await firstValueFrom(this.api.getSavedQueries());
+      this.savedQueries.set(res.queries || []);
+    } catch (e) {
+      console.warn('Failed to load saved queries (user may not be authenticated):', e);
+      this.savedQueries.set([]);
+    }
+  }
+
+  toggleSavedQueries() {
+    this.showSavedQueries.set(!this.showSavedQueries());
+  }
+
+  onKeywordChange(value: string) {
+    this.keyword.set(value);
+    this.offset.set(0);
+  }
+
+  clearKeyword() {
+    this.keyword.set('');
+    this.offset.set(0);
+  }
+
+  getCurrentFilterState(): Record<string, any> {
+    const filters: Record<string, any> = {};
+    if (this.preferredOnly()) filters['preferred'] = true;
+    if (this.scoredOnly()) filters['scored'] = true;
+    if (this.statisticsOnly()) filters['has_statistics'] = true;
+    if (this.expirationFromDate()) filters['expiration_from_date'] = this.expirationFromDate();
+    if (this.expirationToDate()) filters['expiration_to_date'] = this.expirationToDate();
+    if (this.selectedPlatforms().length) filters['auction_sites'] = this.selectedPlatforms();
+    if (this.selectedTlds().length) filters['tlds'] = this.selectedTlds();
+    if (this.offeringType()) filters['offering_type'] = this.offeringType();
+    if (this.minScore() !== null) filters['min_score'] = this.minScore();
+    if (this.maxScore() !== null) filters['max_score'] = this.maxScore();
+    if (this.minPrice() !== null) filters['min_price'] = this.minPrice();
+    if (this.maxPrice() !== null) filters['max_price'] = this.maxPrice();
+    if (this.keyword()) filters['keyword'] = this.keyword();
+    if (this.searchText()) filters['search'] = this.searchText();
+    filters['sort_by'] = this.sortBy();
+    filters['sort_order'] = this.sortOrder();
+    return filters;
+  }
+
+  async saveCurrentQuery() {
+    const name = this.saveQueryName().trim();
+    if (!name) {
+      this.snackBar.open('Enter a name for the saved query', 'Close', { duration: 3000 });
+      return;
+    }
+
+    try {
+      const queryParams = this.getCurrentFilterState();
+      const res = await firstValueFrom(this.api.createSavedQuery(name, queryParams));
+      this.savedQueries.set([res.query, ...this.savedQueries()]);
+      this.saveQueryName.set('');
+      this.snackBar.open(`Saved query "${name}"`, 'Close', { duration: 3000 });
+    } catch (e: any) {
+      const msg = e?.error?.detail || e?.message || 'Failed to save query';
+      this.snackBar.open(`Error: ${msg}`, 'Close', { duration: 5000 });
+    }
+  }
+
+  loadSavedQuery(sq: SavedQuery) {
+    const p = sq.query_params;
+    if (p['preferred']) this.preferredOnly.set(true);
+    if (p['scored']) this.scoredOnly.set(true);
+    if (p['has_statistics']) this.statisticsOnly.set(true);
+    if (p['expiration_from_date']) this.expirationFromDate.set(p['expiration_from_date']);
+    if (p['expiration_to_date']) this.expirationToDate.set(p['expiration_to_date']);
+    if (p['auction_sites']) this.selectedPlatforms.set(p['auction_sites']);
+    if (p['tlds']) this.selectedTlds.set(p['tlds']);
+    if (p['offering_type']) this.offeringType.set(p['offering_type']);
+    if (p['min_score'] !== undefined) this.minScore.set(p['min_score']);
+    if (p['max_score'] !== undefined) this.maxScore.set(p['max_score']);
+    if (p['min_price'] !== undefined) this.minPrice.set(p['min_price']);
+    if (p['max_price'] !== undefined) this.maxPrice.set(p['max_price']);
+    if (p['keyword']) this.keyword.set(p['keyword']);
+    if (p['search']) this.searchText.set(p['search']);
+    if (p['sort_by']) this.sortBy.set(p['sort_by']);
+    if (p['sort_order']) this.sortOrder.set(p['sort_order']);
+    this.offset.set(0);
+    this.showSavedQueries.set(false);
+    this.snackBar.open(`Loaded "${sq.name}"`, 'Close', { duration: 2000 });
+  }
+
+  async deleteSavedQuery(sq: SavedQuery, event: Event) {
+    event.stopPropagation();
+    try {
+      await firstValueFrom(this.api.deleteSavedQuery(sq.id));
+      this.savedQueries.set(this.savedQueries().filter(q => q.id !== sq.id));
+      this.snackBar.open(`Deleted "${sq.name}"`, 'Close', { duration: 2000 });
+    } catch (e: any) {
+      const msg = e?.error?.detail || e?.message || 'Failed to delete query';
+      this.snackBar.open(`Error: ${msg}`, 'Close', { duration: 5000 });
+    }
   }
 
   togglePlatform(platform: string) {

@@ -1111,10 +1111,9 @@ class LLMService:
         
         CRITICAL: Analyze the quality of referring domains by examining:
         1. Domain authority distribution (DR scores)
-        2. Diversity of referring domains
-        3. Presence of high-authority domains (DR 70+)
-        4. Geographic and topical diversity
-        5. Anchor text patterns and relevance
+        2. Diversity of referring domains and presence of high-authority domains (DR 70+)
+        3. Anchor text patterns and natural branding
+        4. Distinguish normal automated scraper/directory noise (ignored by search engines) from true toxic spam (hacked casino/pharma links)
         
         Historical Data:
         - Total Captures: {wayback.get('total_captures', 'N/A')}
@@ -1172,16 +1171,15 @@ class LLMService:
         Sample of Top Referring Domains (showing {len(referring_domains_data.get('items', [])[:30])} out of {referring_domains_data.get('total_count', 0)}):
         {self._format_detailed_referring_domains(referring_domains_data.get('items', [])[:30])}
         
-        DOMAIN BUYER BACKLINK ANALYSIS:
-        For domain buyers, analyze the backlink profile with focus on:
-        1. **Valuable Backlinks**: Identify specific high-quality backlinks that provide SEO value (include domain names and DR scores)
-        2. **Content Opportunities**: What topics/niches do the backlinks suggest for the new website?
-        3. **Risk Assessment**: Are there toxic or spammy backlinks that could hurt the new website?
-        4. **Link Equity Transfer**: How much SEO value will transfer to a new website on this domain?
-        5. **Geographic Relevance**: Do backlinks suggest a specific geographic market or language?
-        6. **Industry Relevance**: What industry or niche do the referring domains suggest?
-        7. **Anchor Text Analysis**: What keywords are being targeted by existing backlinks?
-        8. **Link Building Opportunities**: Which referring domains could be approached for new content?
+        DOMAIN BUYER BACKLINK ANALYSIS & REALISTIC SPAM CALIBRATION:
+        For domain buyers, analyze the backlink profile with modern SEO best practices:
+        1. **Valuable Backlinks**: Identify specific high-quality backlinks that provide real SEO value (include domain names and DR scores).
+        2. **Realistic Scraper & Directory Allowance**: Almost ALL active domains naturally accumulate automated directories, WHOIS scrapers, and bot link aggregators over time. Search engines (like Google with Penguin 4.0/SpamBrain) discount/nullify these background scraper links rather than actively penalizing the domain. DO NOT penalize or assign a CAUTION/NO-BUY verdict solely because of ambient scraper noise.
+        3. **Genuine Toxic Link Detection**: ONLY flag true toxic spam risk if there is clear evidence of malicious manipulation: e.g. hacked adult/casino/pharma anchor injections, foreign-language link farms, PBN manipulation, or negative SEO attacks.
+        4. **Anchor Text Profile Health**: Branded anchors (e.g. "{domain}", brand names), raw URLs, or generic anchors ("source", "website", "click here") are healthy indicators.
+        5. **Content & Niche Opportunities**: What topics/niches do the historical backlinks and content suggest for a new website?
+        6. **Link Equity Transfer**: How much genuine SEO authority will transfer to a new website on this domain?
+        7. **Geographic & Industry Relevance**: What language, market, or industry do the genuine referring domains suggest?
         
         HISTORICAL DATA:
         - Total Captures: {wayback_data.get('total_captures', 'N/A')}
@@ -1190,23 +1188,20 @@ class LLMService:
         
         CRITICAL BACKLINK QUALITY ASSESSMENT:
         Analyze the backlink profile quality by examining:
-        1. **Domain Authority Distribution**: Calculate percentage of backlinks from high-DR domains (70+)
-        2. **Link Diversity**: Assess variety of referring domains and anchor text patterns
-        3. **Link Relevance**: Evaluate topical relevance of referring domains to DataForSEO's business
-        4. **Anchor Text Quality**: Analyze anchor text diversity, over-optimization, and keyword targeting
-        5. **Link Types**: Identify dofollow vs nofollow ratios and link types
-        6. **Geographic Distribution**: Assess international link diversity
-        7. **Link Velocity**: Analyze backlink acquisition patterns over time
-        8. **Toxic Link Detection**: Identify potentially harmful or spammy backlinks
-        9. **Competitor Analysis**: Compare backlink profile to industry standards
-        10. **Link Equity Assessment**: Evaluate the overall value and authority transfer potential
+        1. **Domain Authority Distribution**: Percentage of backlinks from reputable high-DR domains (50+) vs low-tier noise
+        2. **Link Diversity**: Variety of genuine referring domains and natural anchor text patterns
+        3. **Link Relevance**: Topical relevance of referring domains to the domain's historical niche and future potential
+        4. **Anchor Text Quality**: Natural branding vs over-optimization or spam hack patterns
+        5. **Link Types**: Dofollow vs nofollow distribution
+        6. **Toxic Risk Filtering**: Distinguish harmless scraper noise from truly harmful/malicious backlinks
+        7. **Link Equity Assessment**: Overall value and authority transfer potential
         
         QUALITY SCORING CRITERIA:
-        - **Excellent (9-10)**: High-DR domains (80+), relevant anchor text, diverse sources
-        - **Good (7-8)**: Medium-DR domains (50-79), mostly relevant, good diversity
-        - **Fair (5-6)**: Mixed quality, some irrelevant links, moderate diversity
-        - **Poor (3-4)**: Low-DR domains (30-), many irrelevant links, limited diversity
-        - **Toxic (1-2)**: Spammy domains, over-optimized anchors, suspicious patterns
+        - **Excellent (9-10)**: High-DR authoritative domains (70+), reputable editorial links, clean natural anchors
+        - **Good (7-8)**: Solid niche-relevant backlinks, reputable referring domains, healthy anchor diversity
+        - **Fair (5-6)**: Moderate authority, standard web scraper noise alongside some valid links, clean non-spammy anchors
+        - **Poor (3-4)**: Thin profile, mostly low-tier scraper aggregators, but no active malware or penalties
+        - **Toxic (1-2)**: Explicit malicious manipulation (hacked casino/pharma anchors, adult injections, manual Google penalty evidence)
 
         CONFIDENCE SCORING GUIDELINES:
         The confidence_score (0.0 to 1.0) should reflect the reliability of the analysis based on data availability:

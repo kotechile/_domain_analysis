@@ -58,7 +58,7 @@ class UsageTrackingService:
                 
             # Calculate cost if not provided
             if cost_estimated == 0.0:
-                cost_estimated = self._pricing_service.calculate_cost( resource_type=resource_type, provider=provider, model=model, tokens_input=tokens_input, tokens_output=tokens_output, details=details )
+                cost_estimated = await self._pricing_service.calculate_cost( resource_type=resource_type, provider=provider, model=model, tokens_input=tokens_input, tokens_output=tokens_output, details=details )
             
             # Deduct credits if cost > 0 and user is present
             if user_id and cost_estimated > 0:
@@ -67,7 +67,7 @@ class UsageTrackingService:
                     description = f"Usage: {resource_type} - {operation}"
                     reference_id = details.get('reference_id') or details.get('domain')
                     
-                    success = self.credits_service.deduct_credits( user_id=user_id, amount=cost_estimated, description=description, reference_id=reference_id )
+                    success = await self.credits_service.deduct_credits( user_id=user_id, amount=cost_estimated, description=description, reference_id=reference_id )
                     
                     if not success:
                         logger.warning("Insufficient credits for usage", user_id=str(user_id), cost=cost_estimated)

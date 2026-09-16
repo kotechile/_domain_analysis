@@ -307,8 +307,14 @@
                                             }}</span>
                                     </div>
                                 </td>
-                                <td class="p-4 text-xs opacity-60 max-w-[20rem] truncate" style="color: var(--text-color)">
-                                    {{ getKeywordUrl(kw) || 'N/A' }}
+                                <td class="p-4 text-xs max-w-[20rem]" style="color: var(--text-color)">
+                                    @if (getKeywordUrl(kw)) {
+                                        <a [href]="getKeywordUrl(kw)" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline truncate block" [title]="getKeywordUrl(kw)">
+                                            {{ getKeywordUrl(kw) }}
+                                        </a>
+                                    } @else {
+                                        <span class="opacity-60">N/A</span>
+                                    }
                                 </td>
                             </tr>
                             } @empty {
@@ -687,14 +693,26 @@
                                         DR {{ link.domain_rank }}
                                     </span>
                                 </td>
-                                <td class="p-4 text-xs opacity-60 max-w-[16rem] truncate" style="color: var(--text-color)">
-                                    {{ link.url_from || 'N/A' }}
+                                <td class="p-4 text-xs max-w-[16rem]" style="color: var(--text-color)">
+                                    @if (link.url_from) {
+                                        <a [href]="link.url_from" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline truncate block" [title]="link.url_from">
+                                            {{ link.url_from }}
+                                        </a>
+                                    } @else {
+                                        <span class="opacity-60">N/A</span>
+                                    }
                                 </td>
                                 <td class="p-4">
                                     <span class="text-xs font-bold opacity-60" style="color: var(--text-color)">{{ link.anchor_text || 'Generic / Navigational' }}</span>
                                 </td>
-                                <td class="p-4 text-right text-xs opacity-60 max-w-[16rem] truncate" style="color: var(--text-color)">
-                                    {{ link.url_to || 'N/A' }}
+                                <td class="p-4 text-right text-xs max-w-[16rem]" style="color: var(--text-color)">
+                                    @if (link.url_to) {
+                                        <a [href]="link.url_to" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:underline truncate block text-right" [title]="link.url_to">
+                                            {{ link.url_to }}
+                                        </a>
+                                    } @else {
+                                        <span class="opacity-60">N/A</span>
+                                    }
                                 </td>
                             </tr>
                             } @empty {

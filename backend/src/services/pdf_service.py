@@ -79,6 +79,34 @@ class PDFService:
                 textColor=HexColor("#111827"),
             )
         )
+        self.styles.add(
+            ParagraphStyle(
+                name="TableCell",
+                parent=self.styles["Normal"],
+                fontSize=8,
+                leading=11,
+                textColor=HexColor("#111827"),
+            )
+        )
+        self.styles.add(
+            ParagraphStyle(
+                name="TableCellBold",
+                parent=self.styles["Normal"],
+                fontSize=8,
+                leading=11,
+                fontName="Helvetica-Bold",
+                textColor=HexColor("#111827"),
+            )
+        )
+        self.styles.add(
+            ParagraphStyle(
+                name="TableUrl",
+                parent=self.styles["Normal"],
+                fontSize=7.5,
+                leading=10,
+                textColor=HexColor("#2563eb"),
+            )
+        )
 
     def generate_domain_analysis_pdf(self, domain: str, report_data: Dict[str, Any]) -> bytes:
         """Generate an executive PDF report for a domain."""
@@ -312,14 +340,18 @@ class PDFService:
         else:
             rows = [["Source Domain", "DR", "Source URL", "Anchor", "Target"]]
             for item in items:
+                domain_text = self._fmt_value(item.get("domain"), "N/A")
+                domain_cell = Paragraph(domain_text, self.styles["TableCellBold"]) if len(domain_text) > 18 else domain_text
+                anchor_text = self._fmt_value(item.get("anchor_text"), "N/A")
+                anchor_cell = Paragraph(anchor_text, self.styles["TableCell"]) if len(anchor_text) > 16 else anchor_text
                 rows.append([
-                    self._truncate(item.get("domain"), 28),
+                    domain_cell,
                     self._fmt_number(item.get("domain_rank")),
-                    self._truncate(item.get("url_from"), 42),
-                    self._truncate(item.get("anchor_text"), 24),
-                    self._truncate(item.get("url_to"), 42),
+                    self._fmt_url_cell(item.get("url_from")),
+                    anchor_cell,
+                    self._fmt_url_cell(item.get("url_to")),
                 ])
-            story.append(self._build_table(rows, [1.3 * inch, 0.5 * inch, 1.95 * inch, 1.2 * inch, 1.95 * inch], font_size=7.5))
+            story.append(self._build_table(rows, [1.1 * inch, 0.45 * inch, 2.15 * inch, 1.05 * inch, 2.15 * inch], font_size=7.5))
 
         story.append(Spacer(1, 0.18 * inch))
         return story
@@ -340,11 +372,15 @@ class PDFService:
         else:
             rows = [["Domain", "DR", "Backlinks", "Anchor", "First Seen"]]
             for item in items:
+                domain_text = self._fmt_value(item.get("domain"), "N/A")
+                domain_cell = Paragraph(domain_text, self.styles["TableCellBold"]) if len(domain_text) > 24 else domain_text
+                anchor_text = self._fmt_value(item.get("anchor_text"), "N/A")
+                anchor_cell = Paragraph(anchor_text, self.styles["TableCell"]) if len(anchor_text) > 20 else anchor_text
                 rows.append([
-                    self._truncate(item.get("domain"), 32),
+                    domain_cell,
                     self._fmt_number(item.get("domain_rank")),
                     self._fmt_number(item.get("backlinks_count")),
-                    self._truncate(item.get("anchor_text"), 26),
+                    anchor_cell,
                     self._fmt_value(item.get("first_seen"), "N/A"),
                 ])
             story.append(self._build_table(rows, [2.0 * inch, 0.55 * inch, 0.85 * inch, 1.5 * inch, 1.3 * inch], font_size=8))
@@ -368,14 +404,16 @@ class PDFService:
         else:
             rows = [["Keyword", "Position", "Volume", "CPC", "Ranking URL"]]
             for item in items:
+                keyword_text = self._fmt_value(item.get("keyword"), "N/A")
+                keyword_cell = Paragraph(keyword_text, self.styles["TableCellBold"]) if len(keyword_text) > 20 else keyword_text
                 rows.append([
-                    self._truncate(item.get("keyword"), 28),
+                    keyword_cell,
                     self._fmt_number(item.get("position")),
                     self._fmt_number(item.get("search_volume")),
                     self._fmt_currency(item.get("cpc")),
-                    self._truncate(item.get("ranking_url"), 42),
+                    self._fmt_url_cell(item.get("ranking_url")),
                 ])
-            story.append(self._build_table(rows, [1.9 * inch, 0.65 * inch, 0.8 * inch, 0.6 * inch, 2.45 * inch], font_size=8))
+            story.append(self._build_table(rows, [1.65 * inch, 0.55 * inch, 0.7 * inch, 0.55 * inch, 3.45 * inch], font_size=8))
 
         story.append(Spacer(1, 0.18 * inch))
         return story
@@ -458,6 +496,23 @@ class PDFService:
         if len(text) <= max_len:
             return text
         return f"{text[:max_len - 1]}…"
+
+    def _fmt_url_cell(self, url: Any, fallback: str = "N/A") -> Any:
+        """Format a full URL into a clickable, wrapping Table Paragraph."""
+        raw_url = str(url).strip() if url not in (None, "") else ""
+        if not raw_url:
+            return fallback
+
+        # Escape XML entities for ReportLab Paragraph
+        safe_url = raw_url.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+        # Insert zero-width space (\u200b) after URL punctuation to allow clean word wrapping without visual hyphenation
+        display_text = safe_url
+        for char in ["/", ".", "-", "_", "?", "=", "&amp;"]:
+            display_text = display_text.replace(char, char + "\u200b")
+
+        href = safe_url if safe_url.startswith(("http://", "https://", "mailto:")) else f"https://{safe_url}"
+        return Paragraph(f'<a href="{href}" color="#2563eb"><u>{display_text}</u></a>', self.styles["TableUrl"])
 
     def _format_timestamp(self, value: Any) -> str:
         if not value:

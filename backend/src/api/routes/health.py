@@ -149,11 +149,11 @@ async def health_check():
             provider, api_key, _ = await service._get_provider_and_key()
             return provider is not None and api_key is not None
 
-        # Run external API checks in parallel with reasonable timeouts
+        # Run external API checks in parallel with fast timeouts (0 retries so health never blocks)
         dataforseo_status, wayback_status, llm_status = await asyncio.gather(
-            check_service_with_timeout('DataForSEO', check_dataforseo, timeout=5.0, retries=1),
-            check_service_with_timeout('Wayback Machine', check_wayback, timeout=8.0, retries=1),
-            check_service_with_timeout('LLM', check_llm, timeout=5.0, retries=1)
+            check_service_with_timeout('DataForSEO', check_dataforseo, timeout=2.0, retries=0),
+            check_service_with_timeout('Wayback Machine', check_wayback, timeout=2.0, retries=0),
+            check_service_with_timeout('LLM', check_llm, timeout=2.0, retries=0)
         )
 
         services_status['dataforseo'] = dataforseo_status

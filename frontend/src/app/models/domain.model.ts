@@ -608,3 +608,58 @@ export interface PurchaseResponse {
     new_balance: number;
     message: string;
 }
+
+export interface CheckoutRequest {
+    price_id: string;
+    mode: string;
+    quantity?: number;
+    success_url?: string;
+    cancel_url?: string;
+}
+
+export interface CheckoutResponse {
+    session_id: string;
+    url: string;
+}
+
+export interface CreditPack {
+    id: string;
+    name: string;
+    credits: number;
+    price_cents: number;
+    price_id: string | null;
+    popular?: boolean;
+}
+
+export interface SubscriptionPlan {
+    id: string;
+    name: string;
+    monthly_price_cents: number;
+    monthly_credits: number;
+    price_id: string | null;
+}
+
+export interface PlansResponse {
+    publishable_key: string | null;
+    credit_packs: CreditPack[];
+    subscriptions: SubscriptionPlan[];
+}
+
+export interface SavedQuery {
+    id: string;
+    name: string;
+    query_params: Record<string, any>;
+    is_default: boolean;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface SavedQueryListResponse {
+    success: boolean;
+    queries: SavedQuery[];
+}
+
+export interface SavedQueryCreateResponse {
+    success: boolean;
+    query: SavedQuery;
+}

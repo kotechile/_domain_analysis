@@ -46,4 +46,7 @@ structlog>=23.0.0
 # System monitoring (optional but useful for debugging memory issues)
 psutil>=5.9.0
 
+# Stripe payment processing
+stripe>=7.0.0
+
 # Production dependencies only

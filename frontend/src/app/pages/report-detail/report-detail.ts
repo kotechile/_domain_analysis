@@ -3,7 +3,7 @@ import { CommonModule, TitleCasePipe, DatePipe, DecimalPipe } from '@angular/com
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../services/api';
 import { LucideAngularModule, ArrowLeft, RefreshCw, Download, Sparkles, TrendingUp, History, ShieldCheck, Globe, Zap, AlertTriangle, CheckCircle, Search, Info, Flag, Target, Lightbulb, BarChart3, Link2 } from 'lucide-angular';
-import { firstValueFrom, interval, Subscription, startWith, switchMap, takeWhile } from 'rxjs';
+import { firstValueFrom, interval, Subscription, startWith, switchMap, takeWhile, catchError, of } from 'rxjs';
 import { DomainAnalysisReport, OrganicKeyword, ReferringDomain } from '../../models/domain.model';
 import { TrafficChartComponent } from '../../components/traffic-chart/traffic-chart';
 
@@ -274,7 +274,21 @@ export class ReportDetailComponent implements OnInit, OnDestroy {
         this.pollingSub = interval(3000)
             .pipe(
                 startWith(0),
-                switchMap(() => this.api.getReport(domain)),
+                switchMap(() =>
+                    this.api.getReport(domain).pipe(
+                        catchError((err) => {
+                            console.warn('Transient polling error, will retry in next interval:', err);
+                            return of({
+                                success: false,
+                                message: 'Waiting for report...',
+                                report: this.report() || ({
+                                    domain_name: domain,
+                                    status: 'in_progress',
+                                } as any)
+                            });
+                        })
+                    )
+                ),
                 takeWhile(res => {
                     const status = res.report?.status;
                     return status === 'pending' || status === 'in_progress' || !res.report;
