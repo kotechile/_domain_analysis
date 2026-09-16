@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { DecimalPipe } from '@angular/common';
 import { Meta, Title } from '@angular/platform-browser';
 import { LucideAngularModule, Check, Zap, Crown, ArrowRight, CreditCard, Star } from 'lucide-angular';
 
 @Component({
   selector: 'app-pricing',
   standalone: true,
-  imports: [RouterLink, LucideAngularModule],
+  imports: [RouterLink, DecimalPipe, LucideAngularModule],
   templateUrl: './pricing.html',
   styleUrl: './pricing.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

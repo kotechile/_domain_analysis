@@ -1,0 +1,416 @@
+:host {
+  display: block;
+}
+
+.pricing-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(38, 137, 88, 0.15), transparent 26%),
+    radial-gradient(circle at top right, rgba(7, 84, 51, 0.15), transparent 24%),
+    linear-gradient(180deg, #f4f7f5 0%, #f8fbfa 30%, #ffffff 100%);
+  color: #10241a;
+}
+
+.pricing-header,
+main {
+  width: min(1160px, calc(100% - 3rem));
+  margin: 0 auto;
+}
+
+.pricing-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 0;
+}
+
+.brand {
+  color: #10241a;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.pricing-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.pricing-nav a {
+  color: rgba(16, 36, 26, 0.72);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.pricing-nav a:hover {
+  color: #10241a;
+}
+
+.signin-link {
+  padding: 0.75rem 1.25rem;
+  border: 1px solid rgba(16, 36, 26, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.hero-pricing {
+  text-align: center;
+  padding: 4.5rem 0 3rem;
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  color: #287356;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.hero-pricing h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 4.5vw, 4.2rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  font-weight: 900;
+}
+
+.hero-sub {
+  margin: 1.25rem 0 0;
+  color: rgba(16, 36, 26, 0.68);
+  font-size: 1.15rem;
+  line-height: 1.6;
+}
+
+/* Tiers Section */
+.tiers-section {
+  padding: 2rem 0 4rem;
+}
+
+.tiers-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.75rem;
+  align-items: stretch;
+}
+
+.tier-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 2.25rem;
+  border-radius: 1.75rem;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(16, 36, 26, 0.08);
+  box-shadow: 0 12px 36px rgba(13, 54, 37, 0.04);
+  backdrop-filter: blur(12px);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tier-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 48px rgba(13, 54, 37, 0.08);
+}
+
+.tier-card.tier-popular {
+  border: 2px solid #123928;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(18, 57, 40, 0.12);
+}
+
+.popular-badge {
+  position: absolute;
+  top: -12px;
+  right: 24px;
+  padding: 0.35rem 0.85rem;
+  background: #123928;
+  color: #f5fbf8;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tier-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(16, 36, 26, 0.06);
+  color: #10241a;
+  margin-bottom: 1.25rem;
+}
+
+.tier-icon-accent {
+  background: rgba(38, 137, 88, 0.12);
+  color: #1b6647;
+}
+
+.tier-name {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.tier-price {
+  margin: 1rem 0 0.5rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.price-amount {
+  font-size: 3rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.price-period {
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(16, 36, 26, 0.5);
+}
+
+.tier-tagline {
+  margin: 0 0 1.5rem;
+  color: rgba(16, 36, 26, 0.6);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.tier-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tier-features li {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: rgba(16, 36, 26, 0.85);
+}
+
+.feature-check {
+  width: 1rem;
+  height: 1rem;
+  color: #287356;
+  flex-shrink: 0;
+}
+
+.tier-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.95rem 1.5rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.tier-cta-primary {
+  background: #123928;
+  color: #f5fbf8;
+}
+
+.tier-cta-primary:hover {
+  background: #0b2419;
+}
+
+.tier-cta-secondary {
+  background: rgba(16, 36, 26, 0.06);
+  color: #10241a;
+}
+
+.tier-cta-secondary:hover {
+  background: rgba(16, 36, 26, 0.12);
+}
+
+.tier-note {
+  text-align: center;
+  margin: 2rem 0 0;
+  color: rgba(16, 36, 26, 0.5);
+  font-size: 0.92rem;
+}
+
+/* Credits Section */
+.credits-section {
+  padding: 5rem 0 3rem;
+  border-top: 1px solid rgba(16, 36, 26, 0.08);
+}
+
+.section-heading {
+  max-width: 44rem;
+  margin-bottom: 2.5rem;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.section-subtitle {
+  margin: 0.75rem 0 0;
+  color: rgba(16, 36, 26, 0.65);
+  font-size: 1.05rem;
+}
+
+.credits-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.credit-card {
+  position: relative;
+  padding: 2rem;
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(16, 36, 26, 0.08);
+  box-shadow: 0 8px 24px rgba(13, 54, 37, 0.03);
+}
+
+.credit-card.credit-popular {
+  border: 2px solid #287356;
+}
+
+.credit-badge {
+  position: absolute;
+  top: -10px;
+  right: 20px;
+  padding: 0.25rem 0.65rem;
+  background: #287356;
+  color: #ffffff;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.credit-amount {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #10241a;
+}
+
+.credit-price {
+  font-size: 2.4rem;
+  font-weight: 900;
+  margin: 0.5rem 0 0.25rem;
+  letter-spacing: -0.03em;
+}
+
+.credit-per {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #287356;
+  margin-bottom: 0.75rem;
+}
+
+.credit-desc {
+  margin: 0;
+  color: rgba(16, 36, 26, 0.6);
+  font-size: 0.9rem;
+}
+
+/* Pay per report */
+.pay-per-section {
+  padding: 3rem 0;
+}
+
+.pay-per-card {
+  padding: 2.5rem;
+  border-radius: 2rem;
+  background: linear-gradient(135deg, rgba(18, 57, 40, 0.04), rgba(39, 114, 85, 0.08));
+  border: 1px solid rgba(18, 57, 40, 0.12);
+}
+
+.pay-per-content h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.8rem;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.pay-per-content p {
+  margin: 0 0 1.5rem;
+  color: rgba(16, 36, 26, 0.75);
+  font-size: 1.05rem;
+}
+
+/* FAQ */
+.faq-section {
+  padding: 5rem 0;
+  border-top: 1px solid rgba(16, 36, 26, 0.08);
+}
+
+.faq-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.faq-list article h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.faq-list article p {
+  margin: 0;
+  color: rgba(16, 36, 26, 0.7);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* Final CTA */
+.final-cta {
+  text-align: center;
+  padding: 5rem 0 6rem;
+  border-top: 1px solid rgba(16, 36, 26, 0.08);
+}
+
+.final-cta h2 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.final-cta p {
+  margin: 0.75rem 0 1.75rem;
+  color: rgba(16, 36, 26, 0.6);
+  font-size: 1.05rem;
+}
+
+@media (max-width: 860px) {
+  .tiers-grid,
+  .credits-grid,
+  .faq-list {
+    grid-template-columns: 1fr;
+  }
+}
