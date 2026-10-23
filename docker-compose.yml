@@ -55,21 +55,15 @@ services:
         - REACT_APP_URL=https://scout.buildomain.com
     expose:
       - "80"
+    # Routing is owned by Coolify: it generates the http/https Traefik routers for
+    # scout.buildomain.com from the "Domain" set on this service in the Coolify UI
+    # (docker_compose_domains), including the TLS certresolver and the http->https
+    # redirect. Do NOT hand-write router/service labels here: a router declared without
+    # traefik.http.routers.<name>.service cannot be auto-linked when this container also
+    # owns Coolify's generated services, and Traefik drops it with
+    #   ERR Router <name> cannot be linked automatically with multiple Services: [...]
     labels:
       - "traefik.enable=true"
-      # Secure Router (HTTPS)
-      - "traefik.http.routers.scout-secure.rule=Host(`scout.buildomain.com`)"
-      - "traefik.http.routers.scout-secure.entrypoints=https"
-      - "traefik.http.routers.scout-secure.tls=true"
-      - "traefik.http.routers.scout-secure.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.scout-secure.service=scout-svc"
-      - "traefik.http.services.scout-svc.loadbalancer.server.port=80"
-      # Redirect Router (HTTP -> HTTPS)
-      - "traefik.http.routers.scout-insecure.rule=Host(`scout.buildomain.com`)"
-      - "traefik.http.routers.scout-insecure.entrypoints=http"
-      - "traefik.http.routers.scout-insecure.middlewares=scout-redirect"
-      - "traefik.http.middlewares.scout-redirect.redirectscheme.scheme=https"
-      - "traefik.http.middlewares.scout-redirect.redirectscheme.permanent=true"
       - "traefik.docker.network=coolify"
     environment:
       REACT_APP_API_URL: /api/v1
